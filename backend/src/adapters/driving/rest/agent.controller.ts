@@ -1,14 +1,17 @@
-import { Controller, Post, Body, Get } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards } from '@nestjs/common';
 import { AgentRequestDto } from './dto/agent-request.dto';
 import { SupervisorService } from '../../../application/supervisor/supervisor.service';
+import { PromptSanitizerPipe } from './pipes/prompt-sanitizer.pipe';
+import { RateLimitGuard } from './guards/rate-limit.guard';
 import type { AgentResponse } from '../../../domain/types/agent';
 
 @Controller('agent')
+@UseGuards(RateLimitGuard)
 export class AgentController {
   constructor(private readonly supervisor: SupervisorService) {}
 
   @Post('chat')
-  async chat(@Body() dto: AgentRequestDto): Promise<AgentResponse> {
+  async chat(@Body(new PromptSanitizerPipe()) dto: AgentRequestDto): Promise<AgentResponse> {
     return this.supervisor.processRequest(dto);
   }
 }
