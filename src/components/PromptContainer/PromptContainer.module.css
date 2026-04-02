@@ -24,16 +24,17 @@
 
 .input {
   flex: 1;
-  background: var(--color-bg-input);
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg-elevated);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-md) var(--space-lg);
   padding-right: var(--space-xl);
   color: var(--color-text-primary);
   font-size: var(--text-base);
   font-family: var(--font-sans);
   outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: var(--shadow-sm);
 }
 
 .input::placeholder {
@@ -42,13 +43,13 @@
 
 .input:focus {
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 3px rgba(232, 93, 76, 0.12);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(232, 93, 76, 0.12);
 }
 
 .submitBtn {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
   background: var(--color-primary);
   border: none;
   color: var(--color-text-inverse);
@@ -57,17 +58,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition-fast), transform var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .submitBtn:hover:not(:disabled) {
   background: var(--color-primary-dark);
-  transform: scale(1.02);
+  transform: scale(1.04);
+  box-shadow: var(--shadow-md);
 }
 
 .submitBtn:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
 
 .submitBtn:disabled {

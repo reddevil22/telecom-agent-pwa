@@ -5,7 +5,8 @@ import type { orchestratorMachine } from '../../machines/orchestratorMachine';
 import { ScreenRenderer } from '../ScreenRenderer/ScreenRenderer';
 import { PromptContainer } from '../PromptContainer/PromptContainer';
 import { ProcessingIndicator } from '../ProcessingIndicator/ProcessingIndicator';
-import { selectHasReceivedFirstResponse, selectProcessingSteps, selectState } from '../../hooks/useSelectors';
+import { ChatBubble } from '../ChatBubble/ChatBubble';
+import { selectHasReceivedFirstResponse, selectProcessingSteps, selectState, selectConversationHistory } from '../../hooks/useSelectors';
 import styles from './AppShell.module.css';
 
 type Actor = ActorRefFrom<typeof orchestratorMachine>;
@@ -22,6 +23,7 @@ export function AppShell({ actor }: Props) {
   const state = useSelector(actor, selectState);
   const hasReceivedFirstResponse = useSelector(actor, selectHasReceivedFirstResponse);
   const processingSteps = useSelector(actor, selectProcessingSteps);
+  const conversationHistory = useSelector(actor, selectConversationHistory);
   const isProcessing = state === 'processing';
   const isInitial = !hasReceivedFirstResponse && !isProcessing;
 
@@ -49,29 +51,60 @@ export function AppShell({ actor }: Props) {
         </button>
       </header>
 
-      {/* Initial welcome state */}
-      {isInitial && (
+      <div className={styles.main}>
+        {/* Sidebar */}
+        <aside className={styles.sidebar}>
+          <div className={styles.sidebarSection}>
+            <span className={styles.sidebarLabel}>Account Overview</span>
+            <div className={styles.sidebarStat}>
+              <span className={styles.sidebarStatLabel}>Balance</span>
+              <span className={styles.sidebarStatValue}>$42.50</span>
+            </div>
+            <div className={styles.sidebarStat}>
+              <span className={styles.sidebarStatLabel}>Data</span>
+              <span className={styles.sidebarStatValue}>3.7 / 10 GB</span>
+            </div>
+            <div className={styles.sidebarStat}>
+              <span className={styles.sidebarStatLabel}>Voice</span>
+              <span className={styles.sidebarStatValue}>142 / 500 min</span>
+            </div>
+            <div className={styles.sidebarStat}>
+              <span className={styles.sidebarStatLabel}>SMS</span>
+              <span className={styles.sidebarStatValue}>28 / 200</span>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main content */}
         <div className={styles.content}>
-          <div className={styles.initialContent}>
-            <h2 className={styles.initialTitle}>How can I help you today?</h2>
-            <p className={styles.initialSubtitle}>
-              Check your balance, explore bundles, or get support — I'm here to help.
-            </p>
+          <div className={`${styles.contentArea} ${isInitial ? styles['contentArea--initial'] : ''}`}>
+            {isInitial && (
+              <div className={styles.initialContent}>
+                <h2 className={styles.initialTitle}>How can I help you today?</h2>
+                <p className={styles.initialSubtitle}>
+                  Check your balance, explore bundles, or get support — I'm here to help.
+                </p>
+              </div>
+            )}
+
+            {/* Chat history */}
+            {conversationHistory.length > 0 && (
+              <div className={styles.chatHistory}>
+                {conversationHistory.map((msg, i) => (
+                  <ChatBubble key={i} message={msg} />
+                ))}
+              </div>
+            )}
+
+            {!isInitial && isProcessing && <ProcessingIndicator steps={processingSteps} />}
+            {!isInitial && !isProcessing && <ScreenRenderer actor={actor} />}
+          </div>
+
+          {/* Prompt area */}
+          <div className={styles.promptArea}>
+            <PromptContainer actor={actor} />
           </div>
         </div>
-      )}
-
-      {/* Active state with screen */}
-      {!isInitial && (
-        <div className={styles.content}>
-          {isProcessing && <ProcessingIndicator steps={processingSteps} />}
-          {!isProcessing && <ScreenRenderer actor={actor} />}
-        </div>
-      )}
-
-      {/* Prompt area */}
-      <div className={styles.promptArea}>
-        <PromptContainer actor={actor} />
       </div>
     </div>
   );

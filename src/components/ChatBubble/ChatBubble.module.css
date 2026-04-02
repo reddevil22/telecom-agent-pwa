@@ -1,7 +1,7 @@
 .bubble {
-  max-width: 80%;
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--text-sm);
+  max-width: 75%;
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--text-base);
   line-height: var(--leading-relaxed);
   animation: bubbleIn 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }

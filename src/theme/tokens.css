@@ -22,10 +22,10 @@
   --color-surface-hover: rgba(0, 0, 0, 0.04);
   --color-overlay: rgba(0, 0, 0, 0.08);
 
-  /* === TEXT (Light Mode) === */
+  /* === TEXT (Light Mode) — WCAG AA compliant contrast ratios === */
   --color-text-primary: #1A1A1A;
-  --color-text-secondary: #6B6B6B;
-  --color-text-muted: #9B9B9B;
+  --color-text-secondary: #5A5A5A;
+  --color-text-muted: #7A7A7A;
   --color-text-accent: #E85D4C;
   --color-text-inverse: #FFFFFF;
 
@@ -126,8 +126,8 @@
   --color-overlay: rgba(0, 0, 0, 0.24);
 
   --color-text-primary: #F5F5F5;
-  --color-text-secondary: #A1A1A1;
-  --color-text-muted: #6B6B6B;
+  --color-text-secondary: #C5C5C5;
+  --color-text-muted: #8A8A8A;
   --color-text-accent: #F07A6D;
 
   --color-border: rgba(255, 255, 255, 0.1);
