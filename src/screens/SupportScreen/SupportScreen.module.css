@@ -1,0 +1,124 @@
+.container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+}
+
+@media (min-width: 640px) {
+  .container {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 400;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Tickets */
+.tickets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.ticket {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+  transition: border-color var(--transition-fast);
+}
+
+.ticket:hover {
+  border-color: var(--color-text-muted);
+}
+
+.ticketInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.ticketSubject {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xs);
+  line-height: var(--leading-tight);
+}
+
+.ticketMeta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.statusBadge {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.statusBadge--open {
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--color-accent);
+}
+
+.statusBadge--in_progress {
+  background: rgba(26, 171, 154, 0.12);
+  color: var(--color-secondary);
+}
+
+.statusBadge--resolved {
+  background: rgba(34, 160, 107, 0.12);
+  color: var(--color-success);
+}
+
+/* FAQ */
+.faqList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.faqItem {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--transition-fast);
+}
+
+.faqItem:hover {
+  border-color: var(--color-primary);
+}
+
+.faqQ {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xs);
+  line-height: var(--leading-tight);
+}
+
+.faqA {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-relaxed);
+}

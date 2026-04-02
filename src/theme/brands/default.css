@@ -1,0 +1,6 @@
+/* Default brand — inherits all tokens from tokens.css.
+   Override variables here to rebrand. */
+:root {
+  /* Brand name used in the UI */
+  --brand-name: "Telecom Agent";
+}
