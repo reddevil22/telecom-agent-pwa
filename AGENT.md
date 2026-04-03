@@ -156,14 +156,69 @@ interface AgentResponse {
 
 ## Backend Communication
 
-The frontend expects a NestJS backend running at `http://localhost:3000` with these endpoints:
+The frontend communicates with the backend via REST calls. The backend provides:
+
+### Core Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/classify-intent` | POST | Classify user intent from prompt |
-| `/api/agent` | POST | Process prompt and return screen data |
+| `/api/agent/chat` | POST | Process user prompt and return response |
+| `/api/health` | GET | Backend health check |
+| `/api/health/live` | GET | Liveness probe |
+| `/api/health/ready` | GET | Readiness probe |
+| `/api/health/llm` | GET | LLM server health status |
+| `/api/history/sessions` | GET | List user's conversation sessions |
+| `/api/history/session/:id` | GET | Get specific conversation |
+| `/api/history/session/:id` | DELETE | Soft-delete a conversation |
 
-See [AGENT.md](./AGENT.md) (backend) for full API specification.
+### Request Shape
+```typescript
+interface AgentRequest {
+  prompt: string;              // max 1000 chars
+  sessionId: string;           // rate limit key
+  userId: string;              // user identifier
+  conversationHistory: {
+    role: 'user' | 'agent';
+    text: string;              // max 500 chars
+    timestamp: number;
+  }[];                         // max 20 entries
+  timestamp: number;
+}
+```
+
+### Response Shape
+```typescript
+interface AgentResponse {
+  screenType: 'balance' | 'bundles' | 'usage' | 'support' | 'unknown';
+  screenData: ScreenData;
+  replyText: string;
+  suggestions: string[];
+  confidence: number;
+  processingSteps: ProcessingStep[];
+  supplementaryResults?: ToolResult[];
+}
+```
+
+### History API
+
+| Endpoint | Response |
+|----------|----------|
+| `GET /api/history/sessions?userId=user-1` | `[{ sessionId, messageCount, updatedAt }]` |
+| `GET /api/history/session/:id` | `{ id, sessionId, userId, messages, metadata }` |
+| `DELETE /api/history/session/:id` | `{ deleted: true, sessionId }` |
+
+### LLM Health Check
+
+```typescript
+interface LlmHealthStatus {
+  status: 'healthy' | 'unhealthy' | 'unknown';
+  url: string;
+  responseTime?: number;
+  error?: string;
+}
+```
+
+See [backend/AGENT.md](./backend/AGENT.md) for full API specification.
 
 ## Running the App
 

@@ -119,23 +119,23 @@ describe('OpenAiCompatibleLlmAdapter', () => {
   });
 
   it('handles missing choices gracefully', async () => {
-    const warnSpy = jest.spyOn(console, 'log').mockImplementation();
+    const mockLogger = { warn: jest.fn(), setContext: jest.fn() };
+    const adapterWithLogger = new OpenAiCompatibleLlmAdapter('http://localhost:8080/v1', 'test-key', mockLogger as never);
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ choices: [] }),
     });
 
-    const result = await adapter.chatCompletion({
+    const result = await adapterWithLogger.chatCompletion({
       model: 'test',
       messages: [{ role: 'user', content: 'hi' }],
     });
 
     expect(result.message.content).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[LlmAdapter]'),
-      expect.any(String),
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ responseShape: expect.any(String) }),
+      'Unexpected LLM response shape',
     );
-    warnSpy.mockRestore();
   });
 
   it('throws on non-OK HTTP response', async () => {

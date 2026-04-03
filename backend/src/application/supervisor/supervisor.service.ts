@@ -5,6 +5,8 @@ import { ALLOWED_TOOLS, TOOL_ARG_SCHEMAS, SECURITY_LIMITS } from '../../domain/c
 import { SYSTEM_PROMPT } from './system-prompt';
 import { TOOL_DEFINITIONS } from './tool-definitions';
 import { ToolResolver } from './tool-resolver';
+import type { PinoLogger } from 'nestjs-pino';
+import type { ConversationStoragePort } from '../../domain/ports/conversation-storage.port';
 
 /** Internal message type supporting tool-call and tool-result roles for the ReAct loop */
 interface LoopMessage {
@@ -16,14 +18,19 @@ interface LoopMessage {
 
 export class SupervisorService {
   private readonly toolResolver: ToolResolver;
+  private readonly logger: PinoLogger | null;
 
   constructor(
     private readonly llm: LlmPort,
     private readonly modelName: string,
     private readonly temperature: number,
     private readonly maxTokens: number,
+    private readonly storage: ConversationStoragePort,
+    logger?: PinoLogger,
   ) {
     this.toolResolver = new ToolResolver();
+    this.logger = logger ?? null;
+    this.logger?.setContext(SupervisorService.name);
   }
 
   registerAgent(toolName: string, agent: import('../../domain/ports/sub-agent.port').SubAgentPort): void {
@@ -45,17 +52,38 @@ export class SupervisorService {
     };
 
     try {
+      // Get or create conversation
+      let conversation = this.storage.getConversation(request.sessionId);
+      let conversationId: string;
+
+      if (!conversation) {
+        conversationId = this.storage.createConversation(request.sessionId, request.userId);
+      } else {
+        conversationId = conversation.id;
+      }
+
+      // Store user message
+      this.storage.addMessage(
+        conversationId,
+        'user',
+        request.prompt,
+        null,
+        request.timestamp,
+      );
+
       const messages: LoopMessage[] = this.buildInitialMessages(request);
       const collectedResults: ToolResult[] = [];
       let primaryResult: { screenType: ScreenType; screenData: AgentResponse['screenData']; processingSteps: AgentResponse['processingSteps'] } | null = null;
 
       for (let iteration = 0; iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS; iteration++) {
+        const iterStart = Date.now();
         const llmResponse = await this.llm.chatCompletion({
           model: this.modelName,
           messages: messages.map(m => ({
             role: m.role,
             content: m.content,
             ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+            ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
           })),
           tools: TOOL_DEFINITIONS,
           tool_choice: 'auto',
@@ -65,20 +93,42 @@ export class SupervisorService {
 
         const toolCall = llmResponse.message?.tool_calls?.[0];
 
-        if (llmResponse.message?.content) {
-          console.warn('[Supervisor] LLM returned text content alongside tool calls — possible instruction leak attempt');
+        if (llmResponse.message?.content && toolCall) {
+          this.logger?.warn({ iteration }, 'LLM returned text content alongside tool calls — possible instruction leak attempt');
         }
 
-        // No tool call — LLM is done or gave up
+        // No tool call — LLM is done or declined to call a tool
         if (!toolCall) {
           if (primaryResult) {
-            return this.buildResponse(primaryResult, collectedResults);
+            this.logger?.info({
+              screenType: primaryResult.screenType,
+              iterations: iteration + 1,
+              supplementaryCount: collectedResults.length,
+              duration: Date.now() - iterStart,
+            }, 'Supervisor completed with primary result');
+            const response = this.buildResponse(primaryResult, collectedResults);
+            this.persistAgentResponse(conversationId, response);
+            return response;
           }
-          return unknownResponse;
+          // LLM chose to respond with text instead of calling a tool (e.g. gibberish input)
+          if (llmResponse.message?.content) {
+            this.logger?.info({ iterations: iteration + 1 }, 'Supervisor returned unknown (LLM text response)');
+            const response = {
+              ...unknownResponse,
+              replyText: llmResponse.message.content,
+            };
+            this.persistAgentResponse(conversationId, response);
+            return response;
+          }
+          this.logger?.info({ iterations: iteration + 1 }, 'Supervisor returned unknown (no tool call, no content)');
+          const response = unknownResponse;
+          this.persistAgentResponse(conversationId, response);
+          return response;
         }
 
         // Validate tool call
         if (!this.validateToolCall(toolCall)) {
+          this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'Invalid tool call rejected');
           messages.push({
             role: 'assistant',
             content: '',
@@ -94,6 +144,7 @@ export class SupervisorService {
 
         const screenType = TOOL_TO_SCREEN[toolCall.function.name] as ScreenType | undefined;
         if (!screenType) {
+          this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'Unknown tool mapping');
           messages.push({
             role: 'assistant',
             content: '',
@@ -109,6 +160,7 @@ export class SupervisorService {
 
         const subAgent = this.toolResolver.resolve(toolCall.function.name);
         if (!subAgent) {
+          this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'No handler registered for tool');
           messages.push({
             role: 'assistant',
             content: '',
@@ -137,6 +189,13 @@ export class SupervisorService {
           collectedResults.push(toolResult);
         }
 
+        this.logger?.info({
+          iteration,
+          toolName: toolCall.function.name,
+          screenType,
+          duration: Date.now() - iterStart,
+        }, 'Tool executed');
+
         // Feed concise summary back to LLM for next iteration
         const summary = this.summarizeForLlm(toolResult);
         messages.push({
@@ -153,16 +212,38 @@ export class SupervisorService {
 
       // Max iterations reached — return what we have
       if (primaryResult) {
-        return this.buildResponse(primaryResult, collectedResults);
+        this.logger?.warn({
+          screenType: primaryResult.screenType,
+          supplementaryCount: collectedResults.length,
+        }, 'Supervisor hit max iterations');
+        const response = this.buildResponse(primaryResult, collectedResults);
+        this.persistAgentResponse(conversationId, response);
+        return response;
       }
 
-      return unknownResponse;
-    } catch {
+      this.logger?.warn('Supervisor hit max iterations with no valid results');
+      const response = unknownResponse;
+      this.persistAgentResponse(conversationId, response);
+      return response;
+    } catch (error) {
+      this.logger?.error({
+        err: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      }, 'Supervisor error processing request');
       return {
         ...unknownResponse,
         replyText: 'Sorry, I encountered an error processing your request. Please try again.',
       };
     }
+  }
+
+  private persistAgentResponse(conversationId: string, response: AgentResponse): void {
+    this.storage.addMessage(
+      conversationId,
+      'agent',
+      response.replyText,
+      response.screenType,
+      Date.now(),
+    );
   }
 
   private buildResponse(

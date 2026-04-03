@@ -1,0 +1,94 @@
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border, #e0e0e0);
+}
+
+.selectBtn {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+.selectBtn:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  font-size: 14px;
+  color: var(--color-text, #333);
+}
+
+.deleteBtn {
+  background: var(--color-danger, #dc3545);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 12px;
+  font-size: 13px;
+}
+
+.deleteBtn:hover {
+  opacity: 0.9;
+}
+
+.confirmActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.confirmText {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.confirmYes {
+  background: var(--color-danger, #dc3545);
+  color: white;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.confirmYes:hover {
+  opacity: 0.9;
+}
+
+.confirmNo {
+  background: var(--color-bg-input, #e0e0e0);
+  color: var(--color-text-primary);
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.confirmNo:hover {
+  background: var(--color-surface-hover, #d0d0d0);
+}
+
+.empty {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--color-text-muted, #666);
+}

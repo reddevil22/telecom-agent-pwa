@@ -192,6 +192,49 @@
   background: var(--color-bg);
 }
 
+/* Tabs */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  padding: 0 var(--space-lg);
+  flex-shrink: 0;
+}
+
+.tab {
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.contentAreaWrapper {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.historyContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-lg);
+}
+
 /* Mobile layout */
 @media (max-width: 768px) {
   .sidebar {

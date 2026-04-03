@@ -22,4 +22,15 @@ export class HealthController {
   health() {
     return { status: 'ok' };
   }
+
+  @Get('live')
+  liveness() {
+    return { status: 'ok' };
+  }
+
+  @Get('ready')
+  readiness() {
+    // Basic readiness — if we got here, the app is initialized and routes are registered
+    return { status: 'ok' };
+  }
 }

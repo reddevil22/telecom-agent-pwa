@@ -1,0 +1,17 @@
+{
+  "user-1": [
+    { "type": "data", "used": 3.7, "total": 10, "unit": "GB", "period": "March 2026" },
+    { "type": "voice", "used": 142, "total": 500, "unit": "min", "period": "March 2026" },
+    { "type": "sms", "used": 28, "total": 200, "unit": "SMS", "period": "March 2026" }
+  ],
+  "user-2": [
+    { "type": "data", "used": 1.8, "total": 2, "unit": "GB", "period": "March 2026" },
+    { "type": "voice", "used": 67, "total": 100, "unit": "min", "period": "March 2026" },
+    { "type": "sms", "used": 12, "total": 50, "unit": "SMS", "period": "March 2026" }
+  ],
+  "user-3": [
+    { "type": "data", "used": 38.2, "total": 50, "unit": "GB", "period": "March 2026" },
+    { "type": "voice", "used": 0, "total": -1, "unit": "min", "period": "March 2026" },
+    { "type": "sms", "used": 0, "total": -1, "unit": "SMS", "period": "March 2026" }
+  ]
+}

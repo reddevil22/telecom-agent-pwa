@@ -1,0 +1,58 @@
+[
+  {
+    "id": "b1",
+    "name": "Starter Pack",
+    "description": "Perfect for light users who need the basics",
+    "price": 9.99,
+    "currency": "USD",
+    "dataGB": 2,
+    "minutes": 100,
+    "sms": 50,
+    "validity": "30 days"
+  },
+  {
+    "id": "b2",
+    "name": "Value Plus",
+    "description": "Great balance of data and minutes for everyday use",
+    "price": 19.99,
+    "currency": "USD",
+    "dataGB": 10,
+    "minutes": 500,
+    "sms": 200,
+    "validity": "30 days",
+    "popular": true
+  },
+  {
+    "id": "b3",
+    "name": "Unlimited Pro",
+    "description": "For power users who need it all without limits",
+    "price": 39.99,
+    "currency": "USD",
+    "dataGB": 50,
+    "minutes": -1,
+    "sms": -1,
+    "validity": "30 days"
+  },
+  {
+    "id": "b4",
+    "name": "Social Saver",
+    "description": "Budget-friendly with enough data for social media and messaging",
+    "price": 5.99,
+    "currency": "USD",
+    "dataGB": 1,
+    "minutes": 50,
+    "sms": 100,
+    "validity": "7 days"
+  },
+  {
+    "id": "b5",
+    "name": "Traveler Pass",
+    "description": "Short-term pass with generous roaming-ready allowances",
+    "price": 14.99,
+    "currency": "USD",
+    "dataGB": 5,
+    "minutes": 250,
+    "sms": 50,
+    "validity": "14 days"
+  }
+]

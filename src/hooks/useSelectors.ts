@@ -14,6 +14,7 @@ export const selectProcessingSteps = (s: ReturnType<OrchestratorActor['getSnapsh
 export const selectSupplementaryResults = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.supplementaryResults;
 export const selectHasReceivedFirstResponse = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.hasReceivedFirstResponse;
 export const selectError = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.error;
+export const selectSessionId = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.sessionId;
 
 export function useOrchestratorSelectors(actor: OrchestratorActor) {
   return {
@@ -27,5 +28,6 @@ export function useOrchestratorSelectors(actor: OrchestratorActor) {
     supplementaryResults: useSelector(actor, selectSupplementaryResults),
     hasReceivedFirstResponse: useSelector(actor, selectHasReceivedFirstResponse),
     error: useSelector(actor, selectError),
+    sessionId: useSelector(actor, selectSessionId),
   };
 }

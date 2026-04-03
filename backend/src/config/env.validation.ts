@@ -6,4 +6,5 @@ export const envValidationSchema = {
   LLM_MAX_TOKENS: { type: 'number', default: 1024 },
   PORT: { type: 'number', default: 3001 },
   NODE_ENV: { type: 'string', default: 'development' },
+  LOG_LEVEL: { type: 'string', default: 'info' },
 };

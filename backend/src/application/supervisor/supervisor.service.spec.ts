@@ -149,13 +149,23 @@ describe('SupervisorService', () => {
 
   // ── No tool call on first iteration ──
 
-  it('returns unknown when LLM returns no tool call on first iteration', async () => {
-    (mockLlm.chatCompletion as jest.Mock).mockResolvedValueOnce(mockTextResponse('I can help with that'));
+  it('returns unknown with LLM text as replyText when LLM gives no tool call', async () => {
+    (mockLlm.chatCompletion as jest.Mock).mockResolvedValueOnce(mockTextResponse('Could you rephrase your question?'));
 
     const result = await service.processRequest(makeRequest());
 
     expect(result.screenType).toBe('unknown');
+    expect(result.replyText).toBe('Could you rephrase your question?');
     expect(result.confidence).toBe(0.3);
+  });
+
+  it('returns generic unknown when LLM gives no tool call and no content', async () => {
+    (mockLlm.chatCompletion as jest.Mock).mockResolvedValueOnce({ message: { content: null } });
+
+    const result = await service.processRequest(makeRequest());
+
+    expect(result.screenType).toBe('unknown');
+    expect(result.replyText).toBe("I'm not sure what you're looking for. Here are some things I can help with.");
   });
 
   // ── Invalid tool call → error feedback → retry ──
@@ -315,7 +325,10 @@ describe('SupervisorService', () => {
   // ── Content alongside tool calls (injection attempt warning) ──
 
   it('handles LLM returning text content alongside tool calls', async () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const mockLogger = { warn: jest.fn(), info: jest.fn(), error: jest.fn(), setContext: jest.fn() };
+    const serviceWithLogger = new SupervisorService(mockLlm, 'test-model', 0.1, 1024, mockLogger as never);
+    serviceWithLogger.registerAgent('check_balance', balanceAgent);
+
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce({
         message: {
@@ -329,10 +342,12 @@ describe('SupervisorService', () => {
       })
       .mockResolvedValueOnce(mockTextResponse('Done'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await serviceWithLogger.processRequest(makeRequest());
     expect(result.screenType).toBe('balance');
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('instruction leak'));
-    warnSpy.mockRestore();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ iteration: 0 }),
+      expect.stringContaining('instruction leak'),
+    );
   });
 
   // ── Suggestions ──

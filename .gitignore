@@ -36,3 +36,12 @@ backend/.env
 
 # Claude local settings
 .claude/
+
+# Coverage output
+backend/coverage/
+
+# SQLite runtime data
+backend/data/
+
+# Qwen tool config
+.qwen/
