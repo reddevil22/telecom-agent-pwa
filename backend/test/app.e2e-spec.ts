@@ -22,6 +22,14 @@ function mockToolCallResponse(name: string): ReturnType<LlmPort['chatCompletion'
   });
 }
 
+/** Text-only response that signals the supervisor loop to stop */
+function mockTextDoneResponse(): ReturnType<LlmPort['chatCompletion']> {
+  return Promise.resolve({
+    message: { content: 'Done' },
+    usage: { prompt_tokens: 5, completion_tokens: 2 },
+  });
+}
+
 let sessionIdCounter = 0;
 function uniqueSessionId(): string {
   return `e2e-${++sessionIdCounter}`;
@@ -76,7 +84,9 @@ describe('App (e2e)', () => {
   // ── Happy path: balance ──
 
   it('POST /api/agent/chat — routes to balance screen', async () => {
-    mockLlm.chatCompletion.mockResolvedValueOnce(mockToolCallResponse('check_balance'));
+    mockLlm.chatCompletion
+      .mockResolvedValueOnce(mockToolCallResponse('check_balance'))
+      .mockResolvedValueOnce(mockTextDoneResponse());
 
     const res = await request(app.getHttpServer())
       .post('/api/agent/chat')
@@ -100,7 +110,9 @@ describe('App (e2e)', () => {
     ['check_usage', 'usage'],
     ['get_support', 'support'],
   ] as const)('POST /api/agent/chat — routes %s to %s screen', async (tool, screenType) => {
-    mockLlm.chatCompletion.mockResolvedValueOnce(mockToolCallResponse(tool));
+    mockLlm.chatCompletion
+      .mockResolvedValueOnce(mockToolCallResponse(tool))
+      .mockResolvedValueOnce(mockTextDoneResponse());
 
     const res = await request(app.getHttpServer())
       .post('/api/agent/chat')
@@ -158,9 +170,9 @@ describe('App (e2e)', () => {
   });
 
   it('POST /api/agent/chat — accepts any string role in history (class-validator only checks IsString)', async () => {
-    // Note: role is typed as 'user' | 'agent' in TS but class-validator
-    // only enforces @IsString(). Enum validation would need @IsIn().
-    mockLlm.chatCompletion.mockResolvedValueOnce(mockToolCallResponse('check_balance'));
+    mockLlm.chatCompletion
+      .mockResolvedValueOnce(mockToolCallResponse('check_balance'))
+      .mockResolvedValueOnce(mockTextDoneResponse());
 
     const res = await request(app.getHttpServer())
       .post('/api/agent/chat')
@@ -194,7 +206,8 @@ describe('App (e2e)', () => {
 
   it('POST /api/agent/chat — 429 after exceeding rate limit', async () => {
     const rateLimitSession = 'rate-limit-dedicated';
-    mockLlm.chatCompletion.mockResolvedValue(mockToolCallResponse('check_balance'));
+    mockLlm.chatCompletion
+      .mockResolvedValue(mockToolCallResponse('check_balance'));
 
     const RATE_LIMIT = 10;
     for (let i = 0; i < RATE_LIMIT; i++) {
@@ -228,7 +241,9 @@ describe('App (e2e)', () => {
   // ── Conversation with history ──
 
   it('POST /api/agent/chat — handles conversation with history', async () => {
-    mockLlm.chatCompletion.mockResolvedValueOnce(mockToolCallResponse('check_usage'));
+    mockLlm.chatCompletion
+      .mockResolvedValueOnce(mockToolCallResponse('check_usage'))
+      .mockResolvedValueOnce(mockTextDoneResponse());
 
     const res = await request(app.getHttpServer())
       .post('/api/agent/chat')

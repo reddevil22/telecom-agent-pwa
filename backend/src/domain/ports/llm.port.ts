@@ -22,7 +22,7 @@ export interface LlmChatResponse {
 export interface LlmPort {
   chatCompletion(params: {
     model: string;
-    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    messages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }>;
     tools?: LlmToolDefinition[];
     tool_choice?: string;
     temperature?: number;

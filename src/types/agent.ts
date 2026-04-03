@@ -52,6 +52,12 @@ export interface ProcessingStep {
   status: 'pending' | 'active' | 'done';
 }
 
+export interface ToolResult {
+  toolName: string;
+  screenType: ScreenType;
+  screenData: ScreenData;
+}
+
 export interface AgentResponse {
   screenType: ScreenType;
   screenData: ScreenData;
@@ -59,4 +65,5 @@ export interface AgentResponse {
   suggestions: string[];
   confidence: number;
   processingSteps: ProcessingStep[];
+  supplementaryResults?: ToolResult[];
 }

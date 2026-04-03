@@ -11,6 +11,7 @@ export const selectCurrentScreenData = (s: ReturnType<OrchestratorActor['getSnap
 export const selectCurrentSuggestions = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.currentSuggestions;
 export const selectLastAgentReply = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.lastAgentReply;
 export const selectProcessingSteps = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.processingSteps;
+export const selectSupplementaryResults = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.supplementaryResults;
 export const selectHasReceivedFirstResponse = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.hasReceivedFirstResponse;
 export const selectError = (s: ReturnType<OrchestratorActor['getSnapshot']>) => s.context.error;
 
@@ -23,6 +24,7 @@ export function useOrchestratorSelectors(actor: OrchestratorActor) {
     currentSuggestions: useSelector(actor, selectCurrentSuggestions),
     lastAgentReply: useSelector(actor, selectLastAgentReply),
     processingSteps: useSelector(actor, selectProcessingSteps),
+    supplementaryResults: useSelector(actor, selectSupplementaryResults),
     hasReceivedFirstResponse: useSelector(actor, selectHasReceivedFirstResponse),
     error: useSelector(actor, selectError),
   };

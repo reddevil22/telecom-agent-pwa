@@ -1,5 +1,5 @@
 import { setup, fromPromise, assign } from 'xstate';
-import type { AgentRequest, AgentResponse, ProcessingStep, ScreenData } from '../types/agent';
+import type { AgentRequest, AgentResponse, ProcessingStep, ScreenData, ToolResult } from '../types/agent';
 import type { ConversationMessage } from '../types';
 import { invokeAgentService } from '../services/agentService';
 
@@ -10,6 +10,7 @@ export interface OrchestratorContext {
   currentSuggestions: string[];
   lastAgentReply: string | null;
   processingSteps: ProcessingStep[];
+  supplementaryResults: ToolResult[];
   hasReceivedFirstResponse: boolean;
   error: string | null;
 }
@@ -53,6 +54,7 @@ export const orchestratorMachine = setup({
     ],
     lastAgentReply: null,
     processingSteps: [],
+    supplementaryResults: [],
     hasReceivedFirstResponse: false,
     error: null,
   },
@@ -97,6 +99,7 @@ export const orchestratorMachine = setup({
             currentSuggestions: ({ event }) => event.output.suggestions,
             lastAgentReply: ({ event }) => event.output.replyText,
             processingSteps: ({ event }) => event.output.processingSteps,
+            supplementaryResults: ({ event }) => event.output.supplementaryResults ?? [],
             conversationHistory: ({ context, event }) => [
               ...context.conversationHistory,
               { role: 'agent', text: event.output.replyText, timestamp: Date.now() },
