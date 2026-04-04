@@ -1,6 +1,7 @@
 import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
 import type { ScreenData, ProcessingStep, ScreenType } from '../../domain/types/agent';
 import type { Balance } from '../../domain/types/domain';
+import { ProcessingStepLabels, ConfirmationTitles } from '../../domain/constants/processing-steps'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type BffMethod = (userId: string) => Promise<any>;
@@ -28,9 +29,9 @@ export class SimpleQuerySubAgent implements SubAgentPort {
         ...this.config.transformResult(result),
       } as ScreenData,
       processingSteps: [
-        { label: 'Understanding your request', status: 'done' },
+        { label: ProcessingStepLabels.UNDERSTAND, status: 'done' },
         { label: this.config.processingLabels.fetching, status: 'done' },
-        { label: 'Preparing response', status: 'done' },
+        { label: ProcessingStepLabels.PREPARING, status: 'done' },
       ],
     };
   }
@@ -65,7 +66,7 @@ export class ActionSubAgent<TParams extends Record<string, string>> implements S
       return {
         screenData: {
           type: 'confirmation',
-          title: 'Failed',
+          title: ConfirmationTitles.FAILED,
           status: 'error',
           message: validation.error ?? 'Invalid request',
           details: {},
@@ -129,10 +130,10 @@ export class DualQuerySubAgent implements SubAgentPort {
         ...this.config.transformResult(primary, secondary),
       } as ScreenData,
       processingSteps: [
-        { label: 'Understanding your request', status: 'done' },
+        { label: ProcessingStepLabels.UNDERSTAND, status: 'done' },
         { label: this.config.processingLabels.primary, status: 'done' },
         { label: this.config.processingLabels.secondary, status: 'done' },
-        { label: 'Preparing response', status: 'done' },
+        { label: ProcessingStepLabels.PREPARING, status: 'done' },
       ],
     };
   }
