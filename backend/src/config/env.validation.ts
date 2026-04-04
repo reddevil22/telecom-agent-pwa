@@ -1,9 +1,13 @@
 export const envValidationSchema = {
+  LLM_PROVIDER: { type: 'string', default: 'local' },
   LLM_BASE_URL: { type: 'string', default: 'http://localhost:8080/v1' },
   LLM_API_KEY: { type: 'string', default: '' },
   LLM_MODEL_NAME: { type: 'string', default: 'meta-llama/Llama-3-70b' },
   LLM_TEMPERATURE: { type: 'number', default: 0.1 },
   LLM_MAX_TOKENS: { type: 'number', default: 1024 },
+  DASHSCOPE_BASE_URL: { type: 'string', default: 'https://coding-intl.dashscope.aliyuncs.com/v1' },
+  DASHSCOPE_API_KEY: { type: 'string', default: '' },
+  DASHSCOPE_MODEL_NAME: { type: 'string', default: 'qwen3-coder-next' },
   PORT: { type: 'number', default: 3001 },
   NODE_ENV: { type: 'string', default: 'development' },
   LOG_LEVEL: { type: 'string', default: 'info' },

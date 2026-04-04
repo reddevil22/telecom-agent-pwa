@@ -35,9 +35,14 @@ import type { SubAgentPort } from './domain/ports/sub-agent.port';
         config: ConfigService,
         logger: PinoLogger,
       ) => {
+        const provider = config.get<string>('LLM_PROVIDER') ?? 'local';
+        const modelName = provider === 'dashscope'
+          ? config.get<string>('DASHSCOPE_MODEL_NAME')!
+          : config.get<string>('LLM_MODEL_NAME')!;
+
         const supervisor = new SupervisorService(
           llm,
-          config.get<string>('LLM_MODEL_NAME')!,
+          modelName,
           config.get<number>('LLM_TEMPERATURE')!,
           config.get<number>('LLM_MAX_TOKENS')!,
           storage,
