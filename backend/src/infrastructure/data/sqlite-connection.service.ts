@@ -3,6 +3,8 @@ import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { up as runMigration001 } from './migrations/001_initial';
+import { up as runMigration002 } from './migrations/002_add_confirmation_screen_type';
+import { up as runMigration003 } from './migrations/003_add_bundle_detail_screen_type';
 
 @Injectable()
 export class SqliteConnectionService implements OnModuleDestroy {
@@ -48,6 +50,28 @@ export class SqliteConnectionService implements OnModuleDestroy {
         });
         transaction();
         console.log('[SQLite] Applied migration: 001_initial');
+      }
+
+      if (!appliedIds.has('002_add_confirmation_screen_type')) {
+        const transaction = this.db.transaction(() => {
+          runMigration002(this.db);
+          this.db
+            .prepare('INSERT INTO _migrations (id) VALUES (?)')
+            .run('002_add_confirmation_screen_type');
+        });
+        transaction();
+        console.log('[SQLite] Applied migration: 002_add_confirmation_screen_type');
+      }
+
+      if (!appliedIds.has('003_add_bundle_detail_screen_type')) {
+        const transaction = this.db.transaction(() => {
+          runMigration003(this.db);
+          this.db
+            .prepare('INSERT INTO _migrations (id) VALUES (?)')
+            .run('003_add_bundle_detail_screen_type');
+        });
+        transaction();
+        console.log('[SQLite] Applied migration: 003_add_bundle_detail_screen_type');
       }
     } catch (error) {
       console.error('[SQLite] Migration failed:', error);
