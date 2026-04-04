@@ -26,22 +26,5 @@ export const BLOCKED_PATTERNS: readonly RegExp[] = [
   /override\s+(your|the)\s+(system|previous|original)\s+(prompt|instructions)/i,
 ];
 
-export const ALLOWED_TOOLS: ReadonlySet<string> = new Set([
-  'check_balance',
-  'list_bundles',
-  'check_usage',
-  'get_support',
-  'purchase_bundle',
-  'top_up',
-  'create_ticket',
-]);
-
-export const TOOL_ARG_SCHEMAS: Readonly<Record<string, readonly string[]>> = {
-  check_balance: ['userId'],
-  list_bundles: ['userId'],
-  check_usage: ['userId'],
-  get_support: ['userId'],
-  purchase_bundle: ['userId', 'bundleId'],
-  top_up: ['userId', 'amount'],
-  create_ticket: ['userId', 'subject', 'description'],
-};
+// Re-export from tool-registry for backward compatibility
+export { ALLOWED_TOOLS, TOOL_ARG_SCHEMAS } from './tool-registry';
