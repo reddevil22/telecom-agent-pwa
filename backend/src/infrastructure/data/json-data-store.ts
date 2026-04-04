@@ -1,7 +1,9 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { Balance, Bundle, OwnedBundle, UsageEntry, SupportTicket } from '../../domain/types/domain';
+import type { PinoLogger } from 'nestjs-pino';
+import { LOGGER } from '../../domain/tokens';
 
 type UserData<T> = Record<string, T>;
 
@@ -10,7 +12,10 @@ export class JsonDataStore {
   private readonly dataDir: string;
   private cache = new Map<string, unknown>();
 
-  constructor(@Optional() dataDir?: string) {
+  constructor(
+    @Optional() dataDir?: string,
+    @Inject(LOGGER) @Optional() private readonly logger?: PinoLogger,
+  ) {
     this.dataDir = dataDir ?? join(__dirname, '..', '..', 'data');
   }
 
@@ -58,19 +63,24 @@ export class JsonDataStore {
   }
 
   deductBalance(userId: string, amount: number): Balance {
+    this.logger?.debug({ userId, amount }, 'deductBalance called');
     const data = this.load<UserData<Balance>>('balances.json');
     const existing = data[userId];
+    this.logger?.debug({ userId, balance: existing }, 'Current balance');
     if (!existing) throw new Error(`User ${userId} not found`);
     const updated: Balance = {
       ...existing,
       current: existing.current - amount,
     };
     data[userId] = updated;
+    this.logger?.debug({ userId, newBalance: updated }, 'New balance after deduction');
     this.save('balances.json', data);
+    this.logger?.debug('Saved balances.json after deduction');
     return updated;
   }
 
   addOwnedBundle(userId: string, bundleId: string, validityDays: number): OwnedBundle {
+    this.logger?.debug({ userId, bundleId }, 'addOwnedBundle called');
     const data = this.load<UserData<OwnedBundle[]>>('owned-bundles.json');
     const now = new Date();
     const expires = new Date(now.getTime() + validityDays * 24 * 60 * 60 * 1000);
@@ -81,7 +91,9 @@ export class JsonDataStore {
     };
     if (!data[userId]) data[userId] = [];
     data[userId].push(owned);
+    this.logger?.debug({ userId, owned }, 'Adding bundle to user');
     this.save('owned-bundles.json', data);
+    this.logger?.debug('Saved owned-bundles.json');
     return owned;
   }
 
@@ -104,17 +116,19 @@ export class JsonDataStore {
   private load<T>(filename: string): T {
     const cached = this.cache.get(filename);
     if (cached !== undefined) {
-      return cached as T;
+      // Return a deep copy to prevent accidental mutation of cached data
+      return JSON.parse(JSON.stringify(cached)) as T;
     }
     const raw = readFileSync(join(this.dataDir, filename), 'utf-8');
     const parsed = JSON.parse(raw) as T;
     this.cache.set(filename, parsed);
-    return parsed;
+    return JSON.parse(JSON.stringify(parsed)) as T;
   }
 
   private save<T>(filename: string, data: T): void {
     const filePath = join(this.dataDir, filename);
     writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    this.cache.set(filename, data);
+    // Store a copy in cache to prevent external mutations
+    this.cache.set(filename, JSON.parse(JSON.stringify(data)));
   }
 }

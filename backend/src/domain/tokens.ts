@@ -4,3 +4,4 @@ export const BUNDLES_BFF_PORT = Symbol('BUNDLES_BFF_PORT');
 export const USAGE_BFF_PORT = Symbol('USAGE_BFF_PORT');
 export const SUPPORT_BFF_PORT = Symbol('SUPPORT_BFF_PORT');
 export const CONVERSATION_STORAGE_PORT = Symbol('CONVERSATION_STORAGE_PORT');
+export const LOGGER = Symbol('LOGGER');
