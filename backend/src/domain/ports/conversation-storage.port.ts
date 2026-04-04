@@ -23,7 +23,7 @@ export interface ConversationDocument {
     id: string;
     role: 'user' | 'agent';
     text: string;
-    screenType?: 'balance' | 'bundles' | 'usage' | 'support' | 'unknown';
+    screenType?: 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'unknown';
     timestamp: number;
   }>;
   metadata: {

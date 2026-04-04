@@ -85,32 +85,3 @@ export interface AgentResponse {
   supplementaryResults?: ToolResult[];
 }
 
-// ── Streaming types (SSE) ──
-
-export type StreamEventType =
-  | 'step_start'
-  | 'step_complete'
-  | 'tool_call'
-  | 'tool_result'
-  | 'llm_content'
-  | 'screen_ready'
-  | 'complete'
-  | 'error';
-
-export interface StreamEventData {
-  step?: ProcessingStep;
-  stepIndex?: number;
-  toolName?: string;
-  screenType?: ScreenType;
-  screenData?: ScreenData;
-  content?: string;
-  error?: string;
-}
-
-export interface StreamEvent {
-  id: string;
-  type: StreamEventType;
-  timestamp: number;
-  correlationId: string;
-  data: StreamEventData;
-}

@@ -113,7 +113,7 @@ export class SqliteConversationDataMapper implements ConversationStoragePort {
         id: m.id,
         role: m.role as 'user' | 'agent',
         text: m.text,
-        screenType: (m.screen_type ?? undefined) as 'balance' | 'bundles' | 'usage' | 'support' | 'unknown' | undefined,
+        screenType: (m.screen_type ?? undefined) as 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'unknown' | undefined,
         timestamp: m.timestamp,
       })),
       metadata: {

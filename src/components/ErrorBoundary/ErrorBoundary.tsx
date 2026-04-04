@@ -2,6 +2,7 @@ import { Component, type ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
+  onReset?: () => void;
   fallback?: ReactNode;
 }
 
@@ -24,6 +25,11 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 
+  private handleReset = () => {
+    this.props.onReset?.();
+    this.setState({ hasError: false, error: undefined });
+  };
+
   render() {
     if (this.state.hasError) {
       return (
@@ -31,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="error-fallback">
             <h2>Something went wrong</h2>
             <p>We're sorry, but there was an error loading this content.</p>
-            <button onClick={() => this.setState({ hasError: false })}>
+            <button onClick={this.handleReset}>
               Try again
             </button>
           </div>

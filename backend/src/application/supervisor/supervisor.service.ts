@@ -78,9 +78,17 @@ export class SupervisorService {
 
   private initializeConversation(request: AgentRequest): string {
     const conversation = this.storage.getConversation(request.sessionId);
-    
+
     if (!conversation) {
-      return this.storage.createConversation(request.sessionId, request.userId);
+      const conversationId = this.storage.createConversation(request.sessionId, request.userId);
+      this.storage.addMessage(
+        conversationId,
+        'user',
+        request.prompt,
+        null,
+        request.timestamp,
+      );
+      return conversationId;
     }
 
     this.storage.addMessage(

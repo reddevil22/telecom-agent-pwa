@@ -25,6 +25,7 @@ export function AppShell({ actor }: Props) {
   });
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const state = useSelector(actor, selectState);
@@ -53,8 +54,10 @@ export function AppShell({ actor }: Props) {
       const userId = 'user-1';
       const loadedSessions = await historyService.getSavedSessions(userId);
       setSessions(loadedSessions);
+      setSessionError(null);
     } catch (error) {
       console.error('Failed to load sessions:', error);
+      setSessionError(error instanceof Error ? error.message : 'Failed to load sessions');
     }
   };
 
@@ -118,19 +121,19 @@ export function AppShell({ actor }: Props) {
             <span className={styles.sidebarLabel}>Account Overview</span>
             <div className={styles.sidebarStat}>
               <span className={styles.sidebarStatLabel}>Balance</span>
-              <span className={styles.sidebarStatValue}>$42.50</span>
+              <span className={styles.sidebarStatValue}>&mdash;</span>
             </div>
             <div className={styles.sidebarStat}>
               <span className={styles.sidebarStatLabel}>Data</span>
-              <span className={styles.sidebarStatValue}>3.7 / 10 GB</span>
+              <span className={styles.sidebarStatValue}>&mdash;</span>
             </div>
             <div className={styles.sidebarStat}>
               <span className={styles.sidebarStatLabel}>Voice</span>
-              <span className={styles.sidebarStatValue}>142 / 500 min</span>
+              <span className={styles.sidebarStatValue}>&mdash;</span>
             </div>
             <div className={styles.sidebarStat}>
               <span className={styles.sidebarStatLabel}>SMS</span>
-              <span className={styles.sidebarStatValue}>28 / 200</span>
+              <span className={styles.sidebarStatValue}>&mdash;</span>
             </div>
           </div>
         </aside>
@@ -158,6 +161,12 @@ export function AppShell({ actor }: Props) {
           <div className={styles.contentAreaWrapper}>
             {activeTab === 'history' ? (
               <div className={styles.historyContent} data-testid="session-list">
+                {sessionError && (
+                  <div className={styles.sessionError} role="alert">
+                    <p>{sessionError}</p>
+                    <button onClick={loadSessions}>Retry</button>
+                  </div>
+                )}
                 <SessionList
                   sessions={sessions}
                   onSelectSession={handleSelectSession}
@@ -191,7 +200,7 @@ export function AppShell({ actor }: Props) {
                 )}
                 
                 {!isInitial && !isProcessing && !isError && (
-                  <ErrorBoundary>
+                  <ErrorBoundary onReset={() => actor.send({ type: 'RESET' })}>
                     <ScreenRenderer actor={actor} />
                   </ErrorBoundary>
                 )}

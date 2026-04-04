@@ -24,22 +24,16 @@ export interface ConversationDocument {
 
 export const historyService = {
   async getSavedSessions(userId: string): Promise<SessionSummary[]> {
-    try {
-      const res = await fetch(`/api/history/sessions?userId=${encodeURIComponent(userId)}`);
-      if (!res.ok) {
-        if (res.status === 400) throw new Error('userId is required');
-        return [];
-      }
-      const sessions: Array<{ sessionId: string; messageCount: number; updatedAt: string }> = await res.json();
-      return sessions.map((s) => ({
-        sessionId: s.sessionId,
-        messageCount: s.messageCount,
-        lastMessageAt: new Date(s.updatedAt).getTime(),
-      }));
-    } catch (error) {
-      console.error('Failed to load sessions:', error);
-      return [];
+    const res = await fetch(`/api/history/sessions?userId=${encodeURIComponent(userId)}`);
+    if (!res.ok) {
+      throw new Error(`Failed to load sessions: ${res.status} ${res.statusText}`);
     }
+    const sessions: Array<{ sessionId: string; messageCount: number; updatedAt: string }> = await res.json();
+    return sessions.map((s) => ({
+      sessionId: s.sessionId,
+      messageCount: s.messageCount,
+      lastMessageAt: new Date(s.updatedAt).getTime(),
+    }));
   },
 
   async loadSession(sessionId: string): Promise<ConversationMessage[]> {

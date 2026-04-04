@@ -1,13 +1,5 @@
 import type { Balance, Bundle, UsageEntry, SupportTicket, ConversationMessage } from './domain';
 
-// Re-export streaming types for convenience
-export type {
-  StreamEvent,
-  StreamEventType,
-  StreamEventData,
-  StreamingAgentRequest,
-} from './streaming';
-
 export interface AgentRequest {
   prompt: string;
   sessionId: string;

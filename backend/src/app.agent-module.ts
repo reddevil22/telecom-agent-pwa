@@ -3,18 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
 import { AgentController, HealthController } from './adapters/driving/rest/agent.controller';
 import { SupervisorService } from './application/supervisor/supervisor.service';
-import { StreamingSupervisorService } from './application/supervisor/streaming-supervisor.service';
-import { SimpleQuerySubAgent, DualQuerySubAgent, ActionSubAgent } from './application/sub-agents/generic-sub-agents';
-import { PurchaseBundleSubAgent } from './application/sub-agents/purchase-bundle-sub-agent.service';
-import { CreateTicketSubAgent } from './application/sub-agents/create-ticket-sub-agent.service';
-import { ViewBundleDetailsSubAgent } from './application/sub-agents/view-bundle-details-sub-agent.service';
-import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT } from './domain/tokens';
 import { LlmModule } from './adapters/driven/llm/llm.module';
 import { BalanceBffModule } from './adapters/driven/bff/balance/balance-bff.module';
 import { BundlesBffModule } from './adapters/driven/bff/bundles/bundles-bff.module';
 import { UsageBffModule } from './adapters/driven/bff/usage/usage-bff.module';
 import { SupportBffModule } from './adapters/driven/bff/support/support-bff.module';
 import { SqliteDataModule } from './infrastructure/data/sqlite-data.module';
+import { SimpleQuerySubAgent, DualQuerySubAgent, ActionSubAgent } from './application/sub-agents/generic-sub-agents';
+import { PurchaseBundleSubAgent } from './application/sub-agents/purchase-bundle-sub-agent.service';
+import { CreateTicketSubAgent } from './application/sub-agents/create-ticket-sub-agent.service';
+import { ViewBundleDetailsSubAgent } from './application/sub-agents/view-bundle-details-sub-agent.service';
+import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT } from './domain/tokens';
 import type { LlmPort } from './domain/ports/llm.port';
 import type { BalanceBffPort, BundlesBffPort, UsageBffPort, SupportBffPort } from './domain/ports/bff-ports';
 import type { ConversationStoragePort } from './domain/ports/conversation-storage.port';
@@ -120,13 +119,6 @@ import type { SubAgentPort } from './domain/ports/sub-agent.port';
         return supervisor;
       },
       inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, ConfigService, PinoLogger],
-    },
-    {
-      provide: StreamingSupervisorService,
-      useFactory: (supervisor: SupervisorService, logger: PinoLogger) => {
-        return new StreamingSupervisorService(supervisor, logger);
-      },
-      inject: [SupervisorService, PinoLogger],
     },
   ],
 })

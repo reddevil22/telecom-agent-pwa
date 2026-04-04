@@ -8,6 +8,7 @@ import { LlmHealthModule } from './infrastructure/llm/llm-health.module';
 import { HistoryController } from './adapters/driving/rest/history.controller';
 import { LlmHealthController } from './adapters/driving/rest/llm-health.controller';
 import { CorrelationIdMiddleware } from './infrastructure/middleware/correlation-id.middleware';
+import { AuthMiddleware } from './adapters/driving/rest/middleware/auth.middleware';
 import { LoggingInterceptor } from './infrastructure/interceptors/logging.interceptor';
 import { AllExceptionsFilter } from './infrastructure/filters/all-exceptions.filter';
 
@@ -18,6 +19,11 @@ import { AllExceptionsFilter } from './infrastructure/filters/all-exceptions.fil
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(CorrelationIdMiddleware).forRoutes('agent/chat');
+    consumer
+      .apply(CorrelationIdMiddleware)
+      .forRoutes('agent/chat');
+    consumer
+      .apply(AuthMiddleware)
+      .forRoutes('*');
   }
 }
