@@ -5,3 +5,4 @@ export const USAGE_BFF_PORT = Symbol('USAGE_BFF_PORT');
 export const SUPPORT_BFF_PORT = Symbol('SUPPORT_BFF_PORT');
 export const CONVERSATION_STORAGE_PORT = Symbol('CONVERSATION_STORAGE_PORT');
 export const LOGGER = Symbol('LOGGER');
+export const SCREEN_CACHE_PORT = Symbol('SCREEN_CACHE_PORT');

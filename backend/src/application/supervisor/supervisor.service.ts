@@ -8,6 +8,7 @@ import { ToolResolver } from './tool-resolver';
 import type { PinoLogger } from 'nestjs-pino';
 import type { ConversationStoragePort } from '../../domain/ports/conversation-storage.port';
 import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
+import type { ScreenCachePort } from '../../domain/ports/screen-cache.port';
 
 /** Internal message type supporting tool-call and tool-result roles for the ReAct loop */
 interface LoopMessage {
@@ -32,8 +33,18 @@ interface ToolExecutionResult {
 }
 
 export class SupervisorService {
+  private static readonly CACHEABLE_SCREENS = new Set<ScreenType>(['balance', 'bundles', 'usage', 'support']);
+
+  private static readonly INTENT_KEYWORDS: Record<string, string[]> = {
+    balance: ['balance', 'credit', 'airtime', 'how much money', 'account status'],
+    bundles: ['bundles', 'plans', 'packages', 'offers', 'pricing'],
+    usage:   ['usage', 'consumption', 'remaining', 'how much data', 'minutes left'],
+    support: ['support', 'help', 'ticket', 'problem', 'complaint', 'faq'],
+  };
+
   private readonly toolResolver: ToolResolver;
   private readonly logger: PinoLogger | null;
+  private readonly cache: ScreenCachePort | null;
 
   constructor(
     private readonly llm: LlmPort,
@@ -42,9 +53,11 @@ export class SupervisorService {
     private readonly maxTokens: number,
     private readonly storage: ConversationStoragePort,
     logger?: PinoLogger,
+    cache?: ScreenCachePort,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
+    this.cache = cache ?? null;
     this.logger?.setContext(SupervisorService.name);
   }
 
@@ -54,6 +67,9 @@ export class SupervisorService {
 
   async processRequest(request: AgentRequest): Promise<AgentResponse> {
     try {
+      const cached = this.tryCacheHit(request);
+      if (cached) return cached;
+
       const conversationId = this.initializeConversation(request);
       const context: IterationContext = {
         messages: this.buildInitialMessages(request),
@@ -65,6 +81,7 @@ export class SupervisorService {
       for (let iteration = 0; iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS; iteration++) {
         const result = await this.executeIteration(request, context, iteration);
         if (result) {
+          this.tryCacheStore(request, result);
           this.persistAgentResponse(conversationId, result);
           return result;
         }
@@ -73,6 +90,45 @@ export class SupervisorService {
       return this.handleMaxIterationsReached(context);
     } catch (error) {
       return this.handleError(error);
+    }
+  }
+
+  private tryCacheHit(request: AgentRequest): AgentResponse | null {
+    if (!this.cache) return null;
+
+    const lower = request.prompt.toLowerCase();
+    const matches: ScreenType[] = [];
+
+    for (const [screenType, keywords] of Object.entries(SupervisorService.INTENT_KEYWORDS)) {
+      if (keywords.some(kw => lower.includes(kw))) {
+        matches.push(screenType as ScreenType);
+      }
+    }
+
+    if (matches.length !== 1) return null;
+
+    const cached = this.cache.get(request.userId, matches[0]);
+    if (cached) {
+      this.logger?.info({ screenType: matches[0] }, 'Screen cache hit');
+      return {
+        ...cached,
+        processingSteps: [{ label: 'Retrieved from cache', status: 'done' }],
+      };
+    }
+
+    return null;
+  }
+
+  private tryCacheStore(request: AgentRequest, response: AgentResponse): void {
+    if (!this.cache) return;
+
+    if (response.screenType === 'confirmation') {
+      this.cache.invalidateAll(request.userId);
+      return;
+    }
+
+    if (SupervisorService.CACHEABLE_SCREENS.has(response.screenType)) {
+      this.cache.set(request.userId, response.screenType, response);
     }
   }
 

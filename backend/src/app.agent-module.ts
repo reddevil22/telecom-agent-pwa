@@ -13,14 +13,16 @@ import { SimpleQuerySubAgent, DualQuerySubAgent, ActionSubAgent } from './applic
 import { PurchaseBundleSubAgent } from './application/sub-agents/purchase-bundle-sub-agent.service';
 import { CreateTicketSubAgent } from './application/sub-agents/create-ticket-sub-agent.service';
 import { ViewBundleDetailsSubAgent } from './application/sub-agents/view-bundle-details-sub-agent.service';
-import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT } from './domain/tokens';
+import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT } from './domain/tokens';
 import type { LlmPort } from './domain/ports/llm.port';
 import type { BalanceBffPort, BundlesBffPort, UsageBffPort, SupportBffPort } from './domain/ports/bff-ports';
 import type { ConversationStoragePort } from './domain/ports/conversation-storage.port';
 import type { SubAgentPort } from './domain/ports/sub-agent.port';
+import type { ScreenCachePort } from './domain/ports/screen-cache.port';
+import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
 
 @Module({
-  imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule],
+  imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule],
   controllers: [AgentController, HealthController],
   providers: [
     {
@@ -32,6 +34,7 @@ import type { SubAgentPort } from './domain/ports/sub-agent.port';
         usageBff: UsageBffPort,
         supportBff: SupportBffPort,
         storage: ConversationStoragePort,
+        cache: ScreenCachePort,
         config: ConfigService,
         logger: PinoLogger,
       ) => {
@@ -47,6 +50,7 @@ import type { SubAgentPort } from './domain/ports/sub-agent.port';
           config.get<number>('LLM_MAX_TOKENS')!,
           storage,
           logger,
+          cache,
         );
 
         // Simple query sub-agents (read-only operations)
@@ -123,7 +127,7 @@ import type { SubAgentPort } from './domain/ports/sub-agent.port';
 
         return supervisor;
       },
-      inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, ConfigService, PinoLogger],
+      inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, ConfigService, PinoLogger],
     },
   ],
 })

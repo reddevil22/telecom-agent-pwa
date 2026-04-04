@@ -3,6 +3,8 @@ import type { LlmPort, LlmChatResponse } from '../../domain/ports/llm.port';
 import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
 import type { ConversationStoragePort } from '../../domain/ports/conversation-storage.port';
 import type { AgentRequest } from '../../domain/types/agent';
+import type { ScreenCachePort } from '../../domain/ports/screen-cache.port';
+import { InMemoryScreenCacheAdapter } from '../../infrastructure/cache/in-memory-screen-cache.adapter';
 import { SECURITY_LIMITS } from '../../domain/constants/security-constants';
 
 function makeRequest(overrides: Partial<AgentRequest> = {}): AgentRequest {
@@ -462,5 +464,117 @@ describe('SupervisorService', () => {
     const secondCallMessages = (mockLlm.chatCompletion as jest.Mock).mock.calls[1][0].messages;
     const toolMessage = secondCallMessages.find((m: { role: string }) => m.role === 'tool');
     expect(toolMessage.tool_call_id).toBe('call-abc');
+  });
+
+  // ── Screen caching ──
+
+  describe('screen caching', () => {
+    let cache: InMemoryScreenCacheAdapter;
+    let cachedService: SupervisorService;
+
+    beforeEach(() => {
+      cache = new InMemoryScreenCacheAdapter();
+      cachedService = new SupervisorService(mockLlm, 'test-model', 0.1, 1024, mockStorage, undefined, cache);
+
+      balanceAgent = createMockSubAgent('balance');
+      bundlesAgent = createMockSubAgent('bundles');
+      usageAgent = createMockSubAgent('usage');
+      supportAgent = createMockSubAgent('support');
+
+      cachedService.registerAgent('check_balance', balanceAgent);
+      cachedService.registerAgent('list_bundles', bundlesAgent);
+      cachedService.registerAgent('check_usage', usageAgent);
+      cachedService.registerAgent('get_support', supportAgent);
+    });
+
+    it('returns cached response on second balance query without calling LLM', async () => {
+      // First call: hits LLM and caches
+      (mockLlm.chatCompletion as jest.Mock)
+        .mockResolvedValueOnce(mockToolCall('check_balance'))
+        .mockResolvedValueOnce(mockTextResponse('Done'));
+
+      const first = await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      expect(first.screenType).toBe('balance');
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
+
+      // Second call: should hit cache
+      const second = await cachedService.processRequest(makeRequest({ prompt: 'What is my balance?' }));
+      expect(second.screenType).toBe('balance');
+      expect(second.processingSteps[0].label).toBe('Retrieved from cache');
+      // No additional LLM calls
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips cache for ambiguous prompts and calls LLM', async () => {
+      // Prime cache with a balance entry
+      (mockLlm.chatCompletion as jest.Mock)
+        .mockResolvedValueOnce(mockToolCall('check_balance'))
+        .mockResolvedValueOnce(mockTextResponse('Done'));
+      await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+
+      // Ambiguous prompt containing both balance and usage keywords
+      (mockLlm.chatCompletion as jest.Mock)
+        .mockResolvedValueOnce(mockToolCall('check_usage'))
+        .mockResolvedValueOnce(mockTextResponse('Done'));
+
+      const result = await cachedService.processRequest(makeRequest({ prompt: 'Show my balance and usage' }));
+      expect(result.screenType).toBe('usage');
+      // LLM was called (not cached)
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(4);
+    });
+
+    it('invalidates cache after confirmation screen', async () => {
+      // Prime balance cache
+      (mockLlm.chatCompletion as jest.Mock)
+        .mockResolvedValueOnce(mockToolCall('check_balance'))
+        .mockResolvedValueOnce(mockTextResponse('Done'));
+      await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
+
+      // Simulate a confirmation (purchase_bundle) response
+      const confirmAgent: SubAgentPort = {
+        handle: jest.fn().mockResolvedValue({
+          screenData: { type: 'confirmation', title: 'Done', status: 'success' as const, message: 'ok', details: {} },
+          processingSteps: [{ label: 'Processing', status: 'done' as const }],
+        }),
+      } as unknown as SubAgentPort;
+      cachedService.registerAgent('purchase_bundle', confirmAgent);
+
+      (mockLlm.chatCompletion as jest.Mock)
+        .mockResolvedValueOnce(mockToolCall('purchase_bundle'))
+        .mockResolvedValueOnce(mockTextResponse('Done'));
+      await cachedService.processRequest(makeRequest({ prompt: 'Buy the data bundle' }));
+
+      // Balance cache should be invalidated — next balance query hits LLM
+      (mockLlm.chatCompletion as jest.Mock)
+        .mockResolvedValueOnce(mockToolCall('check_balance'))
+        .mockResolvedValueOnce(mockTextResponse('Done'));
+      const result = await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      expect(result.screenType).toBe('balance');
+      // LLM was called again for balance (cache was invalidated)
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(4);
+    });
+
+    it('returns null from cache after TTL expiry', async () => {
+      // Prime cache
+      (mockLlm.chatCompletion as jest.Mock)
+        .mockResolvedValueOnce(mockToolCall('check_balance'))
+        .mockResolvedValueOnce(mockTextResponse('Done'));
+      await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+
+      // Advance time past TTL (5 minutes)
+      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 6 * 60 * 1000);
+
+      (mockLlm.chatCompletion as jest.Mock)
+        .mockResolvedValueOnce(mockToolCall('check_balance'))
+        .mockResolvedValueOnce(mockTextResponse('Done'));
+
+      const result = await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      expect(result.screenType).toBe('balance');
+      // LLM was called again (cache expired)
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(4);
+
+      jest.restoreAllMocks();
+    });
   });
 });
