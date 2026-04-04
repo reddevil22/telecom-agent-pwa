@@ -22,19 +22,25 @@ export function ScreenRenderer({ actor }: Props) {
 
   const Component = entry.component;
 
-  const supplementaryScreens = supplementaryResults
-    ?.map((result) => {
-      const supEntry = screenRegistry.get(result.screenType);
-      if (!supEntry) return null;
-      const SupComponent = supEntry.component;
-      return <SupComponent key={result.toolName} data={result.screenData} actor={actor} />;
-    })
-    .filter(Boolean);
+  // Don't show supplementary results when main screen is confirmation
+  // The confirmation screen already displays all relevant info (balance, etc.)
+  const showSupplementary = screenType !== 'confirmation' && supplementaryResults && supplementaryResults.length > 0;
+
+  const supplementaryScreens = showSupplementary
+    ? supplementaryResults
+        .map((result) => {
+          const supEntry = screenRegistry.get(result.screenType);
+          if (!supEntry) return null;
+          const SupComponent = supEntry.component;
+          return <SupComponent key={result.toolName} data={result.screenData} actor={actor} />;
+        })
+        .filter(Boolean)
+    : [];
 
   return (
     <>
       <Component data={screenData} actor={actor} />
-      {supplementaryScreens && supplementaryScreens.length > 0 && (
+      {supplementaryScreens.length > 0 && (
         <div className="supplementary-results">{supplementaryScreens}</div>
       )}
     </>

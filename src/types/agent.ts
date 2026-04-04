@@ -11,7 +11,7 @@ export interface AgentRequest {
   timestamp: number;
 }
 
-export type ScreenType = 'balance' | 'bundles' | 'usage' | 'support' | 'confirmation' | 'unknown';
+export type ScreenType = 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'unknown';
 
 // ── Screen data (discriminated union) ──
 
@@ -23,6 +23,12 @@ export interface BalanceScreenData {
 export interface BundlesScreenData {
   type: 'bundles';
   bundles: Bundle[];
+}
+
+export interface BundleDetailScreenData {
+  type: 'bundleDetail';
+  bundle: Bundle;
+  currentBalance: Balance;
 }
 
 export interface UsageScreenData {
@@ -52,6 +58,7 @@ export interface UnknownScreenData {
 export type ScreenData =
   | BalanceScreenData
   | BundlesScreenData
+  | BundleDetailScreenData
   | UsageScreenData
   | SupportScreenData
   | ConfirmationScreenData

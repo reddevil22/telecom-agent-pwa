@@ -13,6 +13,14 @@ interface Props {
   onDeleteSession: (sessionId: string) => void;
 }
 
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export function SessionList({ sessions, onSelectSession, onDeleteSession }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -40,23 +48,23 @@ export function SessionList({ sessions, onSelectSession, onDeleteSession }: Prop
         <li key={session.sessionId} className={styles.item} data-testid="session-item">
           <button onClick={() => onSelectSession(session.sessionId)} className={styles.selectBtn}>
             <span className={styles.meta}>
-              {session.messageCount} messages • {new Date(session.lastMessageAt).toLocaleDateString()}
+              {session.messageCount} messages • {formatDate(session.lastMessageAt)}
             </span>
           </button>
           {deletingId === session.sessionId ? (
             <div className={styles.confirmActions}>
-              <span className={styles.confirmText}>Delete?</span>
+              <span className={styles.confirmText}>Delete this conversation?</span>
               <button
                 onClick={() => handleConfirmDelete(session.sessionId)}
                 className={styles.confirmYes}
               >
-                Yes
+                Delete
               </button>
               <button
                 onClick={handleCancelDelete}
                 className={styles.confirmNo}
               >
-                No
+                Cancel
               </button>
             </div>
           ) : (
@@ -64,8 +72,9 @@ export function SessionList({ sessions, onSelectSession, onDeleteSession }: Prop
               onClick={(e) => handleDeleteClick(session.sessionId, e)}
               className={styles.deleteBtn}
               data-testid="delete-session-button"
+              aria-label="Delete conversation"
             >
-              Delete
+              ✕
             </button>
           )}
         </li>

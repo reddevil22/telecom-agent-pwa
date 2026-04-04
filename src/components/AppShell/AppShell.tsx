@@ -3,6 +3,7 @@ import { useSelector } from '@xstate/react';
 import type { ActorRefFrom } from 'xstate';
 import type { orchestratorMachine } from '../../machines/orchestratorMachine';
 import { ScreenRenderer } from '../ScreenRenderer/ScreenRenderer';
+import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary';
 import { PromptContainer } from '../PromptContainer/PromptContainer';
 import { ProcessingIndicator } from '../ProcessingIndicator/ProcessingIndicator';
 import { ChatBubble } from '../ChatBubble/ChatBubble';
@@ -24,6 +25,7 @@ export function AppShell({ actor }: Props) {
   });
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const state = useSelector(actor, selectState);
   const hasReceivedFirstResponse = useSelector(actor, selectHasReceivedFirstResponse);
@@ -95,13 +97,23 @@ export function AppShell({ actor }: Props) {
           onClick={toggleTheme}
           aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
         >
-          {theme === 'light' ? '◐' : '◑'}
+          {theme === 'light' ? '☾' : '☀'}
         </button>
       </header>
 
       <div className={styles.main}>
+        {/* Sidebar toggle */}
+        <button
+          className={styles.sidebarToggle}
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label={sidebarOpen ? 'Hide account details' : 'Show account details'}
+          title={sidebarOpen ? 'Hide account' : 'Show account'}
+        >
+          {sidebarOpen ? '‹' : '›'}
+        </button>
+
         {/* Sidebar */}
-        <aside className={styles.sidebar}>
+        <aside className={`${styles.sidebar} ${sidebarOpen ? '' : styles['sidebar--collapsed']}`}>
           <div className={styles.sidebarSection}>
             <span className={styles.sidebarLabel}>Account Overview</span>
             <div className={styles.sidebarStat}>
@@ -166,8 +178,8 @@ export function AppShell({ actor }: Props) {
                 {/* Chat history */}
                 {hasMessages && (
                   <div className={styles.chatHistory} data-testid="chat-history">
-                    {conversationHistory.map((msg, i) => (
-                      <ChatBubble key={i} message={msg} data-testid="chat-bubble" />
+                    {conversationHistory.map((msg) => (
+                      <ChatBubble key={`${msg.role}-${msg.timestamp}`} message={msg} data-testid="chat-bubble" />
                     ))}
                   </div>
                 )}
@@ -178,7 +190,11 @@ export function AppShell({ actor }: Props) {
                   <LlmErrorScreen onRetry={() => actor.send({ type: 'RESET' })} />
                 )}
                 
-                {!isInitial && !isProcessing && !isError && <ScreenRenderer actor={actor} />}
+                {!isInitial && !isProcessing && !isError && (
+                  <ErrorBoundary>
+                    <ScreenRenderer actor={actor} />
+                  </ErrorBoundary>
+                )}
               </div>
             )}
           </div>

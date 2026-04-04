@@ -8,6 +8,14 @@ interface Props {
   actor: ScreenActor;
 }
 
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export function BalanceScreen({ data, actor }: Props) {
   if (data.type !== 'balance') return null;
   const { balance } = data;
@@ -37,11 +45,11 @@ export function BalanceScreen({ data, actor }: Props) {
       <div className={styles.meta}>
         <div className={styles.metaItem}>
           <span className={styles.metaLabel}>Last Top-up</span>
-          <span className={styles.metaValue}>{balance.lastTopUp}</span>
+          <span className={styles.metaValue}>{formatDate(balance.lastTopUp)}</span>
         </div>
         <div className={styles.metaItem}>
           <span className={styles.metaLabel}>Next Billing</span>
-          <span className={styles.metaValue}>{balance.nextBillingDate}</span>
+          <span className={styles.metaValue}>{formatDate(balance.nextBillingDate)}</span>
         </div>
       </div>
 

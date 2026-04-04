@@ -12,18 +12,23 @@ export class FileBundlesBffAdapter implements BundlesBffPort {
   }
 
   async purchaseBundle(userId: string, bundleId: string): Promise<PurchaseResult> {
+    console.log(`[FileBundlesBffAdapter] purchaseBundle called: userId=${userId}, bundleId=${bundleId}`);
     const bundle = this.store.getBundleById(bundleId);
+    console.log(`[FileBundlesBffAdapter] Found bundle:`, bundle);
     if (!bundle) {
       return { success: false, message: 'Bundle not found', balance: await this.store.getBalance(userId) ?? { current: 0, currency: 'USD', lastTopUp: 'N/A', nextBillingDate: 'N/A' }, bundle: null };
     }
 
     const balance = this.store.getBalance(userId);
+    console.log(`[FileBundlesBffAdapter] User balance:`, balance, `Bundle price:`, bundle.price);
     if (!balance || balance.current < bundle.price) {
       return { success: false, message: 'Insufficient balance', balance: balance ?? { current: 0, currency: 'USD', lastTopUp: 'N/A', nextBillingDate: 'N/A' }, bundle };
     }
 
     const updatedBalance = this.store.deductBalance(userId, bundle.price);
+    console.log(`[FileBundlesBffAdapter] Balance deducted, new balance:`, updatedBalance);
     this.store.addOwnedBundle(userId, bundleId, 30);
+    console.log(`[FileBundlesBffAdapter] Bundle added to user`);
     return { success: true, message: 'Bundle purchased successfully', balance: updatedBalance, bundle };
   }
 }
