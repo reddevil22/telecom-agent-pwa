@@ -5,6 +5,7 @@ export const REPLY_MAP: Record<ScreenType, string> = {
   bundles: 'Here are the bundles currently available for you.',
   usage: 'Here is a summary of your current usage this billing period.',
   support: 'Here are your support options and recent tickets.',
+  confirmation: 'Your request has been processed.',
   unknown: "I'm not sure what you're looking for. Here are some things I can help with.",
 };
 
@@ -13,6 +14,7 @@ export const SUGGESTION_MAP: Record<ScreenType, string[]> = {
   bundles: ['Show my balance', 'Check my usage', 'Activate Value Plus'],
   usage: ['Show my balance', 'What bundles are available?', 'I need support'],
   support: ['Show my balance', 'Check my usage', 'Create a new ticket'],
+  confirmation: ['Show my balance', 'What bundles are available?', 'Check my usage'],
   unknown: ['Show my balance', 'What bundles are available?', 'Check my usage', 'I need support'],
 };
 
@@ -21,4 +23,7 @@ export const TOOL_TO_SCREEN: Record<string, ScreenType> = {
   list_bundles: 'bundles',
   check_usage: 'usage',
   get_support: 'support',
+  purchase_bundle: 'confirmation',
+  top_up: 'confirmation',
+  create_ticket: 'confirmation',
 };

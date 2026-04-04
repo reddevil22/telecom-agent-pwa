@@ -1,13 +1,19 @@
 import type { ScreenData } from '../../types/agent';
+import type { ScreenActor } from '../../types/screens';
 import styles from './BundlesScreen.module.css';
 
 interface Props {
   data: ScreenData;
+  actor: ScreenActor;
 }
 
-export function BundlesScreen({ data }: Props) {
+export function BundlesScreen({ data, actor }: Props) {
   if (data.type !== 'bundles') return null;
   const { bundles } = data;
+
+  function handleBuy(_bundleId: string, bundleName: string) {
+    actor.send({ type: 'SUBMIT_PROMPT', prompt: `Buy the ${bundleName} bundle` });
+  }
 
   return (
     <div className={styles.list}>
@@ -37,6 +43,12 @@ export function BundlesScreen({ data }: Props) {
               {b.sms === -1 ? 'Unlimited' : `${b.sms} SMS`}
             </span>
           </div>
+          <button
+            className={styles.buyBtn}
+            onClick={() => handleBuy(b.id, b.name)}
+          >
+            Buy {b.name}
+          </button>
         </div>
       ))}
     </div>

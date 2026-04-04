@@ -18,6 +18,7 @@ const mockBundles: Bundle[] = [
 
 const mockBff: BundlesBffPort = {
   getBundles: jest.fn().mockResolvedValue(mockBundles),
+  purchaseBundle: jest.fn().mockResolvedValue({ success: false, message: 'Mock', balance: { current: 0, currency: 'USD', lastTopUp: 'N/A', nextBillingDate: 'N/A' }, bundle: null }),
 };
 
 describe('BundlesSubAgent', () => {

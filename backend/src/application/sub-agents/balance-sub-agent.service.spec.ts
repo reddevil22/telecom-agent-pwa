@@ -11,6 +11,7 @@ const mockBalance: Balance = {
 
 const mockBff: BalanceBffPort = {
   getBalance: jest.fn().mockResolvedValue(mockBalance),
+  topUp: jest.fn().mockResolvedValue(mockBalance),
 };
 
 describe('BalanceSubAgent', () => {

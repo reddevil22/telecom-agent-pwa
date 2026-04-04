@@ -1,4 +1,4 @@
-import type { BundlesBffPort } from '../../../../domain/ports/bff-ports';
+import type { BundlesBffPort, PurchaseResult } from '../../../../domain/ports/bff-ports';
 import type { Bundle } from '../../../../domain/types/domain';
 
 export class MockBundlesBffAdapter implements BundlesBffPort {
@@ -39,5 +39,9 @@ export class MockBundlesBffAdapter implements BundlesBffPort {
         validity: '30 days',
       },
     ];
+  }
+
+  async purchaseBundle(_userId: string, _bundleId: string): Promise<PurchaseResult> {
+    return { success: false, message: 'Not implemented in mock', balance: { current: 0, currency: 'USD', lastTopUp: 'N/A', nextBillingDate: 'N/A' }, bundle: null };
   }
 }

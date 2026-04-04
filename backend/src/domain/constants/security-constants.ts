@@ -31,6 +31,9 @@ export const ALLOWED_TOOLS: ReadonlySet<string> = new Set([
   'list_bundles',
   'check_usage',
   'get_support',
+  'purchase_bundle',
+  'top_up',
+  'create_ticket',
 ]);
 
 export const TOOL_ARG_SCHEMAS: Readonly<Record<string, readonly string[]>> = {
@@ -38,4 +41,7 @@ export const TOOL_ARG_SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   list_bundles: ['userId'],
   check_usage: ['userId'],
   get_support: ['userId'],
+  purchase_bundle: ['userId', 'bundleId'],
+  top_up: ['userId', 'amount'],
+  create_ticket: ['userId', 'subject', 'description'],
 };

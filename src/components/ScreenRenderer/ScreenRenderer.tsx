@@ -27,13 +27,13 @@ export function ScreenRenderer({ actor }: Props) {
       const supEntry = screenRegistry.get(result.screenType);
       if (!supEntry) return null;
       const SupComponent = supEntry.component;
-      return <SupComponent key={result.toolName} data={result.screenData} />;
+      return <SupComponent key={result.toolName} data={result.screenData} actor={actor} />;
     })
     .filter(Boolean);
 
   return (
     <>
-      <Component data={screenData} />
+      <Component data={screenData} actor={actor} />
       {supplementaryScreens && supplementaryScreens.length > 0 && (
         <div className="supplementary-results">{supplementaryScreens}</div>
       )}

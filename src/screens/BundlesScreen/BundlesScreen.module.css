@@ -120,8 +120,27 @@
   margin-right: var(--space-xs);
 }
 
-/* CTA Button styling - would be applied if cards were clickable */
-.cardAction {
+/* CTA Button styling */
+.buyBtn {
   margin-top: auto;
   padding-top: var(--space-md);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.buyBtn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.buyBtn:active {
+  transform: translateY(0);
 }

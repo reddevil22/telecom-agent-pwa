@@ -10,4 +10,13 @@ export class MockBalanceBffAdapter implements BalanceBffPort {
       nextBillingDate: '2026-04-15',
     };
   }
+
+  async topUp(_userId: string, _amount: number): Promise<Balance> {
+    return {
+      current: 42.5,
+      currency: 'USD',
+      lastTopUp: '2026-03-28',
+      nextBillingDate: '2026-04-15',
+    };
+  }
 }

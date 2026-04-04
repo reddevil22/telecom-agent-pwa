@@ -5,6 +5,7 @@ const KEYWORD_MAP: Record<ScreenType, string[]> = {
   bundles: ['bundle', 'plan', 'package', 'offer', 'deal', 'subscription', 'data plan', 'buy'],
   usage: ['usage', 'consume', 'used', 'remaining', 'data left', 'minutes used', 'how much', 'consume'],
   support: ['help', 'support', 'issue', 'problem', 'complaint', 'ticket', 'fault', 'not working', 'broken', 'fix'],
+  confirmation: [],
   unknown: [],
 };
 

@@ -1,5 +1,13 @@
 import type { Balance, Bundle, UsageEntry, SupportTicket, ConversationMessage } from './domain';
 
+// Re-export streaming types for convenience
+export type {
+  StreamEvent,
+  StreamEventType,
+  StreamEventData,
+  StreamingAgentRequest,
+} from './streaming';
+
 export interface AgentRequest {
   prompt: string;
   sessionId: string;
@@ -8,7 +16,7 @@ export interface AgentRequest {
   timestamp: number;
 }
 
-export type ScreenType = 'balance' | 'bundles' | 'usage' | 'support' | 'unknown';
+export type ScreenType = 'balance' | 'bundles' | 'usage' | 'support' | 'confirmation' | 'unknown';
 
 export interface BalanceScreenData {
   type: 'balance';
@@ -31,6 +39,15 @@ export interface SupportScreenData {
   faqItems: { question: string; answer: string }[];
 }
 
+export interface ConfirmationScreenData {
+  type: 'confirmation';
+  title: string;
+  status: 'success' | 'error';
+  message: string;
+  details: Record<string, string | number>;
+  updatedBalance?: Balance;
+}
+
 export interface UnknownScreenData {
   type: 'unknown';
 }
@@ -40,6 +57,7 @@ export type ScreenData =
   | BundlesScreenData
   | UsageScreenData
   | SupportScreenData
+  | ConfirmationScreenData
   | UnknownScreenData;
 
 export interface ProcessingStep {

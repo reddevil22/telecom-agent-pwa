@@ -17,4 +17,8 @@ export class FileBalanceBffAdapter implements BalanceBffPort {
   async getBalance(userId: string): Promise<Balance> {
     return this.store.getBalance(userId) ?? DEFAULT_BALANCE;
   }
+
+  async topUp(userId: string, amount: number): Promise<Balance> {
+    return this.store.topUp(userId, amount);
+  }
 }

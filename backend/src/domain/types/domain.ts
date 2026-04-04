@@ -30,7 +30,14 @@ export interface SupportTicket {
   id: string;
   status: 'open' | 'in_progress' | 'resolved';
   subject: string;
+  description: string;
   createdAt: string;
+}
+
+export interface OwnedBundle {
+  bundleId: string;
+  purchasedAt: string;
+  expiresAt: string;
 }
 
 export interface ConversationMessage {

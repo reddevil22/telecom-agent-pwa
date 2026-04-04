@@ -61,4 +61,53 @@ export const TOOL_DEFINITIONS: LlmToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'purchase_bundle',
+      description:
+        'Purchase or activate a specific bundle for the user. The user must have sufficient balance. Requires the bundleId (use IDs from the bundle listing like "b1", "b2", etc.).',
+      parameters: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string', description: 'The user ID' },
+          bundleId: { type: 'string', description: 'The bundle ID to purchase (e.g. "b1", "b2")' },
+        },
+        required: ['userId', 'bundleId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'top_up',
+      description:
+        'Top up, recharge, or add credit to the user account balance. Use when the user wants to add money to their account.',
+      parameters: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string', description: 'The user ID' },
+          amount: { type: 'string', description: 'The amount to top up (e.g. "20", "50")' },
+        },
+        required: ['userId', 'amount'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_ticket',
+      description:
+        'Create a new support ticket for the user. Use when the user describes a problem, complaint, or issue they want tracked as a ticket.',
+      parameters: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string', description: 'The user ID' },
+          subject: { type: 'string', description: 'Short summary of the issue' },
+          description: { type: 'string', description: 'Detailed description of the problem' },
+        },
+        required: ['userId', 'subject', 'description'],
+      },
+    },
+  },
 ];

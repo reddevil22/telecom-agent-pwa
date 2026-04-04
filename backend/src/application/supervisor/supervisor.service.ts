@@ -175,7 +175,8 @@ export class SupervisorService {
         }
 
         // Execute sub-agent (always using request.userId, never LLM-provided)
-        const { screenData, processingSteps } = await subAgent.handle(request.userId);
+        const parsedArgs = JSON.parse(toolCall.function.arguments || '{}');
+        const { screenData, processingSteps } = await subAgent.handle(request.userId, parsedArgs);
 
         const toolResult: ToolResult = {
           toolName: toolCall.function.name,
@@ -272,6 +273,8 @@ export class SupervisorService {
         return { tool: result.toolName, result: 'usage_retrieved', entries: data.usage?.length ?? 0 };
       case 'support':
         return { tool: result.toolName, result: 'support_data_retrieved', tickets: data.tickets?.length ?? 0, faqCount: data.faqItems?.length ?? 0 };
+      case 'confirmation':
+        return { tool: result.toolName, result: data.status, title: data.title, message: data.message };
       default:
         return { tool: result.toolName, result: 'unknown' };
     }

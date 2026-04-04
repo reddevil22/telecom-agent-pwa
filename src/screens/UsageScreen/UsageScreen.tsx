@@ -1,8 +1,10 @@
 import type { ScreenData } from '../../types/agent';
+import type { ScreenActor } from '../../types/screens';
 import styles from './UsageScreen.module.css';
 
 interface Props {
   data: ScreenData;
+  actor: ScreenActor;
 }
 
 export function UsageScreen({ data }: Props) {

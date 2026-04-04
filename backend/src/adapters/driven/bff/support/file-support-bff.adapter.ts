@@ -13,4 +13,8 @@ export class FileSupportBffAdapter implements SupportBffPort {
   async getFaq() {
     return this.store.getFaq();
   }
+
+  async createTicket(userId: string, subject: string, description: string) {
+    return this.store.createTicket(userId, subject, description);
+  }
 }

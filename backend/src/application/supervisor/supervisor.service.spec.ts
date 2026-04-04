@@ -1,6 +1,7 @@
 import { SupervisorService } from './supervisor.service';
 import type { LlmPort, LlmChatResponse } from '../../domain/ports/llm.port';
 import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
+import type { ConversationStoragePort } from '../../domain/ports/conversation-storage.port';
 import type { AgentRequest } from '../../domain/types/agent';
 import { SECURITY_LIMITS } from '../../domain/constants/security-constants';
 
@@ -49,20 +50,37 @@ function createMockLlm(responses: LlmChatResponse[]): LlmPort {
 
 function createMockSubAgent(screenType: string): SubAgentPort {
   return {
-    handle: jest.fn().mockResolvedValue({
+    handle: jest.fn().mockImplementation((userId: string) => Promise.resolve({
       screenData: { type: screenType },
       processingSteps: [
         { label: 'Understanding your request', status: 'done' },
         { label: 'Processing', status: 'done' },
         { label: 'Preparing response', status: 'done' },
       ],
-    }),
+    })),
   } as unknown as SubAgentPort;
+}
+
+function createMockStorage(): ConversationStoragePort {
+  return {
+    createConversation: jest.fn().mockResolvedValue({
+      id: 'conv-1',
+      sessionId: 's1',
+      userId: 'user-42',
+      messages: [],
+      metadata: { createdAt: new Date(), updatedAt: new Date(), totalMessages: 0 },
+    }),
+    getConversation: jest.fn().mockResolvedValue(null),
+    getConversationsByUser: jest.fn().mockResolvedValue([]),
+    addMessage: jest.fn().mockResolvedValue(undefined),
+    deleteConversation: jest.fn().mockResolvedValue(undefined),
+  } as unknown as ConversationStoragePort;
 }
 
 describe('SupervisorService', () => {
   let service: SupervisorService;
   let mockLlm: LlmPort;
+  let mockStorage: ConversationStoragePort;
   let balanceAgent: SubAgentPort;
   let bundlesAgent: SubAgentPort;
   let usageAgent: SubAgentPort;
@@ -70,7 +88,8 @@ describe('SupervisorService', () => {
 
   beforeEach(() => {
     mockLlm = createMockLlm([]);
-    service = new SupervisorService(mockLlm, 'test-model', 0.1, 1024);
+    mockStorage = createMockStorage();
+    service = new SupervisorService(mockLlm, 'test-model', 0.1, 1024, mockStorage);
 
     balanceAgent = createMockSubAgent('balance');
     bundlesAgent = createMockSubAgent('bundles');
@@ -97,7 +116,7 @@ describe('SupervisorService', () => {
     expect(result.screenData.type).toBe('balance');
     expect(result.replyText).toBe('Here is your current account balance.');
     expect(result.confidence).toBe(0.95);
-    expect(balanceAgent.handle).toHaveBeenCalledWith('user-42');
+    expect(balanceAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
   });
 
   it('routes list_bundles tool call to bundles sub-agent', async () => {
@@ -108,7 +127,7 @@ describe('SupervisorService', () => {
     const result = await service.processRequest(makeRequest());
 
     expect(result.screenType).toBe('bundles');
-    expect(bundlesAgent.handle).toHaveBeenCalledWith('user-42');
+    expect(bundlesAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
   });
 
   it('routes check_usage tool call to usage sub-agent', async () => {
@@ -119,7 +138,7 @@ describe('SupervisorService', () => {
     const result = await service.processRequest(makeRequest());
 
     expect(result.screenType).toBe('usage');
-    expect(usageAgent.handle).toHaveBeenCalledWith('user-42');
+    expect(usageAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
   });
 
   it('routes get_support tool call to support sub-agent', async () => {
@@ -130,7 +149,7 @@ describe('SupervisorService', () => {
     const result = await service.processRequest(makeRequest());
 
     expect(result.screenType).toBe('support');
-    expect(supportAgent.handle).toHaveBeenCalledWith('user-42');
+    expect(supportAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
   });
 
   // ── userId trust boundary ──
@@ -143,7 +162,7 @@ describe('SupervisorService', () => {
     const result = await service.processRequest(makeRequest());
 
     expect(result.screenType).toBe('balance');
-    expect(balanceAgent.handle).toHaveBeenCalledWith('user-42');
+    expect(balanceAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
     expect(balanceAgent.handle).not.toHaveBeenCalledWith('attacker-controlled');
   });
 
@@ -189,7 +208,7 @@ describe('SupervisorService', () => {
     const result = await service.processRequest(makeRequest());
 
     expect(result.screenType).toBe('balance');
-    expect(balanceAgent.handle).toHaveBeenCalledWith('user-42');
+    expect(balanceAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
     expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(3);
   });
 
@@ -271,9 +290,9 @@ describe('SupervisorService', () => {
     expect(result.supplementaryResults![0].screenType).toBe('usage');
     expect(result.supplementaryResults![1].screenType).toBe('support');
     // Verify all sub-agents called with trusted userId
-    expect(balanceAgent.handle).toHaveBeenCalledWith('user-42');
-    expect(usageAgent.handle).toHaveBeenCalledWith('user-42');
-    expect(supportAgent.handle).toHaveBeenCalledWith('user-42');
+    expect(balanceAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
+    expect(usageAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
+    expect(supportAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
   });
 
   it('does not include supplementaryResults when only one tool is called', async () => {
@@ -326,7 +345,7 @@ describe('SupervisorService', () => {
 
   it('handles LLM returning text content alongside tool calls', async () => {
     const mockLogger = { warn: jest.fn(), info: jest.fn(), error: jest.fn(), setContext: jest.fn() };
-    const serviceWithLogger = new SupervisorService(mockLlm, 'test-model', 0.1, 1024, mockLogger as never);
+    const serviceWithLogger = new SupervisorService(mockLlm, 'test-model', 0.1, 1024, mockStorage, mockLogger as never);
     serviceWithLogger.registerAgent('check_balance', balanceAgent);
 
     (mockLlm.chatCompletion as jest.Mock)

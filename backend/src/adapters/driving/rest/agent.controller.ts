@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Sse, MessageEvent } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Sse } from '@nestjs/common';
 import { AgentRequestDto } from './dto/agent-request.dto';
 import { SupervisorService } from '../../../application/supervisor/supervisor.service';
 import { StreamingSupervisorService } from '../../../application/supervisor/streaming-supervisor.service';
@@ -21,9 +21,13 @@ export class AgentController {
   }
 
   @Sse('chat/stream')
-  streamChat(@Body(new PromptSanitizerPipe()) dto: AgentRequestDto): Observable<MessageEvent> {
+  streamChat(@Body(new PromptSanitizerPipe()) dto: AgentRequestDto): Observable<{
+    id: string;
+    event: string;
+    data: string;
+  }> {
     return this.streamingSupervisor.processRequestStream(dto).pipe(
-      map((event: StreamEvent): MessageEvent => ({
+      map((event: StreamEvent) => ({
         id: event.id,
         event: event.type,
         data: JSON.stringify(event),

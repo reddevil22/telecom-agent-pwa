@@ -8,12 +8,14 @@ export class MockSupportBffAdapter implements SupportBffPort {
         id: 'TK-1024',
         status: 'open',
         subject: 'Data connectivity issues in downtown area',
+        description: '',
         createdAt: '2026-03-30',
       },
       {
         id: 'TK-1019',
         status: 'in_progress',
         subject: 'Incorrect billing amount on last invoice',
+        description: '',
         createdAt: '2026-03-25',
       },
     ];
@@ -34,5 +36,15 @@ export class MockSupportBffAdapter implements SupportBffPort {
         answer: "Say \"connect me to an agent\" and we'll route you to the next available representative.",
       },
     ];
+  }
+
+  async createTicket(_userId: string, subject: string, description: string): Promise<SupportTicket> {
+    return {
+      id: 'TK-MOCK',
+      status: 'open',
+      subject,
+      description,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
   }
 }
