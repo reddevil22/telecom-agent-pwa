@@ -68,6 +68,7 @@ src/
 ├── screens/
 │   ├── BalanceScreen/     # Account balance display
 │   ├── BundlesScreen/     # Available bundles/cards
+│   ├── BundleDetailScreen/ # Bundle purchase confirmation
 │   ├── SupportScreen/      # Tickets and FAQ
 │   ├── UsageScreen/       # Data/voice/SMS usage
 │   └── registry.ts        # Screen component map
@@ -240,6 +241,23 @@ npm run lint       # ESLint
 - Offline support with precached assets
 - Installable on mobile/desktop
 - App-like experience with safe area insets
+
+## Recent Changes
+
+### Bundle Detail Screen (2025-01)
+Added `BundleDetailScreen` component for two-phase bundle purchase flow:
+- Shows full bundle details (price, data, minutes, SMS, validity)
+- Displays current balance and projected balance after purchase
+- Red warning + disabled button if insufficient balance
+- "Confirm Purchase" and "Cancel" buttons
+
+**Flow**: User clicks "View Details" → sees BundleDetailScreen → clicks "Confirm Purchase" → backend executes purchase → shows confirmation
+
+**Purpose**: Prevents accidental purchases by requiring explicit confirmation
+
+### ScreenRenderer Updates (2025-01)
+- Modified to skip supplementary results when main screen is `confirmation` type
+- Prevents duplicate balance display on purchase confirmation
 
 ## Design Principles
 

@@ -7,18 +7,22 @@ NestJS backend that orchestrates an LLM-powered telecom customer service agent. 
 ```
 src/
 ├── domain/                  # Pure business logic — zero framework deps
-│   ├── constants/           # agent-constants.ts, security-constants.ts
+│   ├── constants/           # tool-registry.ts (single source of truth), security-constants.ts, processing-steps.ts
 │   ├── ports/               # Interfaces: LlmPort, SubAgentPort, BffPorts, ConversationStoragePort
 │   ├── tokens.ts            # DI injection tokens (Symbols)
 │   └── types/               # agent.ts (request/response), domain.ts (entities)
 │
 ├── application/             # Use-case orchestration
 │   ├── supervisor/          # SupervisorService — LLM routing & tool dispatch
-│   │   ├── supervisor.service.ts   # Main orchestrator with conversation persistence
+│   │   ├── supervisor.service.ts   # Main orchestrator (refactored into 12 focused methods)
 │   │   ├── system-prompt.ts        # LLM system prompt with security rules
-│   │   ├── tool-definitions.ts     # 4 tool schemas for LLM function calling
+│   │   ├── tool-definitions.ts     # Auto-generated from tool-registry.ts
 │   │   └── tool-resolver.ts        # toolName → SubAgentPort registry
-│   └── sub-agents/          # One per tool: balance, bundles, usage, support
+│   └── sub-agents/          # Generic + specific sub-agents
+│       ├── generic-sub-agents.ts   # SimpleQuerySubAgent, DualQuerySubAgent, ActionSubAgent
+│       ├── purchase-bundle-sub-agent.service.ts
+│       ├── create-ticket-sub-agent.service.ts
+│       └── view-bundle-details-sub-agent.service.ts
 │
 ├── adapters/
 │   ├── driving/rest/        # Inbound — HTTP API
@@ -140,11 +144,43 @@ SQLite database created automatically at `backend/data/telecom.db`.
 ### Migrations
 Migrations run automatically on startup. The `001_initial` migration creates all tables and indexes.
 
+## Refactoring Highlights
+
+### Generic Sub-Agent Factory (2025-01)
+Created reusable sub-agent classes in `generic-sub-agents.ts`:
+- **SimpleQuerySubAgent**: For single BFF call operations (balance, bundles, usage)
+- **DualQuerySubAgent**: For parallel BFF calls (support = tickets + FAQ)
+- **ActionSubAgent**: For confirmation-based operations with validation (top-up)
+
+**Impact**: Reduced 5 individual sub-agent files to 3 generic classes + 3 complex ones. Adding a new simple query now requires ~5 lines instead of 25.
+
+### Tool Registry Consolidation (2025-01)
+Created `tool-registry.ts` as single source of truth:
+- Tool metadata (name, screenType, allowedArgs, replyText, suggestions, description, parameters)
+- Auto-generates: `ALLOWED_TOOLS`, `TOOL_TO_SCREEN`, `TOOL_ARG_SCHEMAS`, `REPLY_MAP`, `SUGGESTION_MAP`, `TOOL_DEFINITIONS`
+
+**Impact**: Adding a new tool requires updating 1 file instead of 4.
+
+### Supervisor Service Refactoring (2025-01)
+Split 373-line `processRequest()` into 12 focused methods:
+- `initializeConversation()`, `executeIteration()`, `callLlm()`
+- `handleNoToolCall()`, `handleToolCall()`, `validateToolCallWithError()`
+- `executeSubAgent()`, `updatePrimaryResult()`, `feedResultBackToLlm()`
+- `handleMaxIterationsReached()`, `handleError()`, `buildUnknownResponse()`
+
+**Impact**: Each method has single responsibility, easier to test and understand.
+
+### Standardized Constants (2025-01)
+Created `processing-steps.ts` with:
+- `ProcessingStepLabels` — Standardized step names across all sub-agents
+- `ErrorMessages` — Consistent error messages
+- `ConfirmationTitles` — Standardized confirmation dialog titles
+
 ## Conventions
 
 - All API routes are prefixed with `/api` (set in `main.ts`).
 - DTO validation uses `class-validator` decorators with `whitelist: true` and `forbidNonWhitelisted: true` — extra fields are rejected with 400.
 - Sub-agents implement `SubAgentPort` and are registered in `app.agent-module.ts` via `SupervisorService.registerAgent()`.
-- Screen types: `balance | bundles | usage | support | unknown`. Mapped from tool names via `TOOL_TO_SCREEN` constant.
-- New tools require: tool definition in `tool-definitions.ts`, entry in `ALLOWED_TOOLS` + `TOOL_ARG_SCHEMAS` in `security-constants.ts`, mapping in `TOOL_TO_SCREEN`, a `SubAgentPort` implementation, and registration in `app.agent-module.ts`.
+- Screen types: `balance | bundles | bundleDetail | usage | support | confirmation | unknown`. Mapped from tool names via `TOOL_TO_SCREEN` constant.
+- New tools require: Add entry to `TOOL_REGISTRY` in `tool-registry.ts`, implement `SubAgentPort` (or use generic classes), register in `app.agent-module.ts`.
 - Conversation persistence is automatic — every request/response pair is stored in SQLite.
