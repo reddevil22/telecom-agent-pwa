@@ -11,7 +11,7 @@ export interface AgentRequest {
   timestamp: number;
 }
 
-export type ScreenType = 'balance' | 'bundles' | 'usage' | 'support' | 'unknown';
+export type ScreenType = 'balance' | 'bundles' | 'usage' | 'support' | 'confirmation' | 'unknown';
 
 // ── Screen data (discriminated union) ──
 
@@ -36,6 +36,15 @@ export interface SupportScreenData {
   faqItems: { question: string; answer: string }[];
 }
 
+export interface ConfirmationScreenData {
+  type: 'confirmation';
+  title: string;
+  status: 'success' | 'error';
+  message: string;
+  details: Record<string, string | number>;
+  updatedBalance?: Balance;
+}
+
 export interface UnknownScreenData {
   type: 'unknown';
 }
@@ -45,6 +54,7 @@ export type ScreenData =
   | BundlesScreenData
   | UsageScreenData
   | SupportScreenData
+  | ConfirmationScreenData
   | UnknownScreenData;
 
 export interface ProcessingStep {
@@ -66,4 +76,34 @@ export interface AgentResponse {
   confidence: number;
   processingSteps: ProcessingStep[];
   supplementaryResults?: ToolResult[];
+}
+
+// ── Streaming types (SSE) ──
+
+export type StreamEventType =
+  | 'step_start'
+  | 'step_complete'
+  | 'tool_call'
+  | 'tool_result'
+  | 'llm_content'
+  | 'screen_ready'
+  | 'complete'
+  | 'error';
+
+export interface StreamEventData {
+  step?: ProcessingStep;
+  stepIndex?: number;
+  toolName?: string;
+  screenType?: ScreenType;
+  screenData?: ScreenData;
+  content?: string;
+  error?: string;
+}
+
+export interface StreamEvent {
+  id: string;
+  type: StreamEventType;
+  timestamp: number;
+  correlationId: string;
+  data: StreamEventData;
 }
