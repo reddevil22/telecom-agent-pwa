@@ -72,7 +72,7 @@ describe('RateLimitGuard', () => {
 
     // Manually expire timestamps by accessing internal state
     // @ts-expect-error accessing private for test
-    const record = guard.requests.get('session-1')!;
+    const record = guard.requests.get('session:session-1')!;
     record.timestamps = record.timestamps.map(() => Date.now() - SECURITY_LIMITS.RATE_LIMIT_WINDOW_MS - 1000);
 
     // Should be allowed again after timestamps expired
@@ -85,13 +85,13 @@ describe('RateLimitGuard', () => {
 
     // Expire the timestamp
     // @ts-expect-error accessing private for test
-    const record = guard.requests.get('old-session')!;
+    const record = guard.requests.get('session:old-session')!;
     record.timestamps = [Date.now() - SECURITY_LIMITS.RATE_LIMIT_WINDOW_MS - 1000];
 
     // @ts-expect-error accessing private for test
     guard.cleanup();
 
     // @ts-expect-error accessing private for test
-    expect(guard.requests.has('old-session')).toBe(false);
+    expect(guard.requests.has('session:old-session')).toBe(false);
   });
 });
