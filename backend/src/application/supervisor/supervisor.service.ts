@@ -1,4 +1,4 @@
-import type { LlmPort } from '../../domain/ports/llm.port';
+import type { LlmPort, LlmChatResponse } from '../../domain/ports/llm.port';
 import type { AgentRequest, AgentResponse, ScreenType, ToolResult } from '../../domain/types/agent';
 import { REPLY_MAP, SUGGESTION_MAP, TOOL_TO_SCREEN } from '../../domain/constants/agent-constants';
 import { ALLOWED_TOOLS, TOOL_ARG_SCHEMAS, SECURITY_LIMITS } from '../../domain/constants/security-constants';
@@ -7,6 +7,7 @@ import { TOOL_DEFINITIONS } from './tool-definitions';
 import { ToolResolver } from './tool-resolver';
 import type { PinoLogger } from 'nestjs-pino';
 import type { ConversationStoragePort } from '../../domain/ports/conversation-storage.port';
+import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
 
 /** Internal message type supporting tool-call and tool-result roles for the ReAct loop */
 interface LoopMessage {
@@ -14,6 +15,20 @@ interface LoopMessage {
   content: string;
   tool_call_id?: string;
   tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
+}
+
+interface IterationContext {
+  messages: LoopMessage[];
+  collectedResults: ToolResult[];
+  primaryResult: { screenType: ScreenType; screenData: AgentResponse['screenData']; processingSteps: AgentResponse['processingSteps'] } | null;
+  conversationId: string;
+}
+
+interface ToolExecutionResult {
+  toolName: string;
+  screenType: ScreenType;
+  screenData: AgentResponse['screenData'];
+  processingSteps: AgentResponse['processingSteps'];
 }
 
 export class SupervisorService {
@@ -33,15 +48,325 @@ export class SupervisorService {
     this.logger?.setContext(SupervisorService.name);
   }
 
-  registerAgent(toolName: string, agent: import('../../domain/ports/sub-agent.port').SubAgentPort): void {
+  registerAgent(toolName: string, agent: SubAgentPort): void {
     this.toolResolver.register(toolName, agent);
   }
 
   async processRequest(request: AgentRequest): Promise<AgentResponse> {
-    const unknownResponse: AgentResponse = {
+    try {
+      const conversationId = this.initializeConversation(request);
+      const context: IterationContext = {
+        messages: this.buildInitialMessages(request),
+        collectedResults: [],
+        primaryResult: null,
+        conversationId,
+      };
+
+      for (let iteration = 0; iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS; iteration++) {
+        const result = await this.executeIteration(request, context, iteration);
+        if (result) {
+          this.persistAgentResponse(conversationId, result);
+          return result;
+        }
+      }
+
+      return this.handleMaxIterationsReached(context);
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  private initializeConversation(request: AgentRequest): string {
+    const conversation = this.storage.getConversation(request.sessionId);
+    
+    if (!conversation) {
+      return this.storage.createConversation(request.sessionId, request.userId);
+    }
+
+    this.storage.addMessage(
+      conversation.id,
+      'user',
+      request.prompt,
+      null,
+      request.timestamp,
+    );
+
+    return conversation.id;
+  }
+
+  private async executeIteration(
+    request: AgentRequest,
+    context: IterationContext,
+    iteration: number,
+  ): Promise<AgentResponse | null> {
+    const iterStart = Date.now();
+    const llmResponse = await this.callLlm(context.messages);
+    const toolCall = llmResponse.message?.tool_calls?.[0];
+
+    this.checkForInstructionLeak(iteration, llmResponse, toolCall);
+
+    if (!toolCall) {
+      return await this.handleNoToolCall(context, iteration, iterStart, llmResponse);
+    }
+
+    return await this.handleToolCall(request, context, iteration, iterStart, toolCall);
+  }
+
+  private async callLlm(messages: LoopMessage[]): Promise<LlmChatResponse> {
+    return this.llm.chatCompletion({
+      model: this.modelName,
+      messages: messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+      })),
+      tools: TOOL_DEFINITIONS,
+      tool_choice: 'auto',
+      temperature: this.temperature,
+      max_tokens: this.maxTokens,
+    });
+  }
+
+  private checkForInstructionLeak(
+    iteration: number,
+    llmResponse: LlmChatResponse,
+    toolCall: { id: string; type: 'function'; function: { name: string; arguments: string } } | undefined,
+  ): void {
+    if (llmResponse.message.content && toolCall) {
+      this.logger?.warn({ iteration }, 'LLM returned text content alongside tool calls — possible instruction leak attempt');
+    }
+  }
+
+  private async handleNoToolCall(
+    context: IterationContext,
+    iteration: number,
+    iterStart: number,
+    llmResponse: LlmChatResponse,
+  ): Promise<AgentResponse | null> {
+    if (context.primaryResult) {
+      this.logger?.info({
+        screenType: context.primaryResult.screenType,
+        iterations: iteration + 1,
+        supplementaryCount: context.collectedResults.length,
+        duration: Date.now() - iterStart,
+      }, 'Supervisor completed with primary result');
+      return this.buildResponse(context.primaryResult, context.collectedResults);
+    }
+
+    if (llmResponse.message.content) {
+      this.logger?.info({ iterations: iteration + 1 }, 'Supervisor returned unknown (LLM text response)');
+      return this.buildUnknownResponse(llmResponse.message.content);
+    }
+
+    this.logger?.info({ iterations: iteration + 1 }, 'Supervisor returned unknown (no tool call, no content)');
+    return this.buildUnknownResponse();
+  }
+
+  private async handleToolCall(
+    request: AgentRequest,
+    context: IterationContext,
+    iteration: number,
+    iterStart: number,
+    toolCall: { id: string; type: 'function'; function: { name: string; arguments: string } },
+  ): Promise<AgentResponse | null> {
+    const validationError = this.validateToolCallWithError(toolCall);
+    if (validationError) {
+      this.pushErrorToMessages(context.messages, toolCall, validationError);
+      return null;
+    }
+
+    const screenType = this.resolveScreenType(toolCall);
+    if (!screenType) {
+      this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'Unknown tool mapping');
+      this.pushErrorToMessages(context.messages, toolCall, `Unknown tool mapping: ${toolCall.function.name}`);
+      return null;
+    }
+
+    const subAgent = this.toolResolver.resolve(toolCall.function.name);
+    if (!subAgent) {
+      this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'No handler registered for tool');
+      this.pushErrorToMessages(context.messages, toolCall, `No handler registered for tool: ${toolCall.function.name}`);
+      return null;
+    }
+
+    const toolResult = await this.executeSubAgent(request, subAgent, toolCall, screenType);
+    this.updatePrimaryResult(context, toolResult, iteration, iterStart);
+
+    // For screens that require user confirmation, stop here
+    if (screenType === 'bundleDetail') {
+      this.logger?.info({
+        screenType: context.primaryResult?.screenType,
+        iterations: iteration + 1,
+      }, 'Supervisor pausing for user confirmation');
+      return this.buildResponse(context.primaryResult!, context.collectedResults);
+    }
+
+    this.feedResultBackToLlm(context.messages, toolCall, toolResult);
+    return null;
+  }
+
+  private validateToolCallWithError(
+    toolCall: { function: { name: string; arguments: string } },
+  ): string | null {
+    if (!ALLOWED_TOOLS.has(toolCall.function.name)) {
+      return 'Invalid tool call. Use only the allowed tools with correct arguments.';
+    }
+
+    const expectedKeys = TOOL_ARG_SCHEMAS[toolCall.function.name];
+    if (!expectedKeys) {
+      return 'Invalid tool call. Use only the allowed tools with correct arguments.';
+    }
+
+    let args: Record<string, unknown>;
+    try {
+      args = JSON.parse(toolCall.function.arguments);
+    } catch {
+      return 'Invalid tool call. Use only the allowed tools with correct arguments.';
+    }
+
+    const argKeys = Object.keys(args);
+
+    for (const key of argKeys) {
+      if (!expectedKeys.includes(key)) {
+        return 'Invalid tool call. Use only the allowed tools with correct arguments.';
+      }
+    }
+
+    for (const key of expectedKeys) {
+      if (typeof args[key] !== 'string') {
+        return 'Invalid tool call. Use only the allowed tools with correct arguments.';
+      }
+    }
+
+    return null;
+  }
+
+  private pushErrorToMessages(
+    messages: LoopMessage[],
+    toolCall: { id: string; type: 'function'; function: { name: string; arguments: string } },
+    error: string,
+  ): void {
+    messages.push({
+      role: 'assistant',
+      content: '',
+      tool_calls: [toolCall],
+    });
+    messages.push({
+      role: 'tool',
+      content: JSON.stringify({ error }),
+      tool_call_id: toolCall.id,
+    });
+  }
+
+  private resolveScreenType(
+    toolCall: { function: { name: string } },
+  ): ScreenType | undefined {
+    return TOOL_TO_SCREEN[toolCall.function.name] as ScreenType | undefined;
+  }
+
+  private async executeSubAgent(
+    request: AgentRequest,
+    subAgent: SubAgentPort,
+    toolCall: { function: { name: string; arguments: string } },
+    screenType: ScreenType,
+  ): Promise<ToolExecutionResult> {
+    const parsedArgs = JSON.parse(toolCall.function.arguments || '{}');
+    const { screenData, processingSteps } = await subAgent.handle(request.userId, parsedArgs);
+
+    return {
+      toolName: toolCall.function.name,
+      screenType,
+      screenData,
+      processingSteps,
+    };
+  }
+
+  private updatePrimaryResult(
+    context: IterationContext,
+    toolResult: ToolExecutionResult,
+    iteration: number,
+    iterStart: number,
+  ): void {
+    if (!context.primaryResult) {
+      context.primaryResult = {
+        screenType: toolResult.screenType,
+        screenData: toolResult.screenData,
+        processingSteps: toolResult.processingSteps,
+      };
+    } else if (toolResult.screenType === 'confirmation' && context.primaryResult.screenType !== 'confirmation') {
+      // Move current primary to supplementary and make confirmation the new primary
+      context.collectedResults.push({
+        toolName: 'previous',
+        screenType: context.primaryResult.screenType,
+        screenData: context.primaryResult.screenData,
+      });
+      context.primaryResult = {
+        screenType: toolResult.screenType,
+        screenData: toolResult.screenData,
+        processingSteps: toolResult.processingSteps,
+      };
+    } else {
+      context.collectedResults.push({
+        toolName: toolResult.toolName,
+        screenType: toolResult.screenType,
+        screenData: toolResult.screenData,
+      });
+    }
+
+    this.logger?.info({
+      iteration,
+      toolName: toolResult.toolName,
+      screenType: toolResult.screenType,
+      duration: Date.now() - iterStart,
+    }, 'Tool executed');
+  }
+
+  private feedResultBackToLlm(
+    messages: LoopMessage[],
+    toolCall: { id: string; type: 'function'; function: { name: string; arguments: string } },
+    toolResult: ToolExecutionResult,
+  ): void {
+    const summary = this.summarizeForLlm(toolResult);
+    messages.push({
+      role: 'assistant',
+      content: '',
+      tool_calls: [toolCall],
+    });
+    messages.push({
+      role: 'tool',
+      content: JSON.stringify(summary),
+      tool_call_id: toolCall.id,
+    });
+  }
+
+  private handleMaxIterationsReached(context: IterationContext): AgentResponse {
+    if (context.primaryResult) {
+      this.logger?.warn({
+        screenType: context.primaryResult.screenType,
+        supplementaryCount: context.collectedResults.length,
+      }, 'Supervisor hit max iterations');
+      return this.buildResponse(context.primaryResult, context.collectedResults);
+    }
+
+    this.logger?.warn('Supervisor hit max iterations with no valid results');
+    return this.buildUnknownResponse();
+  }
+
+  private handleError(error: unknown): AgentResponse {
+    this.logger?.error({
+      err: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+    }, 'Supervisor error processing request');
+    return {
+      ...this.buildUnknownResponse(),
+      replyText: 'Sorry, I encountered an error processing your request. Please try again.',
+    };
+  }
+
+  private buildUnknownResponse(replyText?: string): AgentResponse {
+    return {
       screenType: 'unknown',
       screenData: { type: 'unknown' },
-      replyText: REPLY_MAP.unknown,
+      replyText: replyText ?? REPLY_MAP.unknown,
       suggestions: SUGGESTION_MAP.unknown,
       confidence: 0.3,
       processingSteps: [
@@ -50,191 +375,6 @@ export class SupervisorService {
         { label: 'Preparing response', status: 'done' },
       ],
     };
-
-    try {
-      // Get or create conversation
-      let conversation = this.storage.getConversation(request.sessionId);
-      let conversationId: string;
-
-      if (!conversation) {
-        conversationId = this.storage.createConversation(request.sessionId, request.userId);
-      } else {
-        conversationId = conversation.id;
-      }
-
-      // Store user message
-      this.storage.addMessage(
-        conversationId,
-        'user',
-        request.prompt,
-        null,
-        request.timestamp,
-      );
-
-      const messages: LoopMessage[] = this.buildInitialMessages(request);
-      const collectedResults: ToolResult[] = [];
-      let primaryResult: { screenType: ScreenType; screenData: AgentResponse['screenData']; processingSteps: AgentResponse['processingSteps'] } | null = null;
-
-      for (let iteration = 0; iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS; iteration++) {
-        const iterStart = Date.now();
-        const llmResponse = await this.llm.chatCompletion({
-          model: this.modelName,
-          messages: messages.map(m => ({
-            role: m.role,
-            content: m.content,
-            ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-            ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-          })),
-          tools: TOOL_DEFINITIONS,
-          tool_choice: 'auto',
-          temperature: this.temperature,
-          max_tokens: this.maxTokens,
-        });
-
-        const toolCall = llmResponse.message?.tool_calls?.[0];
-
-        if (llmResponse.message?.content && toolCall) {
-          this.logger?.warn({ iteration }, 'LLM returned text content alongside tool calls — possible instruction leak attempt');
-        }
-
-        // No tool call — LLM is done or declined to call a tool
-        if (!toolCall) {
-          if (primaryResult) {
-            this.logger?.info({
-              screenType: primaryResult.screenType,
-              iterations: iteration + 1,
-              supplementaryCount: collectedResults.length,
-              duration: Date.now() - iterStart,
-            }, 'Supervisor completed with primary result');
-            const response = this.buildResponse(primaryResult, collectedResults);
-            this.persistAgentResponse(conversationId, response);
-            return response;
-          }
-          // LLM chose to respond with text instead of calling a tool (e.g. gibberish input)
-          if (llmResponse.message?.content) {
-            this.logger?.info({ iterations: iteration + 1 }, 'Supervisor returned unknown (LLM text response)');
-            const response = {
-              ...unknownResponse,
-              replyText: llmResponse.message.content,
-            };
-            this.persistAgentResponse(conversationId, response);
-            return response;
-          }
-          this.logger?.info({ iterations: iteration + 1 }, 'Supervisor returned unknown (no tool call, no content)');
-          const response = unknownResponse;
-          this.persistAgentResponse(conversationId, response);
-          return response;
-        }
-
-        // Validate tool call
-        if (!this.validateToolCall(toolCall)) {
-          this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'Invalid tool call rejected');
-          messages.push({
-            role: 'assistant',
-            content: '',
-            tool_calls: [toolCall],
-          });
-          messages.push({
-            role: 'tool',
-            content: JSON.stringify({ error: 'Invalid tool call. Use only the allowed tools with correct arguments.' }),
-            tool_call_id: toolCall.id,
-          });
-          continue;
-        }
-
-        const screenType = TOOL_TO_SCREEN[toolCall.function.name] as ScreenType | undefined;
-        if (!screenType) {
-          this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'Unknown tool mapping');
-          messages.push({
-            role: 'assistant',
-            content: '',
-            tool_calls: [toolCall],
-          });
-          messages.push({
-            role: 'tool',
-            content: JSON.stringify({ error: `Unknown tool mapping: ${toolCall.function.name}` }),
-            tool_call_id: toolCall.id,
-          });
-          continue;
-        }
-
-        const subAgent = this.toolResolver.resolve(toolCall.function.name);
-        if (!subAgent) {
-          this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'No handler registered for tool');
-          messages.push({
-            role: 'assistant',
-            content: '',
-            tool_calls: [toolCall],
-          });
-          messages.push({
-            role: 'tool',
-            content: JSON.stringify({ error: `No handler registered for tool: ${toolCall.function.name}` }),
-            tool_call_id: toolCall.id,
-          });
-          continue;
-        }
-
-        // Execute sub-agent (always using request.userId, never LLM-provided)
-        const parsedArgs = JSON.parse(toolCall.function.arguments || '{}');
-        const { screenData, processingSteps } = await subAgent.handle(request.userId, parsedArgs);
-
-        const toolResult: ToolResult = {
-          toolName: toolCall.function.name,
-          screenType,
-          screenData,
-        };
-
-        if (!primaryResult) {
-          primaryResult = { screenType, screenData, processingSteps };
-        } else {
-          collectedResults.push(toolResult);
-        }
-
-        this.logger?.info({
-          iteration,
-          toolName: toolCall.function.name,
-          screenType,
-          duration: Date.now() - iterStart,
-        }, 'Tool executed');
-
-        // Feed concise summary back to LLM for next iteration
-        const summary = this.summarizeForLlm(toolResult);
-        messages.push({
-          role: 'assistant',
-          content: '',
-          tool_calls: [toolCall],
-        });
-        messages.push({
-          role: 'tool',
-          content: JSON.stringify(summary),
-          tool_call_id: toolCall.id,
-        });
-      }
-
-      // Max iterations reached — return what we have
-      if (primaryResult) {
-        this.logger?.warn({
-          screenType: primaryResult.screenType,
-          supplementaryCount: collectedResults.length,
-        }, 'Supervisor hit max iterations');
-        const response = this.buildResponse(primaryResult, collectedResults);
-        this.persistAgentResponse(conversationId, response);
-        return response;
-      }
-
-      this.logger?.warn('Supervisor hit max iterations with no valid results');
-      const response = unknownResponse;
-      this.persistAgentResponse(conversationId, response);
-      return response;
-    } catch (error) {
-      this.logger?.error({
-        err: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-      }, 'Supervisor error processing request');
-      return {
-        ...unknownResponse,
-        replyText: 'Sorry, I encountered an error processing your request. Please try again.',
-      };
-    }
   }
 
   private persistAgentResponse(conversationId: string, response: AgentResponse): void {
@@ -262,13 +402,15 @@ export class SupervisorService {
     };
   }
 
-  private summarizeForLlm(result: ToolResult): Record<string, unknown> {
+  private summarizeForLlm(result: ToolExecutionResult): Record<string, unknown> {
     const data = result.screenData;
     switch (data.type) {
       case 'balance':
         return { tool: result.toolName, result: 'balance_retrieved', balance: data.balance ?? null };
       case 'bundles':
         return { tool: result.toolName, result: 'bundles_listed', count: data.bundles?.length ?? 0 };
+      case 'bundleDetail':
+        return { tool: result.toolName, result: 'bundle_details_retrieved', bundle: data.bundle?.name ?? 'unknown' };
       case 'usage':
         return { tool: result.toolName, result: 'usage_retrieved', entries: data.usage?.length ?? 0 };
       case 'support':
@@ -280,48 +422,11 @@ export class SupervisorService {
     }
   }
 
-  private validateToolCall(toolCall: { function: { name: string; arguments: string } }): boolean {
-    if (!ALLOWED_TOOLS.has(toolCall.function.name)) {
-      return false;
-    }
-
-    const expectedKeys = TOOL_ARG_SCHEMAS[toolCall.function.name];
-    if (!expectedKeys) {
-      return false;
-    }
-
-    let args: Record<string, unknown>;
-    try {
-      args = JSON.parse(toolCall.function.arguments);
-    } catch {
-      return false;
-    }
-
-    const argKeys = Object.keys(args);
-
-    // Check for unexpected keys
-    for (const key of argKeys) {
-      if (!expectedKeys.includes(key)) {
-        return false;
-      }
-    }
-
-    // Check all required keys exist and are strings
-    for (const key of expectedKeys) {
-      if (typeof args[key] !== 'string') {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   private buildInitialMessages(request: AgentRequest): LoopMessage[] {
     const messages: LoopMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
     ];
 
-    // Slice history to supervisor cap (inner cap, DTO allows more)
     const cappedHistory = request.conversationHistory.slice(-SECURITY_LIMITS.SUPERVISOR_HISTORY_CAP);
 
     for (const msg of cappedHistory) {
@@ -336,10 +441,8 @@ export class SupervisorService {
       content: `<user_context>\nuserId: ${request.userId}\n</user_context>\n${request.prompt}`,
     });
 
-    // Enforce total character budget — trim oldest history messages if exceeded
     let totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
     while (totalChars > SECURITY_LIMITS.TOTAL_CHARS_BUDGET && messages.length > 2) {
-      // Remove the oldest history message (index 1, right after system prompt)
       const removed = messages.splice(1, 1)[0];
       totalChars -= removed.content.length;
     }
