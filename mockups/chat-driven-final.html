@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telecom Agent - Chat-Driven UI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #FAFBFC;
+      --bg-elevated: #FFFFFF;
+      --bg-input: #F0F2F5;
+      --bg-card: #FFFFFF;
+      --primary: #00A3E0;
+      --primary-light: #33B5E6;
+      --primary-dark: #0077B8;
+      --primary-dim: rgba(0, 163, 224, 0.08);
+      --primary-glow: rgba(0, 163, 224, 0.25);
+      --accent: #7C3AED;
+      --text: #1A1D26;
+      --text-secondary: #5A6170;
+      --text-muted: #9099A8;
+      --border: rgba(0, 0, 0, 0.08);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 12px 32px rgba(0,0,0,0.12);
+    }
+
+    [data-theme="dark"] {
+      --bg: #0F1117;
+      --bg-elevated: #181B24;
+      --bg-input: #1E222C;
+      --bg-card: #1E222C;
+      --primary: #00C9FF;
+      --primary-light: #33D6FF;
+      --primary-dark: #0099CC;
+      --primary-dim: rgba(0, 201, 255, 0.1);
+      --primary-glow: rgba(0, 201, 255, 0.3);
+      --accent: #A78BFA;
+      --text: #F0F2F5;
+      --text-secondary: #9CA3AF;
+      --text-muted: #6B7280;
+      --border: rgba(255, 255, 255, 0.08);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+      --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+    }
+
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 480px;
+      margin: 0 auto;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    /* HEADER */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-elevated);
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      position: relative;
+      width: 36px;
+      height: 36px;
+    }
+
+    .brand-icon-bg {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border-radius: 9px;
+    }
+
+    .brand-icon-ring {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border-radius: 9px;
+      animation: ring-pulse 2.5s ease-out infinite;
+    }
+
+    @keyframes ring-pulse {
+      0% { transform: scale(1); opacity: 0.4; }
+      100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    .brand-letter {
+      position: relative;
+      z-index: 1;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      color: white;
+    }
+
+    .brand-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+      letter-spacing: -0.01em;
+    }
+
+    .theme-toggle {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-elevated);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* CHAT CONTAINER */
+    .chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* WELCOME STATE */
+    .welcome {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .welcome-icon {
+      width: 72px;
+      height: 72px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .welcome-icon-ring {
+      position: absolute;
+      inset: 0;
+      background: var(--primary);
+      border-radius: 18px;
+      opacity: 0.15;
+    }
+
+    .welcome-icon-inner {
+      position: relative;
+      z-index: 1;
+      width: 72px;
+      height: 72px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      color: white;
+      box-shadow: 0 8px 32px var(--primary-glow);
+    }
+
+    .welcome-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .welcome-subtitle {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      max-width: 280px;
+      line-height: 1.6;
+    }
+
+    .quick-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .quick-action {
+      padding: 10px 16px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .quick-action:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-dim);
+    }
+
+    /* MESSAGES */
+    .message {
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      animation: msg-in 0.25s ease-out;
+    }
+
+    @keyframes msg-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.agent {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 16px 16px 16px 4px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+    }
+
+    .message.agent::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 50%;
+      background: linear-gradient(180deg, var(--primary), var(--accent));
+      border-radius: 0 2px 2px 0;
+      opacity: 0.8;
+    }
+
+    .message.user {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      margin-left: auto;
+      border-radius: 16px 16px 4px 16px;
+      box-shadow: 0 4px 16px var(--primary-glow);
+    }
+
+    /* TYPING INDICATOR */
+    .typing {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 16px 16px 16px 4px;
+      width: fit-content;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .typing-dots {
+      display: flex;
+      gap: 3px;
+    }
+
+    .typing-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      animation: typing 1.4s ease-in-out infinite;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+    @keyframes typing {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+
+    /* Signal wave bars */
+    .signal-wave {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+      height: 16px;
+    }
+
+    .signal-wave span {
+      width: 2px;
+      background: var(--primary);
+      border-radius: 1px;
+      animation: wave 1s ease-in-out infinite;
+    }
+
+    .signal-wave span:nth-child(1) { height: 5px; animation-delay: 0s; }
+    .signal-wave span:nth-child(2) { height: 9px; animation-delay: 0.1s; }
+    .signal-wave span:nth-child(3) { height: 13px; animation-delay: 0.2s; }
+    .signal-wave span:nth-child(4) { height: 9px; animation-delay: 0.3s; }
+    .signal-wave span:nth-child(5) { height: 5px; animation-delay: 0.4s; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.6); opacity: 0.4; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+
+    /* SCREEN CARD - embedded in chat */
+    .screen-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-top: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+
+    .screen-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-input);
+    }
+
+    .screen-card-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background: #22C55E;
+      border-radius: 50%;
+      box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+    }
+
+    /* BALANCE CARD */
+    .balance-card {
+      padding: 20px;
+      text-align: center;
+    }
+
+    .balance-amount {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 2.8rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .balance-currency {
+      font-size: 1.2rem;
+      color: var(--text-secondary);
+      margin-left: 2px;
+    }
+
+    .balance-meta {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .balance-meta-item {
+      text-align: center;
+    }
+
+    .balance-meta-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .balance-meta-value {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* BUNDLE CARD */
+    .bundle-card {
+      padding: 16px;
+    }
+
+    .bundle-header {
+      margin-bottom: 12px;
+    }
+
+    .bundle-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+
+    .bundle-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .bundle-desc {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    .bundle-price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .bundle-price {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .bundle-period {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .bundle-features {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg-input);
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+
+    .bundle-feature {
+      flex: 1;
+      text-align: center;
+    }
+
+    .bundle-feature-value {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .bundle-feature-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* CTA BUTTON */
+    .cta-btn {
+      width: 100%;
+      padding: 13px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px var(--primary-glow);
+    }
+
+    .cta-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px var(--primary-glow);
+    }
+
+    /* PROMPT AREA */
+    .prompt-area {
+      padding: 14px 18px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+
+    .prompt-wrapper {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .prompt-input {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 12px 18px;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .prompt-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-dim);
+    }
+
+    .prompt-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .send-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border: none;
+      color: white;
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px var(--primary-glow);
+    }
+
+    .send-btn:hover {
+      transform: scale(1.05);
+    }
+
+    .send-btn:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon">
+          <div class="brand-icon-ring"></div>
+          <div class="brand-icon-bg"></div>
+          <div class="brand-letter">T</div>
+        </div>
+        <span class="brand-name">Telecom Agent</span>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">☾</button>
+    </header>
+
+    <div class="chat" id="chat">
+      <!-- Welcome state -->
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">
+          <div class="welcome-icon-ring"></div>
+          <div class="welcome-icon-inner">💬</div>
+        </div>
+        <h1 class="welcome-title">How can I help?</h1>
+        <p class="welcome-subtitle">Check your balance, explore bundles, or get support — just ask.</p>
+        <div class="quick-actions">
+          <span class="quick-action">Check balance</span>
+          <span class="quick-action">Buy a bundle</span>
+          <span class="quick-action">Top up</span>
+          <span class="quick-action">View usage</span>
+        </div>
+      </div>
+
+      <!-- Chat with balance response -->
+      <div id="chatView" style="display: none;">
+        <div class="message agent">
+          Hi Sarah! Your account is active. How can I help you today?
+        </div>
+        <div class="message user">
+          Show me my balance
+        </div>
+        <div class="typing">
+          <div class="typing-dots">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+          <div class="signal-wave">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <div class="message agent">
+          Here's your current balance.
+          <div class="screen-card">
+            <div class="screen-card-header">
+              <span class="screen-card-title">Balance</span>
+              <div class="status-badge">
+                <div class="status-dot"></div>
+                Active
+              </div>
+            </div>
+            <div class="balance-card">
+              <div class="balance-amount">$42<span class="balance-currency">.50</span></div>
+              <div class="balance-meta">
+                <div class="balance-meta-item">
+                  <div class="balance-meta-label">Last Top-up</div>
+                  <div class="balance-meta-value">Mar 28, 2026</div>
+                </div>
+                <div class="balance-meta-item">
+                  <div class="balance-meta-label">Next Billing</div>
+                  <div class="balance-meta-value">Apr 15, 2026</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="message user">
+          Top up $20
+        </div>
+        <div class="message agent">
+          I'll add $20 to your balance. Confirm to continue?
+          <div class="screen-card">
+            <div class="bundle-card">
+              <div class="bundle-header">
+                <div class="bundle-title">Confirm Top-up</div>
+              </div>
+              <div class="bundle-price-row">
+                <span class="bundle-price">+$20.00</span>
+              </div>
+              <button class="cta-btn" onclick="confirmTopUp()">Confirm</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="prompt-area">
+      <div class="prompt-wrapper">
+        <input class="prompt-input" placeholder="Ask me anything..." id="promptInput">
+        <button class="send-btn">→</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const btn = document.getElementById('themeBtn');
+      const isDark = html.getAttribute('data-theme') === 'dark';
+
+      if (isDark) {
+        html.setAttribute('data-theme', 'light');
+        btn.textContent = '☾';
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        btn.textContent = '☀';
+      }
+    }
+
+    function confirmTopUp() {
+      const chatView = document.getElementById('chatView');
+      const chat = document.getElementById('chat');
+
+      // Show confirmation
+      const successMsg = document.createElement('div');
+      successMsg.className = 'message agent';
+      successMsg.innerHTML = '✓ $20 has been added to your balance. New balance: <strong>$62.50</strong>';
+      chat.appendChild(successMsg);
+
+      // Scroll to bottom
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    // Demo: switch to chat view on quick action click
+    document.querySelectorAll('.quick-action').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('welcome').style.display = 'none';
+        document.getElementById('chatView').style.display = 'block';
+      });
+    });
+
+    // Demo: switch to chat view on prompt focus
+    document.getElementById('promptInput').addEventListener('focus', () => {
+      document.getElementById('welcome').style.display = 'none';
+      document.getElementById('chatView').style.display = 'block';
+    });
+  </script>
+</body>
+</html>

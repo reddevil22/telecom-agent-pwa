@@ -24,17 +24,15 @@
 
 .input {
   flex: 1;
-  background: var(--color-bg-elevated);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-md) var(--space-lg);
-  padding-right: var(--space-xl);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  padding: 12px 18px;
   color: var(--color-text-primary);
-  font-size: var(--text-base);
-  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-family: inherit;
   outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-  box-shadow: var(--shadow-sm);
 }
 
 .input::placeholder {
@@ -42,35 +40,34 @@
 }
 
 .input:focus {
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-md), 0 0 0 3px rgba(232, 93, 76, 0.12);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-dim, rgba(0, 163, 224, 0.1));
 }
 
 .submitBtn {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  background: var(--color-primary);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   border: none;
   color: var(--color-text-inverse);
-  font-size: var(--text-lg);
+  font-size: 1.1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition: all var(--transition-fast);
   flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 16px rgba(0, 163, 224, 0.25);
 }
 
 .submitBtn:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-  transform: scale(1.04);
-  box-shadow: var(--shadow-md);
+  transform: scale(1.05);
+  box-shadow: 0 6px 24px rgba(0, 163, 224, 0.35);
 }
 
 .submitBtn:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(0.98);
 }
 
 .submitBtn:disabled {

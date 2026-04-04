@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat-Driven Telecom UI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0D0F14;
+      --bg-elevated: #151820;
+      --bg-input: #1C1F2A;
+      --primary: #00F5A0;
+      --primary-dim: rgba(0, 245, 160, 0.15);
+      --primary-glow: rgba(0, 245, 160, 0.4);
+      --accent: #00D4FF;
+      --accent-glow: rgba(0, 212, 255, 0.4);
+      --warning: #FFB800;
+      --error: #FF4757;
+      --text: #FFFFFF;
+      --text-secondary: #8B92A5;
+      --text-muted: #4A5068;
+      --border: rgba(255,255,255,0.06);
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* HEADER - Minimal, no visual clutter */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      position: relative;
+      width: 40px;
+      height: 40px;
+    }
+
+    /* Animated signal waves emanating from brand icon */
+    .brand-icon::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--primary);
+      border-radius: 10px;
+      opacity: 0.9;
+    }
+
+    .brand-icon::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--primary);
+      border-radius: 10px;
+      animation: pulse-ring 2s ease-out infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(1); opacity: 0.4; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+
+    .brand-letter {
+      position: relative;
+      z-index: 1;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--bg);
+    }
+
+    .brand-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      transition: all 0.2s;
+    }
+
+    .icon-btn:hover {
+      background: var(--bg-elevated);
+      color: var(--text);
+      border-color: var(--primary);
+    }
+
+    /* CHAT AREA - Where all the magic happens */
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 0 20px;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Message bubbles with subtle wave/signal accents */
+    .message {
+      max-width: 80%;
+      padding: 14px 18px;
+      border-radius: 18px;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      position: relative;
+      animation: message-in 0.3s ease-out;
+    }
+
+    @keyframes message-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .message.agent {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 18px 18px 18px 4px;
+      align-self: flex-start;
+    }
+
+    /* Signal wave accent on agent messages */
+    .message.agent::before {
+      content: '';
+      position: absolute;
+      left: -1px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 60%;
+      background: linear-gradient(180deg, var(--primary), var(--accent));
+      border-radius: 0 2px 2px 0;
+      opacity: 0.7;
+    }
+
+    .message.user {
+      background: linear-gradient(135deg, var(--primary), #00D4AA);
+      color: var(--bg);
+      border-radius: 18px 18px 4px 18px;
+      align-self: flex-end;
+      font-weight: 500;
+    }
+
+    /* Typing indicator with signal waves */
+    .typing {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 18px 18px 18px 4px;
+      align-self: flex-start;
+      max-width: 160px;
+    }
+
+    .typing-dots {
+      display: flex;
+      gap: 4px;
+    }
+
+    .typing-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--primary);
+      border-radius: 50%;
+      animation: typing-pulse 1.4s ease-in-out infinite;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+    @keyframes typing-pulse {
+      0%, 60%, 100% { transform: scale(1); opacity: 0.4; }
+      30% { transform: scale(1.2); opacity: 1; }
+    }
+
+    /* Signal wave animation next to typing */
+    .signal-wave {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+
+    .signal-wave span {
+      width: 2px;
+      height: 12px;
+      background: var(--accent);
+      border-radius: 1px;
+      animation: wave 1s ease-in-out infinite;
+    }
+
+    .signal-wave span:nth-child(1) { animation-delay: 0s; height: 6px; }
+    .signal-wave span:nth-child(2) { animation-delay: 0.1s; height: 10px; }
+    .signal-wave span:nth-child(3) { animation-delay: 0.2s; height: 14px; }
+    .signal-wave span:nth-child(4) { animation-delay: 0.3s; height: 10px; }
+    .signal-wave span:nth-child(5) { animation-delay: 0.4s; height: 6px; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.5); opacity: 0.4; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+
+    /* Screen cards rendered in chat context */
+    .screen-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 8px;
+      width: 100%;
+    }
+
+    .screen-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .screen-card-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    /* Status indicator with connection dot */
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 8px var(--primary-glow);
+      animation: status-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes status-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .balance-display {
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .balance-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .balance-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 3rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--text), var(--primary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+
+    .balance-meta {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 16px;
+    }
+
+    .balance-meta-item {
+      text-align: center;
+    }
+
+    .balance-meta-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .balance-meta-value {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary);
+      color: var(--bg);
+      border: none;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 16px;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .action-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: left 0.5s;
+    }
+
+    .action-btn:hover::before {
+      left: 100%;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px var(--primary-glow);
+    }
+
+    /* Bundle list - compact, chat-native */
+    .bundle-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .bundle-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--bg-input);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .bundle-item:hover {
+      border-color: var(--primary);
+      background: var(--primary-dim);
+    }
+
+    .bundle-item.featured {
+      border-color: var(--primary);
+      background: var(--primary-dim);
+    }
+
+    .bundle-info {
+      flex: 1;
+    }
+
+    .bundle-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .bundle-details {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .bundle-price {
+      text-align: right;
+    }
+
+    .bundle-price-value {
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .bundle-price-period {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    /* PROMPT AREA - Clean input with subtle wave accent */
+    .prompt-area {
+      padding: 16px 0 20px;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .prompt-wrapper {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .prompt-input {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 14px 20px;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .prompt-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-dim);
+    }
+
+    .prompt-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .send-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), #00D4AA);
+      border: none;
+      color: var(--bg);
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 4px 20px var(--primary-glow);
+    }
+
+    .send-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 30px var(--primary-glow);
+    }
+
+    .send-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* Welcome state */
+    .welcome {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .welcome-icon {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .welcome-icon::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--primary);
+      border-radius: 20px;
+      opacity: 0.15;
+    }
+
+    .welcome-icon-inner {
+      position: relative;
+      z-index: 1;
+      width: 80px;
+      height: 80px;
+      background: var(--primary);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      color: var(--bg);
+      box-shadow: 0 8px 40px var(--primary-glow);
+    }
+
+    .welcome-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .welcome-subtitle {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      max-width: 300px;
+      line-height: 1.6;
+    }
+
+    .quick-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .quick-action {
+      padding: 10px 18px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .quick-action:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-dim);
+    }
+
+    /* Light mode variant */
+    .light-mode {
+      --bg: #F8F9FC;
+      --bg-elevated: #FFFFFF;
+      --bg-input: #F0F2F5;
+      --primary: #00B377;
+      --primary-dim: rgba(0, 179, 119, 0.1);
+      --primary-glow: rgba(0, 179, 119, 0.3);
+      --accent: #0099FF;
+      --accent-glow: rgba(0, 153, 255, 0.3);
+      --text: #1A1D26;
+      --text-secondary: #5A6070;
+      --text-muted: #9099A8;
+      --border: rgba(0,0,0,0.08);
+    }
+  </style>
+</head>
+<body>
+
+<!-- LIGHT MODE VERSION -->
+<div class="light-mode" style="min-height: 100vh; display: flex; flex-direction: column; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 20px;">
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">
+        <div class="brand-letter">T</div>
+      </div>
+      <span class="brand-name">Telecom Agent</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn">☽</button>
+    </div>
+  </div>
+
+  <div class="chat-container">
+    <!-- Welcome state -->
+    <div class="welcome">
+      <div class="welcome-icon">
+        <div class="welcome-icon-inner">💬</div>
+      </div>
+      <h1 class="welcome-title">How can I help you?</h1>
+      <p class="welcome-subtitle">Check your balance, explore bundles, or get support — just ask.</p>
+      <div class="quick-actions">
+        <span class="quick-action">Check balance</span>
+        <span class="quick-action">Buy a bundle</span>
+        <span class="quick-action">View usage</span>
+        <span class="quick-action">Top up</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="prompt-area">
+    <div class="prompt-wrapper">
+      <input class="prompt-input" placeholder="Ask me anything...">
+      <button class="send-btn">→</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHAT WITH BALANCE SCREEN -->
+<div class="light-mode" style="min-height: 100vh; display: flex; flex-direction: column; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 20px;">
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">
+        <div class="brand-letter">T</div>
+      </div>
+      <span class="brand-name">Telecom Agent</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn">☽</button>
+    </div>
+  </div>
+
+  <div class="chat-container">
+    <div class="messages">
+      <div class="message agent">
+        Hi Sarah! Your account is active. What would you like to do today?
+      </div>
+
+      <div class="message user">
+        Show me my balance
+      </div>
+
+      <div class="typing">
+        <div class="typing-dots">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+        <div class="signal-wave">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+
+      <div class="message agent">
+        Here's your current balance.
+        <div class="screen-card">
+          <div class="screen-card-header">
+            <span class="screen-card-title">Balance</span>
+            <div class="status-indicator">
+              <div class="status-dot"></div>
+              Active
+            </div>
+          </div>
+          <div class="balance-display">
+            <div class="balance-label">Current Balance</div>
+            <div class="balance-value">$42.50</div>
+            <div class="balance-meta">
+              <div class="balance-meta-item">
+                <div class="balance-meta-label">Last Top-up</div>
+                <div class="balance-meta-value">Mar 28, 2026</div>
+              </div>
+              <div class="balance-meta-item">
+                <div class="balance-meta-label">Next Billing</div>
+                <div class="balance-meta-value">Apr 15, 2026</div>
+              </div>
+            </div>
+          </div>
+          <button class="action-btn">+ Top Up</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="prompt-area">
+    <div class="prompt-wrapper">
+      <input class="prompt-input" placeholder="Ask me anything...">
+      <button class="send-btn">→</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHAT WITH BUNDLE LIST -->
+<div class="light-mode" style="min-height: 100vh; display: flex; flex-direction: column;">
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">
+        <div class="brand-letter">T</div>
+      </div>
+      <span class="brand-name">Telecom Agent</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn">☽</button>
+    </div>
+  </div>
+
+  <div class="chat-container">
+    <div class="messages">
+      <div class="message agent">
+        I found some great bundle options for you!
+        <div class="screen-card">
+          <div class="screen-card-header">
+            <span class="screen-card-title">Available Bundles</span>
+          </div>
+          <div class="bundle-list">
+            <div class="bundle-item featured">
+              <div class="bundle-info">
+                <div class="bundle-name">Value Plus</div>
+                <div class="bundle-details">10 GB • 500 min • 200 SMS</div>
+              </div>
+              <div class="bundle-price">
+                <div class="bundle-price-value">$19.99</div>
+                <div class="bundle-price-period">/ 30 days</div>
+              </div>
+            </div>
+            <div class="bundle-item">
+              <div class="bundle-info">
+                <div class="bundle-name">Starter Pack</div>
+                <div class="bundle-details">2 GB • 100 min • 50 SMS</div>
+              </div>
+              <div class="bundle-price">
+                <div class="bundle-price-value">$9.99</div>
+                <div class="bundle-price-period">/ 30 days</div>
+              </div>
+            </div>
+            <div class="bundle-item">
+              <div class="bundle-info">
+                <div class="bundle-name">Unlimited Pro</div>
+                <div class="bundle-details">50 GB • ∞ min • ∞ SMS</div>
+              </div>
+              <div class="bundle-price">
+                <div class="bundle-price-value">$39.99</div>
+                <div class="bundle-price-period">/ 30 days</div>
+              </div>
+            </div>
+          </div>
+          <button class="action-btn">View Details</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="prompt-area">
+    <div class="prompt-wrapper">
+      <input class="prompt-input" placeholder="Ask me anything...">
+      <button class="send-btn">→</button>
+    </div>
+  </div>
+</div>
+
+<!-- DARK MODE VERSION -->
+<div style="padding-top: 20px;">
+  <p style="text-align: center; color: #8B92A5; margin-bottom: 20px; font-size: 0.85rem;">DARK MODE</p>
+
+  <div style="min-height: 100vh; display: flex; flex-direction: column;">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-icon">
+          <div class="brand-letter">T</div>
+        </div>
+        <span class="brand-name">Telecom Agent</span>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn">☀</button>
+      </div>
+    </div>
+
+    <div class="chat-container">
+      <div class="messages">
+        <div class="welcome">
+          <div class="welcome-icon">
+            <div class="welcome-icon-inner">💬</div>
+          </div>
+          <h1 class="welcome-title">How can I help you?</h1>
+          <p class="welcome-subtitle">Check your balance, explore bundles, or get support — just ask.</p>
+          <div class="quick-actions">
+            <span class="quick-action">Check balance</span>
+            <span class="quick-action">Buy a bundle</span>
+            <span class="quick-action">View usage</span>
+            <span class="quick-action">Top up</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="prompt-area">
+      <div class="prompt-wrapper">
+        <input class="prompt-input" placeholder="Ask me anything...">
+        <button class="send-btn">→</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

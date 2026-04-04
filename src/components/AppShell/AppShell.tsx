@@ -26,7 +26,6 @@ export function AppShell({ actor }: Props) {
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionError, setSessionError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const state = useSelector(actor, selectState);
   const hasReceivedFirstResponse = useSelector(actor, selectHasReceivedFirstResponse);
@@ -92,7 +91,10 @@ export function AppShell({ actor }: Props) {
       {/* Header */}
       <header className={styles.header}>
         <div className={styles.brandGroup}>
-          <div className={styles.brandIcon}>T</div>
+          <div className={styles.brandIcon}>
+            <div className={styles.brandIconRing}></div>
+            <div className={styles.brandIconInner}>T</div>
+          </div>
           <h1 className={styles.brandTitle}>Telecom Agent</h1>
         </div>
         <button
@@ -105,39 +107,6 @@ export function AppShell({ actor }: Props) {
       </header>
 
       <div className={styles.main}>
-        {/* Sidebar toggle */}
-        <button
-          className={styles.sidebarToggle}
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label={sidebarOpen ? 'Hide account details' : 'Show account details'}
-          title={sidebarOpen ? 'Hide account' : 'Show account'}
-        >
-          {sidebarOpen ? '‹' : '›'}
-        </button>
-
-        {/* Sidebar */}
-        <aside className={`${styles.sidebar} ${sidebarOpen ? '' : styles['sidebar--collapsed']}`}>
-          <div className={styles.sidebarSection}>
-            <span className={styles.sidebarLabel}>Account Overview</span>
-            <div className={styles.sidebarStat}>
-              <span className={styles.sidebarStatLabel}>Balance</span>
-              <span className={styles.sidebarStatValue}>&mdash;</span>
-            </div>
-            <div className={styles.sidebarStat}>
-              <span className={styles.sidebarStatLabel}>Data</span>
-              <span className={styles.sidebarStatValue}>&mdash;</span>
-            </div>
-            <div className={styles.sidebarStat}>
-              <span className={styles.sidebarStatLabel}>Voice</span>
-              <span className={styles.sidebarStatValue}>&mdash;</span>
-            </div>
-            <div className={styles.sidebarStat}>
-              <span className={styles.sidebarStatLabel}>SMS</span>
-              <span className={styles.sidebarStatValue}>&mdash;</span>
-            </div>
-          </div>
-        </aside>
-
         {/* Main content */}
         <div className={styles.content}>
           {/* Tabs */}
@@ -194,11 +163,11 @@ export function AppShell({ actor }: Props) {
                 )}
 
                 {!isInitial && isProcessing && <ProcessingIndicator steps={processingSteps} />}
-                
+
                 {!isInitial && !isProcessing && isError && (
                   <LlmErrorScreen onRetry={() => actor.send({ type: 'RESET' })} />
                 )}
-                
+
                 {!isInitial && !isProcessing && !isError && (
                   <ErrorBoundary onReset={() => actor.send({ type: 'RESET' })}>
                     <ScreenRenderer actor={actor} />

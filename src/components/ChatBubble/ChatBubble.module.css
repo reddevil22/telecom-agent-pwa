@@ -1,5 +1,5 @@
 .bubble {
-  max-width: 75%;
+  max-width: 80%;
   padding: var(--space-md) var(--space-lg);
   font-size: var(--text-base);
   line-height: var(--leading-relaxed);
@@ -22,7 +22,7 @@
   background: var(--chat-bubble-user-bg);
   color: var(--chat-bubble-user-text);
   border-radius: var(--chat-bubble-user-border-radius);
-  border-bottom-right-radius: var(--radius-xs);
+  box-shadow: var(--shadow-sm);
 }
 
 .bubble--agent {
@@ -30,5 +30,21 @@
   background: var(--chat-bubble-agent-bg);
   color: var(--chat-bubble-agent-text);
   border-radius: var(--chat-bubble-agent-border-radius);
-  border-bottom-left-radius: var(--radius-xs);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-xs);
+  position: relative;
+}
+
+/* Left accent bar - telecom signal motif */
+.bubble--agent::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 50%;
+  background: linear-gradient(180deg, var(--color-primary), var(--color-secondary));
+  border-radius: 0 2px 2px 0;
+  opacity: 0.8;
 }
