@@ -12,7 +12,17 @@ A React 19 + TypeScript Progressive Web App providing an AI-powered telecom cust
 - **Styling**: CSS Modules with CSS custom properties (design tokens)
 - **Fonts**: DM Sans (body), DM Serif Display (headings)
 
-## Architecture
+## Tech Stack
+
+- **Framework**: React 19 with TypeScript (strict mode)
+- **Build Tool**: Vite 8 with `vite-plugin-pwa` for service worker
+- **State Management**: XState v5 (state machines) with `@xstate/react`
+- **Styling**: CSS Modules with CSS custom properties (design tokens)
+- **Fonts**: DM Sans (body), DM Serif Display (headings)
+
+## LLM
+
+The backend's LLM provider is OpenAI-compatible. During development, **GLM-5.1** was used as the model powering the telecom agent's ReAct loop. The provider is configurable via environment variables (`LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL_NAME` for local; `DASHSCOPE_*` for Alibaba Cloud DashScope).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -258,6 +268,19 @@ Added `BundleDetailScreen` component for two-phase bundle purchase flow:
 ### ScreenRenderer Updates (2025-01)
 - Modified to skip supplementary results when main screen is `confirmation` type
 - Prevents duplicate balance display on purchase confirmation
+
+### Mock Telco Backend (2026-04)
+
+The backend now runs a **MockTelcoService** — a stateful simulation of a telecom OSS/BSS backed by SQLite. This replaces the earlier static JSON-file-based adapters. Key behaviors visible from the frontend:
+
+- **Balance is dynamic**: starts at $50, deducts on bundle purchases and top-ups persist across restarts
+- **Usage changes over time**: every 60 seconds (configurable), the backend lazily simulates data/voice/SMS consumption against active subscriptions. Asking "check my usage" twice in a demo will show different numbers
+- **5 bundles in catalog**: Starter Pack ($9.99), Value Plus ($19.99, popular), Unlimited Pro ($39.99), Weekend Pass ($4.99, promo), Travel Roaming ($14.99, roaming)
+- **Bundle purchase deducts real balance**: purchasing flows through `purchaseBundle` → balance deduction → subscription creation → confirmation screen
+- **Support tickets progress**: open tickets auto-transition to `in_progress` after ~2 minutes and to `resolved` after ~5 minutes
+- **Pre-seeded data**: user-1 has a partially consumed Starter Pack subscription (0.9/2 GB, 49/100 min, 13/50 SMS) and 2 tickets
+
+The frontend code is unchanged — the same `AgentResponse` contract is served. The `docs/ARCHITECTURE.md` file contains a full architecture reference for onboarding.
 
 ## Design Principles
 

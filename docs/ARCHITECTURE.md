@@ -10,7 +10,7 @@ A conversational AI agent for telecom customers. Users type natural-language req
 |-------|-----------|
 | Frontend | React 19, TypeScript, XState v5, Vite 8, CSS Modules |
 | Backend | NestJS 11, TypeScript, SQLite (better-sqlite3) |
-| LLM | DashScope (Alibaba Cloud) or local llama-server — any OpenAI-compatible API |
+| LLM | DashScope (Alibaba Cloud) or local llama-server — any OpenAI-compatible API. GLM-5.1 was used during development. |
 | E2E Tests | Playwright |
 | Backend Tests | Jest + Supertest |
 

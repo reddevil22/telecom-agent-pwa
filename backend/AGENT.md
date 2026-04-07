@@ -34,15 +34,17 @@ src/
 │   │   └── pipes/                  # PromptSanitizerPipe (injection patterns, control chars)
 │   └── driven/              # Outbound — external systems
 │       ├── llm/             # OpenAI-compatible adapter (llama-server)
-│       └── bff/             # Mock BFF adapters for balance/bundles/usage/support
+│       └── bff/             # BFF adapters delegating to MockTelcoService
 │
 ├── infrastructure/
 │   ├── data/                # SQLite persistence
 │   │   ├── sqlite-connection.service.ts  # Database connection with WAL mode
-│   │   ├── sqlite-data.module.ts         # NestJS module
+│   │   ├── sqlite-data.module.ts         # NestJS module (exports SqliteConnectionService)
 │   │   ├── conversation-data.mapper.ts   # Conversation CRUD operations
-│   │   ├── migrations/                   # Database migrations
-│   │   └── json-data.module.ts           # JSON file storage for mock data
+│   │   └── migrations/                   # 001_initial through 004_mock_telco
+│   ├── telco/               # Mock telco BFF simulation
+│   │   ├── mock-telco.service.ts         # Stateful telco simulation (balance, bundles, usage, tickets)
+│   │   └── mock-telco.module.ts          # NestJS module
 │   └── llm/                 # LLM health monitoring
 │       └── llm-health.service.ts         # LLM server health checks
 │
@@ -101,11 +103,12 @@ GET /api/health/llm
 ## Key Design Decisions
 
 - **Hexagonal Architecture**: Domain layer has zero NestJS imports. Ports are plain TypeScript interfaces.
-- **SQLite Persistence**: Conversations persisted with soft deletes. Database stored in `backend/data/telecom.db`.
+- **Mock Telco BFF Service**: A stateful `MockTelcoService` backed by SQLite simulates a real telecom OSS/BSS. It manages subscriber accounts, bundle catalog, active subscriptions, CDR-style usage records, and support tickets — all persisted in `telco_*` tables alongside the conversation data. Lazy time-aware simulation increments usage and progresses ticket statuses on every read (configurable via `TELCO_SIMULATION_INTERVAL_MS`).
+- **SQLite Persistence**: Conversations persisted with soft deletes. Telco state persisted alongside in the same database. Stored in `backend/data/telecom.db`.
 - **userId trust boundary**: The supervisor always passes `request.userId` (from session) to sub-agents, never the value parsed from LLM tool call arguments.
 - **Defense-in-depth**: 6 security layers — DTO validation, prompt sanitizer, rate limiting, system prompt hardening, tool call validation, history/budget caps. All tunables centralized in `domain/constants/security-constants.ts`.
-- **Tool whitelist**: Only 4 tools (`check_balance`, `list_bundles`, `check_usage`, `get_support`). The `validateToolCall()` method rejects unknown tools, unexpected args, and non-string values.
-- **LLM adapter**: OpenAI-compatible (`/v1/chat/completions`). Targets llama-server at configurable URL.
+- **Tool whitelist**: 9 tools registered (`check_balance`, `list_bundles`, `check_usage`, `get_support`, `view_bundle_details`, `purchase_bundle`, `top_up`, `create_ticket`). The `validateToolCall()` method rejects unknown tools, unexpected args, and non-string values.
+- **LLM adapter**: OpenAI-compatible (`/v1/chat/completions`). Supports local llama-server and DashScope (Alibaba Cloud). The LLM used during development was **GLM-5.1**.
 - **LLM health monitoring**: Background health checks with 5-second cache. Converts `localhost` to `127.0.0.1` automatically.
 - **Soft deletes**: Conversations are soft-deleted (deleted_at timestamp) for audit trail.
 
@@ -121,6 +124,7 @@ GET /api/health/llm
 | `PORT` | `3001` | HTTP server port |
 | `NODE_ENV` | `development` | Runtime environment |
 | `LOG_LEVEL` | `info` | Pino log level |
+| `TELCO_SIMULATION_INTERVAL_MS` | `60000` | How often mock telco simulates usage ticks |
 
 ## Commands
 
@@ -137,12 +141,22 @@ npm run lint          # ESLint
 SQLite database created automatically at `backend/data/telecom.db`.
 
 ### Tables
+
+**Conversation tables (migrations 001–003):**
 - `conversations` — Session metadata with soft delete
 - `messages` — Conversation messages (FK to conversations)
 - `_migrations` — Migration tracking
 
+**Mock Telco tables (migration 004):**
+- `telco_accounts` — Subscriber accounts (userId, msisdn, name, balance, billing cycle, status)
+- `telco_bundles_catalog` — Static bundle catalog (id, name, price, data_gb, minutes, sms, validity_days, category)
+- `telco_subscriptions` — Active bundles owned by users (allowances + consumed counters, status, activation/expiry dates)
+- `telco_usage_records` — CDR-like usage events (type, amount, direction, timestamp)
+- `telco_tickets` — Support tickets with lifecycle (status progression: open → in_progress → resolved)
+- `telco_faq` — Static FAQ entries
+
 ### Migrations
-Migrations run automatically on startup. The `001_initial` migration creates all tables and indexes.
+Migrations run automatically on startup. Migration `004_mock_telco` creates the telco tables and seeds default data (user-1 with $50 balance, 5 bundles, 1 active subscription, 2 tickets, 5 FAQs).
 
 ## Refactoring Highlights
 
@@ -176,6 +190,29 @@ Created `processing-steps.ts` with:
 - `ErrorMessages` — Consistent error messages
 - `ConfirmationTitles` — Standardized confirmation dialog titles
 
+### Mock Telco BFF Service (2026-04)
+
+Replaced the static `JsonDataStore`/`File*BffAdapter` stack with a stateful `MockTelcoService` backed by SQLite.
+
+**What it does:**
+- Manages subscriber accounts with real balance deductions and top-ups
+- Maintains a bundle catalog with purchase flow (balance check → subscription creation → deduction)
+- Tracks usage per active subscription with CDR-style records
+- Runs lazy time-aware simulation: on every read, if `TELCO_SIMULATION_INTERVAL_MS` (default 60s) has elapsed, randomly increments data/voice/SMS usage, expires stale bundles, and progresses ticket statuses (open → in_progress → resolved)
+- Persists all state across restarts in `telco_*` tables
+
+**Architecture fit:**
+New `MockTelco*BffAdapter` classes implement the same `BalanceBffPort`, `BundlesBffPort`, `UsageBffPort`, `SupportBffPort` interfaces, so sub-agents and the supervisor are completely unchanged. The `JsonDataModule` was removed from `app.module.ts`; old file/mock adapters remain in the codebase but are unwired.
+
+**Seed data (user-1):**
+- $50 balance, billing cycle = current month
+- 5 bundles (Starter Pack, Value Plus, Unlimited Pro, Weekend Pass, Travel Roaming)
+- 1 active Starter Pack subscription (partially consumed: ~0.9/2 GB, 49/100 min, 13/50 SMS)
+- 2 support tickets (1 open, 1 in_progress)
+- 5 FAQ entries
+
+**Files:** `infrastructure/telco/mock-telco.service.ts`, `infrastructure/telco/mock-telco.module.ts`, 4 `MockTelco*BffAdapter` files, migration `004_mock_telco.ts`.
+
 ## Conventions
 
 - All API routes are prefixed with `/api` (set in `main.ts`).
@@ -184,3 +221,5 @@ Created `processing-steps.ts` with:
 - Screen types: `balance | bundles | bundleDetail | usage | support | confirmation | unknown`. Mapped from tool names via `TOOL_TO_SCREEN` constant.
 - New tools require: Add entry to `TOOL_REGISTRY` in `tool-registry.ts`, implement `SubAgentPort` (or use generic classes), register in `app.agent-module.ts`.
 - Conversation persistence is automatic — every request/response pair is stored in SQLite.
+- BFF adapters delegate to `MockTelcoService` which owns all telco state. The old `JsonDataStore`/`File*BffAdapter` implementations are retained in the codebase but no longer wired.
+- Mock telco data is seeded by migration `004_mock_telco`. Delete `backend/data/telecom.db` to force a fresh seed.
