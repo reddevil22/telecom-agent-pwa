@@ -5,6 +5,7 @@ import { BundleDetailScreen } from './BundleDetailScreen/BundleDetailScreen';
 import { UsageScreen } from './UsageScreen/UsageScreen';
 import { SupportScreen } from './SupportScreen/SupportScreen';
 import { ConfirmationScreen } from './ConfirmationScreen/ConfirmationScreen';
+import { AccountScreen } from './AccountScreen/AccountScreen';
 
 export const screenRegistry: ScreenRegistry = new Map([
   ['balance', { component: BalanceScreen, displayName: 'Balance' }],
@@ -13,4 +14,5 @@ export const screenRegistry: ScreenRegistry = new Map([
   ['usage', { component: UsageScreen, displayName: 'Usage' }],
   ['support', { component: SupportScreen, displayName: 'Support' }],
   ['confirmation', { component: ConfirmationScreen, displayName: 'Confirmation' }],
+  ['account', { component: AccountScreen, displayName: 'Account' }],
 ]);

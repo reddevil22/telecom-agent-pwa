@@ -40,6 +40,47 @@ export interface OwnedBundle {
   expiresAt: string;
 }
 
+export interface AccountProfile {
+  name: string;
+  msisdn: string;
+  plan: string;
+  status: string;
+  balance: Balance;
+  billingCycleStart: string;
+  billingCycleEnd: string;
+}
+
+export interface ActiveSubscription {
+  subscriptionId: string;
+  bundleName: string;
+  bundleId: string;
+  status: string;
+  activatedAt: string;
+  expiresAt: string;
+  dataUsedMb: number;
+  dataTotalMb: number;
+  minutesUsed: number;
+  minutesTotal: number;
+  smsUsed: number;
+  smsTotal: number;
+}
+
+export interface TransactionEntry {
+  id: string;
+  type: 'purchase' | 'topup' | 'ticket';
+  description: string;
+  amount?: number;
+  currency?: string;
+  timestamp: string;
+}
+
+export interface OpenTicket {
+  id: string;
+  status: string;
+  subject: string;
+  updatedAt: string;
+}
+
 export interface ConversationMessage {
   role: 'user' | 'agent';
   text: string;

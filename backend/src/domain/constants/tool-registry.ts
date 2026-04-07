@@ -137,6 +137,21 @@ export const TOOL_REGISTRY: Record<string, ToolMetadata> = {
       required: ['userId', 'subject', 'description'],
     },
   },
+  get_account_summary: {
+    name: 'get_account_summary',
+    screenType: 'account',
+    allowedArgs: ['userId'],
+    replyText: 'Here is your account overview.',
+    suggestions: ['Show my balance', 'Check my usage', 'What bundles are available?'],
+    description: 'Get a comprehensive account overview including profile, active subscriptions, recent transactions, and open tickets. Use when the user asks for "my account", "account overview", "my dashboard", "my profile", or wants a summary of everything.',
+    parameters: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'The user ID' },
+      },
+      required: ['userId'],
+    },
+  },
 };
 
 // Derived constants for backward compatibility
@@ -157,6 +172,7 @@ export const REPLY_MAP: Record<ScreenType, string> = {
   usage: 'Here is a summary of your current usage this billing period.',
   support: 'Here are your support options and recent tickets.',
   confirmation: 'Your request has been processed.',
+  account: 'Here is your account overview.',
   unknown: "I'm not sure what you're looking for. Here are some things I can help with.",
 };
 
@@ -167,6 +183,7 @@ export const SUGGESTION_MAP: Record<ScreenType, string[]> = {
   usage: ['Show my balance', 'What bundles are available?', 'I need support'],
   support: ['Show my balance', 'Check my usage', 'Create a new ticket'],
   confirmation: ['Show my balance', 'What bundles are available?', 'Check my usage'],
+  account: ['Show my balance', 'Check my usage', 'What bundles are available?'],
   unknown: ['Show my balance', 'What bundles are available?', 'Check my usage', 'I need support'],
 };
 

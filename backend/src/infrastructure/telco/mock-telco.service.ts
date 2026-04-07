@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Database } from 'better-sqlite3';
 import { SqliteConnectionService } from '../data/sqlite-connection.service';
-import type { Balance, Bundle, UsageEntry, SupportTicket } from '../../domain/types/domain';
+import type { Balance, Bundle, UsageEntry, SupportTicket, AccountProfile, ActiveSubscription, TransactionEntry, OpenTicket } from '../../domain/types/domain';
 import { randomUUID } from 'crypto';
 
 export interface TelcoAccount {
@@ -216,6 +216,137 @@ export class MockTelcoService {
     }
 
     return entries;
+  }
+
+  // ── Account Summary ──
+
+  getAccountSummary(userId: string): {
+    profile: AccountProfile;
+    activeSubscriptions: ActiveSubscription[];
+    recentTransactions: TransactionEntry[];
+    openTickets: OpenTicket[];
+  } {
+    this.simulateTick(userId);
+    this.expireBundles();
+
+    const account = this.requireAccount(userId);
+
+    // Profile
+    const profile: AccountProfile = {
+      name: account.name,
+      msisdn: account.msisdn,
+      plan: account.plan_name,
+      status: account.status,
+      balance: this.accountToBalance(account),
+      billingCycleStart: account.billing_cycle_start,
+      billingCycleEnd: account.billing_cycle_end,
+    };
+
+    // Active subscriptions with bundle details
+    const subRows = this.db
+      .prepare(`
+        SELECT s.*, c.name as bundle_name
+        FROM telco_subscriptions s
+        JOIN telco_bundles_catalog c ON c.id = s.bundle_id
+        WHERE s.user_id = ? AND s.status = 'active' AND s.expires_at > datetime('now')
+        ORDER BY s.expires_at ASC
+      `)
+      .all(userId) as Array<Record<string, unknown>>;
+
+    const activeSubscriptions: ActiveSubscription[] = subRows.map(row => ({
+      subscriptionId: row.id as string,
+      bundleId: row.bundle_id as string,
+      bundleName: row.bundle_name as string,
+      status: row.status as string,
+      activatedAt: row.activated_at as string,
+      expiresAt: row.expires_at as string,
+      dataUsedMb: row.data_used_mb as number,
+      dataTotalMb: row.data_total_mb as number,
+      minutesUsed: row.minutes_used as number,
+      minutesTotal: row.minutes_total as number,
+      smsUsed: row.sms_used as number,
+      smsTotal: row.sms_total as number,
+    }));
+
+    // Recent transactions — combine purchases, top-ups, and tickets
+    const recentTransactions: TransactionEntry[] = [];
+
+    // Recent subscriptions (purchases)
+    const purchaseRows = this.db
+      .prepare(`
+        SELECT s.*, c.name as bundle_name, c.price, c.currency as bundle_currency
+        FROM telco_subscriptions s
+        JOIN telco_bundles_catalog c ON c.id = s.bundle_id
+        WHERE s.user_id = ?
+        ORDER BY s.created_at DESC
+        LIMIT 5
+      `)
+      .all(userId) as Array<Record<string, unknown>>;
+
+    for (const row of purchaseRows) {
+      recentTransactions.push({
+        id: row.id as string,
+        type: 'purchase',
+        description: `Purchased ${row.bundle_name}`,
+        amount: row.price as number,
+        currency: (row.bundle_currency as string) ?? 'USD',
+        timestamp: row.created_at as string,
+      });
+    }
+
+    // Recent tickets
+    const ticketRows = this.db
+      .prepare(`
+        SELECT * FROM telco_tickets
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT 3
+      `)
+      .all(userId) as Array<Record<string, unknown>>;
+
+    for (const row of ticketRows) {
+      recentTransactions.push({
+        id: row.id as string,
+        type: 'ticket',
+        description: `Ticket created: ${(row.subject as string).slice(0, 40)}`,
+        timestamp: row.created_at as string,
+      });
+    }
+
+    // Top-up from account history
+    if (account.last_topup_at) {
+      recentTransactions.push({
+        id: 'topup-last',
+        type: 'topup',
+        description: 'Account top-up',
+        amount: 10, // from seed data
+        currency: account.currency,
+        timestamp: account.last_topup_at,
+      });
+    }
+
+    // Sort all transactions by timestamp descending, take top 5
+    recentTransactions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const trimmedTransactions = recentTransactions.slice(0, 5);
+
+    // Open tickets (non-resolved)
+    const openTicketRows = this.db
+      .prepare(`
+        SELECT id, status, subject, updated_at
+        FROM telco_tickets
+        WHERE user_id = ? AND status != 'resolved'
+        ORDER BY updated_at DESC
+      `)
+      .all(userId) as Array<{ id: string; status: string; subject: string; updated_at: string }>;
+
+    const openTickets: OpenTicket[] = openTicketRows.map(row => ({
+      id: row.id,
+      status: row.status,
+      subject: row.subject,
+      updatedAt: row.updated_at,
+    }));
+
+    return { profile, activeSubscriptions, recentTransactions: trimmedTransactions, openTickets };
   }
 
   // ── Support ──

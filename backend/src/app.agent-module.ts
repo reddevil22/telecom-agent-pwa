@@ -20,9 +20,11 @@ import type { ConversationStoragePort } from './domain/ports/conversation-storag
 import type { SubAgentPort } from './domain/ports/sub-agent.port';
 import type { ScreenCachePort } from './domain/ports/screen-cache.port';
 import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
+import { MockTelcoModule } from './infrastructure/telco/mock-telco.module';
+import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
 
 @Module({
-  imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule],
+  imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule, MockTelcoModule],
   controllers: [AgentController, HealthController],
   providers: [
     {
@@ -37,6 +39,7 @@ import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
         cache: ScreenCachePort,
         config: ConfigService,
         logger: PinoLogger,
+        telcoService: MockTelcoService,
       ) => {
         const provider = config.get<string>('LLM_PROVIDER') ?? 'local';
         const modelName = provider === 'dashscope'
@@ -98,6 +101,16 @@ import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
         supervisor.registerAgent('purchase_bundle', new PurchaseBundleSubAgent(bundlesBff));
         supervisor.registerAgent('create_ticket', new CreateTicketSubAgent(supportBff));
 
+        // Account summary sub-agent
+        supervisor.registerAgent('get_account_summary', new SimpleQuerySubAgent(
+          (userId) => Promise.resolve(telcoService.getAccountSummary(userId)),
+          {
+            screenType: 'account',
+            processingLabels: { fetching: 'Loading account overview' },
+            transformResult: (summary) => summary as Record<string, unknown>,
+          }
+        ) as SubAgentPort);
+
         // Action sub-agent for top-up
         supervisor.registerAgent('top_up', new ActionSubAgent({
           screenType: 'confirmation',
@@ -127,7 +140,7 @@ import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
 
         return supervisor;
       },
-      inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, ConfigService, PinoLogger],
+      inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, ConfigService, PinoLogger, MockTelcoService],
     },
   ],
 })

@@ -1,4 +1,4 @@
-import type { Balance, Bundle, UsageEntry, SupportTicket, ConversationMessage } from './domain';
+import type { Balance, Bundle, UsageEntry, SupportTicket, ConversationMessage, AccountProfile, ActiveSubscription, TransactionEntry, OpenTicket } from './domain';
 
 export interface AgentRequest {
   prompt: string;
@@ -8,7 +8,7 @@ export interface AgentRequest {
   timestamp: number;
 }
 
-export type ScreenType = 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'unknown';
+export type ScreenType = 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'account' | 'unknown';
 
 export interface BalanceScreenData {
   type: 'balance';
@@ -46,6 +46,14 @@ export interface ConfirmationScreenData {
   updatedBalance?: Balance;
 }
 
+export interface AccountScreenData {
+  type: 'account';
+  profile: AccountProfile;
+  activeSubscriptions: ActiveSubscription[];
+  recentTransactions: TransactionEntry[];
+  openTickets: OpenTicket[];
+}
+
 export interface UnknownScreenData {
   type: 'unknown';
 }
@@ -57,6 +65,7 @@ export type ScreenData =
   | UsageScreenData
   | SupportScreenData
   | ConfirmationScreenData
+  | AccountScreenData
   | UnknownScreenData;
 
 export interface ProcessingStep {

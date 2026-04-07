@@ -11,7 +11,7 @@ export interface AgentRequest {
   timestamp: number;
 }
 
-export type ScreenType = 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'unknown';
+export type ScreenType = 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'account' | 'unknown';
 
 // ── Screen data (discriminated union) ──
 
@@ -51,6 +51,46 @@ export interface ConfirmationScreenData {
   updatedBalance?: Balance;
 }
 
+export interface AccountScreenData {
+  type: 'account';
+  profile: {
+    name: string;
+    msisdn: string;
+    plan: string;
+    status: string;
+    balance: Balance;
+    billingCycleStart: string;
+    billingCycleEnd: string;
+  };
+  activeSubscriptions: Array<{
+    subscriptionId: string;
+    bundleName: string;
+    status: string;
+    activatedAt: string;
+    expiresAt: string;
+    dataUsedMb: number;
+    dataTotalMb: number;
+    minutesUsed: number;
+    minutesTotal: number;
+    smsUsed: number;
+    smsTotal: number;
+  }>;
+  recentTransactions: Array<{
+    id: string;
+    type: string;
+    description: string;
+    amount?: number;
+    currency?: string;
+    timestamp: string;
+  }>;
+  openTickets: Array<{
+    id: string;
+    status: string;
+    subject: string;
+    updatedAt: string;
+  }>;
+}
+
 export interface UnknownScreenData {
   type: 'unknown';
 }
@@ -62,6 +102,7 @@ export type ScreenData =
   | UsageScreenData
   | SupportScreenData
   | ConfirmationScreenData
+  | AccountScreenData
   | UnknownScreenData;
 
 export interface ProcessingStep {

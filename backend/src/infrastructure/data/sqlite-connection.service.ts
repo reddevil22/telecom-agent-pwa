@@ -6,6 +6,7 @@ import { up as runMigration001 } from './migrations/001_initial';
 import { up as runMigration002 } from './migrations/002_add_confirmation_screen_type';
 import { up as runMigration003 } from './migrations/003_add_bundle_detail_screen_type';
 import { up as runMigration004 } from './migrations/004_mock_telco';
+import { up as runMigration005 } from './migrations/005_add_account_screen_type';
 
 @Injectable()
 export class SqliteConnectionService implements OnModuleDestroy {
@@ -84,6 +85,17 @@ export class SqliteConnectionService implements OnModuleDestroy {
         });
         transaction();
         console.log('[SQLite] Applied migration: 004_mock_telco');
+      }
+
+      if (!appliedIds.has('005_add_account_screen_type')) {
+        const transaction = this.db.transaction(() => {
+          runMigration005(this.db);
+          this.db
+            .prepare('INSERT INTO _migrations (id) VALUES (?)')
+            .run('005_add_account_screen_type');
+        });
+        transaction();
+        console.log('[SQLite] Applied migration: 005_add_account_screen_type');
       }
     } catch (error) {
       console.error('[SQLite] Migration failed:', error);
