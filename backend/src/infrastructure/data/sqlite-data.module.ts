@@ -11,6 +11,6 @@ import { CONVERSATION_STORAGE_PORT } from '../../domain/tokens';
       useClass: SqliteConversationDataMapper,
     },
   ],
-  exports: [CONVERSATION_STORAGE_PORT],
+  exports: [CONVERSATION_STORAGE_PORT, SqliteConnectionService],
 })
 export class SqliteDataModule {}

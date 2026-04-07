@@ -5,6 +5,7 @@ import { mkdirSync, existsSync } from 'fs';
 import { up as runMigration001 } from './migrations/001_initial';
 import { up as runMigration002 } from './migrations/002_add_confirmation_screen_type';
 import { up as runMigration003 } from './migrations/003_add_bundle_detail_screen_type';
+import { up as runMigration004 } from './migrations/004_mock_telco';
 
 @Injectable()
 export class SqliteConnectionService implements OnModuleDestroy {
@@ -72,6 +73,17 @@ export class SqliteConnectionService implements OnModuleDestroy {
         });
         transaction();
         console.log('[SQLite] Applied migration: 003_add_bundle_detail_screen_type');
+      }
+
+      if (!appliedIds.has('004_mock_telco')) {
+        const transaction = this.db.transaction(() => {
+          runMigration004(this.db);
+          this.db
+            .prepare('INSERT INTO _migrations (id) VALUES (?)')
+            .run('004_mock_telco');
+        });
+        transaction();
+        console.log('[SQLite] Applied migration: 004_mock_telco');
       }
     } catch (error) {
       console.error('[SQLite] Migration failed:', error);
