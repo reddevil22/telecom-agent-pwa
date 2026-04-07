@@ -81,6 +81,7 @@ src/
 │   ├── BundleDetailScreen/ # Bundle purchase confirmation
 │   ├── SupportScreen/      # Tickets and FAQ
 │   ├── UsageScreen/       # Data/voice/SMS usage
+│   ├── AccountScreen/     # Full account overview (profile, subscriptions, activity, tickets)
 │   └── registry.ts        # Screen component map
 ├── services/
 │   ├── agentService.ts    # Main agent (routes to sub-agents)
@@ -159,7 +160,7 @@ interface AgentRequest {
 ### Response Shape
 ```typescript
 interface AgentResponse {
-  screenType: 'balance' | 'bundles' | 'usage' | 'support' | 'chat';
+  screenType: 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'account' | 'unknown';
   screenData: ScreenData;
   message?: string;
 }
@@ -200,7 +201,7 @@ interface AgentRequest {
 ### Response Shape
 ```typescript
 interface AgentResponse {
-  screenType: 'balance' | 'bundles' | 'usage' | 'support' | 'unknown';
+  screenType: 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'account' | 'unknown';
   screenData: ScreenData;
   replyText: string;
   suggestions: string[];
@@ -281,6 +282,18 @@ The backend now runs a **MockTelcoService** — a stateful simulation of a telec
 - **Pre-seeded data**: user-1 has a partially consumed Starter Pack subscription (0.9/2 GB, 49/100 min, 13/50 SMS) and 2 tickets
 
 The frontend code is unchanged — the same `AgentResponse` contract is served. The `docs/ARCHITECTURE.md` file contains a full architecture reference for onboarding.
+
+### Account Dashboard Screen (2026-04)
+
+Added `AccountScreen` component — a read-only dashboard aggregating four sections:
+- **Profile card**: Name, phone, plan, status, balance, billing cycle dates
+- **Active subscriptions**: Each subscription shows bundle name, expiry, and data/voice/SMS usage bars
+- **Recent activity**: Last 5 transactions (purchases, top-ups, ticket events) sorted chronologically
+- **Open tickets**: Unresolved support tickets with status badges
+
+**Trigger**: The LLM dispatches the `get_account_summary` tool when the user asks something like "show my account" or "account overview". The backend's `MockTelcoService.getAccountSummary()` aggregates data from `telco_accounts`, `telco_subscriptions` (JOINed with `telco_bundles_catalog`), and `telco_tickets`.
+
+**Frontend files**: `src/screens/AccountScreen/AccountScreen.tsx` + `AccountScreen.module.css`
 
 ## Design Principles
 

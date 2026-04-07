@@ -41,7 +41,7 @@ src/
 │   │   ├── sqlite-connection.service.ts  # Database connection with WAL mode
 │   │   ├── sqlite-data.module.ts         # NestJS module (exports SqliteConnectionService)
 │   │   ├── conversation-data.mapper.ts   # Conversation CRUD operations
-│   │   └── migrations/                   # 001_initial through 004_mock_telco
+│   │   └── migrations/                   # 001_initial through 005_add_account_screen_type
 │   ├── telco/               # Mock telco BFF simulation
 │   │   ├── mock-telco.service.ts         # Stateful telco simulation (balance, bundles, usage, tickets)
 │   │   └── mock-telco.module.ts          # NestJS module
@@ -107,7 +107,7 @@ GET /api/health/llm
 - **SQLite Persistence**: Conversations persisted with soft deletes. Telco state persisted alongside in the same database. Stored in `backend/data/telecom.db`.
 - **userId trust boundary**: The supervisor always passes `request.userId` (from session) to sub-agents, never the value parsed from LLM tool call arguments.
 - **Defense-in-depth**: 6 security layers — DTO validation, prompt sanitizer, rate limiting, system prompt hardening, tool call validation, history/budget caps. All tunables centralized in `domain/constants/security-constants.ts`.
-- **Tool whitelist**: 9 tools registered (`check_balance`, `list_bundles`, `check_usage`, `get_support`, `view_bundle_details`, `purchase_bundle`, `top_up`, `create_ticket`). The `validateToolCall()` method rejects unknown tools, unexpected args, and non-string values.
+- **Tool whitelist**: 9 tools registered (`check_balance`, `list_bundles`, `check_usage`, `get_support`, `view_bundle_details`, `purchase_bundle`, `top_up`, `create_ticket`, `get_account_summary`). The `validateToolCall()` method rejects unknown tools, unexpected args, and non-string values.
 - **LLM adapter**: OpenAI-compatible (`/v1/chat/completions`). Supports local llama-server and DashScope (Alibaba Cloud). The LLM used during development was **GLM-5.1**.
 - **LLM health monitoring**: Background health checks with 5-second cache. Converts `localhost` to `127.0.0.1` automatically.
 - **Soft deletes**: Conversations are soft-deleted (deleted_at timestamp) for audit trail.
@@ -156,7 +156,7 @@ SQLite database created automatically at `backend/data/telecom.db`.
 - `telco_faq` — Static FAQ entries
 
 ### Migrations
-Migrations run automatically on startup. Migration `004_mock_telco` creates the telco tables and seeds default data (user-1 with $50 balance, 5 bundles, 1 active subscription, 2 tickets, 5 FAQs).
+Migrations run automatically on startup. Migration `004_mock_telco` creates the telco tables and seeds default data (user-1 with $50 balance, 5 bundles, 1 active subscription, 2 tickets, 5 FAQs). Migration `005_add_account_screen_type` adds `'account'` to the `screen_type` CHECK constraint on the `messages` table.
 
 ## Refactoring Highlights
 
@@ -218,8 +218,20 @@ New `MockTelco*BffAdapter` classes implement the same `BalanceBffPort`, `Bundles
 - All API routes are prefixed with `/api` (set in `main.ts`).
 - DTO validation uses `class-validator` decorators with `whitelist: true` and `forbidNonWhitelisted: true` — extra fields are rejected with 400.
 - Sub-agents implement `SubAgentPort` and are registered in `app.agent-module.ts` via `SupervisorService.registerAgent()`.
-- Screen types: `balance | bundles | bundleDetail | usage | support | confirmation | unknown`. Mapped from tool names via `TOOL_TO_SCREEN` constant.
+- Screen types: `balance | bundles | bundleDetail | usage | support | confirmation | account | unknown`. Mapped from tool names via `TOOL_TO_SCREEN` constant.
 - New tools require: Add entry to `TOOL_REGISTRY` in `tool-registry.ts`, implement `SubAgentPort` (or use generic classes), register in `app.agent-module.ts`.
 - Conversation persistence is automatic — every request/response pair is stored in SQLite.
 - BFF adapters delegate to `MockTelcoService` which owns all telco state. The old `JsonDataStore`/`File*BffAdapter` implementations are retained in the codebase but no longer wired.
 - Mock telco data is seeded by migration `004_mock_telco`. Delete `backend/data/telecom.db` to force a fresh seed.
+
+### Account Dashboard (2026-04)
+
+Added a `get_account_summary` tool that aggregates all user data into a single screen:
+- **Profile**: Account name, MSISDN, plan, status, balance, billing cycle
+- **Active subscriptions**: JOINed with bundle catalog, includes data/voice/SMS usage bars
+- **Recent transactions**: Combined from subscriptions (purchases), tickets, and top-ups, sorted by timestamp desc, capped at 5
+- **Open tickets**: Non-resolved support tickets with status
+
+Registered as a `SimpleQuerySubAgent` in `app.agent-module.ts`, delegating to `MockTelcoService.getAccountSummary()`. Migration `005_add_account_screen_type` adds `'account'` to the `messages.screen_type` CHECK constraint.
+
+**Files:** `infrastructure/telco/mock-telco.service.ts` (new `getAccountSummary` method), `domain/constants/tool-registry.ts` (new tool entry), `domain/types/agent.ts` (AccountScreenData type), `domain/types/domain.ts` (AccountProfile, ActiveSubscription, TransactionEntry, OpenTicket interfaces), `infrastructure/data/migrations/005_add_account_screen_type.ts`.
