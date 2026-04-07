@@ -7,6 +7,7 @@ const KEYWORD_MAP: Record<ScreenType, string[]> = {
   usage: ['usage', 'consume', 'used', 'remaining', 'data left', 'minutes used', 'how much', 'consume'],
   support: ['help', 'support', 'issue', 'problem', 'complaint', 'ticket', 'fault', 'not working', 'broken', 'fix'],
   confirmation: [],
+  account: ['my account', 'account summary', 'account overview', 'profile', 'dashboard'],
   unknown: [],
 };
 

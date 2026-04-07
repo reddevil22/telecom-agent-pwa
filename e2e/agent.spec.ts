@@ -32,6 +32,15 @@ const TESTS = [
       await expect(page.getByText('Frequently Asked')).toBeVisible();
     },
   },
+  {
+    prompt: 'show my account',
+    assert: async (page) => {
+      await expect(page.getByText('Alex Morgan')).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText('Active Subscriptions')).toBeVisible();
+      await expect(page.getByText('Starter Pack')).toBeVisible();
+      await expect(page.getByText('Recent Activity')).toBeVisible();
+    },
+  },
 ];
 
 for (const t of TESTS) {

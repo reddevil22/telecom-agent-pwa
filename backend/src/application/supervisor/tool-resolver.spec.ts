@@ -48,4 +48,16 @@ describe('ToolResolver', () => {
     expect(resolver.resolve('check_balance')).toBe(agent1);
     expect(resolver.resolve('list_bundles')).toBe(agent2);
   });
+
+  it('resolves get_account_summary to a registered agent', () => {
+    const accountAgent: SubAgentPort = {
+      handle: jest.fn().mockResolvedValue({
+        screenData: { type: 'account' },
+        processingSteps: [],
+      }),
+    };
+    resolver.register('get_account_summary', accountAgent);
+    const resolved = resolver.resolve('get_account_summary');
+    expect(resolved).toBe(accountAgent);
+  });
 });
