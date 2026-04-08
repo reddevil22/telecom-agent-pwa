@@ -1,7 +1,7 @@
 import { setup, fromPromise, assign } from 'xstate';
 import type { AgentRequest, AgentResponse, ProcessingStep, ScreenData, ToolResult } from '../types/agent';
 import type { ConversationMessage } from '../types';
-import { invokeAgentService } from '../services/agentService';
+import { invokeAgentService, invokeAgentStream } from '../services/agentService';
 import { historyService } from '../services/historyService';
 
 function generateSessionId(): string {
@@ -27,6 +27,7 @@ export interface OrchestratorContext {
 
 export type OrchestratorEvents =
   | { type: 'SUBMIT_PROMPT'; prompt: string }
+  | { type: 'STEP_UPDATE'; steps: ProcessingStep[] }
   | { type: 'LOAD_SESSION'; sessionId: string }
   | { type: 'SESSION_LOADED'; messages: ConversationMessage[] }
   | { type: 'NEW_SESSION' }
@@ -44,8 +45,8 @@ export const orchestratorMachine = setup({
   actors: {
     callAgent: fromPromise<
       AgentResponse,
-      { prompt: string; conversationHistory: ConversationMessage[]; sessionId: string }
-    >(async ({ input }) => {
+      { prompt: string; conversationHistory: ConversationMessage[]; sessionId: string; self: { send: (event: OrchestratorEvents) => void } | null }
+    >(async ({ input, self }) => {
       const request: AgentRequest = {
         prompt: input.prompt,
         sessionId: input.sessionId,
@@ -53,6 +54,18 @@ export const orchestratorMachine = setup({
         conversationHistory: input.conversationHistory,
         timestamp: Date.now(),
       };
+
+      // Try streaming first, fall back to non-streaming
+      if (self) {
+        try {
+          return await invokeAgentStream(request, (steps) => {
+            self.send({ type: 'STEP_UPDATE', steps });
+          });
+        } catch {
+          // Streaming failed, fall back to standard call
+        }
+      }
+
       return invokeAgentService(request);
     }),
     loadSession: fromPromise<
@@ -131,6 +144,12 @@ export const orchestratorMachine = setup({
       },
     }),
     clearError: assign({ error: () => null }),
+    updateSteps: assign({
+      processingSteps: ({ event }) => {
+        if (event.type !== 'STEP_UPDATE') return [];
+        return event.steps;
+      },
+    }),
   },
 }).createMachine({
   id: 'orchestrator',
@@ -210,15 +229,21 @@ export const orchestratorMachine = setup({
           { label: 'Preparing response', status: 'pending' },
         ],
       }),
+      on: {
+        STEP_UPDATE: {
+          actions: 'updateSteps',
+        },
+      },
       invoke: {
         id: 'callAgent',
         src: 'callAgent',
-        input: ({ context, event }) => {
+        input: ({ context, event, self }) => {
           const submitEvent = event as Extract<OrchestratorEvents, { type: 'SUBMIT_PROMPT' }>;
           return {
             prompt: submitEvent.prompt,
             conversationHistory: context.conversationHistory.slice(0, -1),
             sessionId: context.sessionId,
+            self: self ?? null,
           };
         },
         onDone: {

@@ -1,10 +1,11 @@
-import { Controller, Post, Body, Get, Header, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Header, UseGuards, Req, Res } from '@nestjs/common';
 import { AgentRequestDto } from './dto/agent-request.dto';
 import { SupervisorService } from '../../../application/supervisor/supervisor.service';
 import { PromptSanitizerPipe } from './pipes/prompt-sanitizer.pipe';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import type { AgentResponse } from '../../../domain/types/agent';
 import { QUICK_ACTIONS } from './quick-actions.config';
+import type { Request, Response } from 'express';
 
 @Controller('agent')
 @UseGuards(RateLimitGuard)
@@ -16,6 +17,40 @@ export class AgentController {
   @Post('chat')
   async chat(@Body(new PromptSanitizerPipe()) dto: AgentRequestDto): Promise<AgentResponse> {
     return this.supervisor.processRequest(dto);
+  }
+
+  @Post('chat/stream')
+  async chatStream(
+    @Body(new PromptSanitizerPipe()) dto: AgentRequestDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Emit processing step events
+    const emitStep = (label: string, status: string) => {
+      res.write(`event: step\ndata: ${JSON.stringify({ label, status })}\n\n`);
+    };
+
+    emitStep('Understanding your request', 'done');
+    emitStep('Processing', 'active');
+
+    try {
+      const result = await this.supervisor.processRequest(dto);
+
+      emitStep('Processing', 'done');
+      emitStep('Preparing response', 'done');
+
+      // Send final result
+      res.write(`event: result\ndata: ${JSON.stringify(result)}\n\n`);
+    } catch (error) {
+      res.write(`event: error\ndata: ${JSON.stringify({ message: 'Processing failed' })}\n\n`);
+    } finally {
+      res.end();
+    }
   }
 
   @Get('status')
