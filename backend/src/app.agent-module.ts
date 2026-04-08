@@ -22,6 +22,8 @@ import type { ScreenCachePort } from './domain/ports/screen-cache.port';
 import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
 import { MockTelcoModule } from './infrastructure/telco/mock-telco.module';
 import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
+import { IntentRouterService } from './domain/services/intent-router.service';
+import { IntentCacheService } from './application/supervisor/intent-cache.service';
 
 @Module({
   imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule, MockTelcoModule],
@@ -46,6 +48,9 @@ import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
           ? config.get<string>('DASHSCOPE_MODEL_NAME')!
           : config.get<string>('LLM_MODEL_NAME')!;
 
+        const intentCache = new IntentCacheService();
+        const intentRouter = new IntentRouterService(intentCache);
+
         const supervisor = new SupervisorService(
           llm,
           modelName,
@@ -54,6 +59,7 @@ import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
           storage,
           logger,
           cache,
+          intentRouter,
         );
 
         // Simple query sub-agents (read-only operations)

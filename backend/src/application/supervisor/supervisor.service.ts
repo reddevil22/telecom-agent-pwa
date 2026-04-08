@@ -9,6 +9,9 @@ import type { PinoLogger } from 'nestjs-pino';
 import type { ConversationStoragePort } from '../../domain/ports/conversation-storage.port';
 import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
 import type { ScreenCachePort } from '../../domain/ports/screen-cache.port';
+import type { IntentRouterPort } from '../../domain/ports/intent-router.port';
+import type { IntentRouterService } from '../../domain/services/intent-router.service';
+import { INTENT_TOOL_MAP, TelecomIntent, TIER1_INTENTS, INTENT_KEYWORDS } from '../../domain/types/intent';
 
 /** Internal message type supporting tool-call and tool-result roles for the ReAct loop */
 interface LoopMessage {
@@ -33,18 +36,12 @@ interface ToolExecutionResult {
 }
 
 export class SupervisorService {
-  private static readonly CACHEABLE_SCREENS = new Set<ScreenType>(['balance', 'bundles', 'usage', 'support']);
-
-  private static readonly INTENT_KEYWORDS: Record<string, string[]> = {
-    balance: ['balance', 'credit', 'airtime', 'how much money', 'account status'],
-    bundles: ['bundles', 'plans', 'packages', 'offers', 'pricing'],
-    usage:   ['usage', 'consumption', 'remaining', 'how much data', 'minutes left'],
-    support: ['support', 'help', 'ticket', 'problem', 'complaint', 'faq'],
-  };
+  private static readonly CACHEABLE_SCREENS = new Set<ScreenType>(['balance', 'bundles', 'usage', 'support', 'account']);
 
   private readonly toolResolver: ToolResolver;
   private readonly logger: PinoLogger | null;
   private readonly cache: ScreenCachePort | null;
+  private readonly intentRouter: IntentRouterService | null;
 
   constructor(
     private readonly llm: LlmPort,
@@ -54,10 +51,12 @@ export class SupervisorService {
     private readonly storage: ConversationStoragePort,
     logger?: PinoLogger,
     cache?: ScreenCachePort,
+    intentRouter?: IntentRouterService,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
     this.cache = cache ?? null;
+    this.intentRouter = intentRouter ?? null;
     this.logger?.setContext(SupervisorService.name);
   }
 
@@ -67,7 +66,12 @@ export class SupervisorService {
 
   async processRequest(request: AgentRequest): Promise<AgentResponse> {
     try {
-      const cached = this.tryCacheHit(request);
+      // Try intent router (keyword + fuzzy cache) before LLM
+      const routed = await this.tryIntentRouter(request);
+      if (routed) return routed;
+
+      // Try screen cache (previously fetched screens)
+      const cached = this.tryScreenCacheHit(request);
       if (cached) return cached;
 
       const conversationId = this.initializeConversation(request);
@@ -82,6 +86,7 @@ export class SupervisorService {
         const result = await this.executeIteration(request, context, iteration);
         if (result) {
           this.tryCacheStore(request, result);
+          this.cacheIntentResult(request, result);
           this.persistAgentResponse(conversationId, result);
           return result;
         }
@@ -93,15 +98,48 @@ export class SupervisorService {
     }
   }
 
-  private tryCacheHit(request: AgentRequest): AgentResponse | null {
+  private async tryIntentRouter(request: AgentRequest): Promise<AgentResponse | null> {
+    if (!this.intentRouter) return null;
+
+    const resolution = await this.intentRouter.classify(request.prompt, request.userId);
+    if (!resolution) return null;
+
+    this.logger?.info({
+      intent: resolution.intent,
+      toolName: resolution.toolName,
+      confidence: resolution.confidence,
+      tier: resolution.confidence === 1.0 ? 'keyword' : 'fuzzy',
+    }, 'Intent router resolved — skipping LLM');
+
+    const subAgent = this.toolResolver.resolve(resolution.toolName);
+    if (!subAgent) return null;
+
+    const conversationId = this.initializeConversation(request);
+    const { screenData, processingSteps } = await subAgent.handle(request.userId, resolution.args);
+
+    const screenType = TOOL_TO_SCREEN[resolution.toolName] as ScreenType;
+    const response = this.buildResponse(
+      { screenType, screenData, processingSteps },
+      [],
+    );
+
+    // Store in screen cache for future hits
+    this.tryCacheStore(request, response);
+    this.persistAgentResponse(conversationId, response);
+    return response;
+  }
+
+  private tryScreenCacheHit(request: AgentRequest): AgentResponse | null {
     if (!this.cache) return null;
 
+    // Quick keyword check to determine which screen type to look up
     const lower = request.prompt.toLowerCase();
     const matches: ScreenType[] = [];
-
-    for (const [screenType, keywords] of Object.entries(SupervisorService.INTENT_KEYWORDS)) {
+    for (const [intentKey, keywords] of Object.entries(INTENT_KEYWORDS)) {
       if (keywords.some(kw => lower.includes(kw))) {
-        matches.push(screenType as ScreenType);
+        const toolName = INTENT_TOOL_MAP[intentKey as TelecomIntent];
+        const screenType = TOOL_TO_SCREEN[toolName] as ScreenType;
+        if (screenType) matches.push(screenType);
       }
     }
 
@@ -117,6 +155,18 @@ export class SupervisorService {
     }
 
     return null;
+  }
+
+  private cacheIntentResult(request: AgentRequest, response: AgentResponse): void {
+    if (!this.intentRouter) return;
+
+    // Find the TelecomIntent for this screen type (reverse lookup)
+    for (const [intent, toolName] of Object.entries(INTENT_TOOL_MAP)) {
+      if (TOOL_TO_SCREEN[toolName] === response.screenType) {
+        this.intentRouter.cacheLlmResult(request.userId, request.prompt, intent as TelecomIntent);
+        return;
+      }
+    }
   }
 
   private tryCacheStore(request: AgentRequest, response: AgentResponse): void {
