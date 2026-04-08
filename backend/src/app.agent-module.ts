@@ -24,6 +24,7 @@ import { MockTelcoModule } from './infrastructure/telco/mock-telco.module';
 import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
 import { IntentRouterService } from './domain/services/intent-router.service';
 import { IntentCacheService } from './application/supervisor/intent-cache.service';
+import { CircuitBreakerService } from './domain/services/circuit-breaker.service';
 
 @Module({
   imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule, MockTelcoModule],
@@ -50,6 +51,7 @@ import { IntentCacheService } from './application/supervisor/intent-cache.servic
 
         const intentCache = new IntentCacheService();
         const intentRouter = new IntentRouterService(intentCache);
+        const circuitBreaker = new CircuitBreakerService();
 
         const supervisor = new SupervisorService(
           llm,
@@ -60,6 +62,7 @@ import { IntentCacheService } from './application/supervisor/intent-cache.servic
           logger,
           cache,
           intentRouter,
+          circuitBreaker,
         );
 
         // Simple query sub-agents (read-only operations)

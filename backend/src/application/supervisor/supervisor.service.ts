@@ -11,6 +11,7 @@ import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
 import type { ScreenCachePort } from '../../domain/ports/screen-cache.port';
 import type { IntentRouterPort } from '../../domain/ports/intent-router.port';
 import type { IntentRouterService } from '../../domain/services/intent-router.service';
+import type { CircuitBreakerService } from '../../domain/services/circuit-breaker.service';
 import { INTENT_TOOL_MAP, TelecomIntent, TIER1_INTENTS, INTENT_KEYWORDS } from '../../domain/types/intent';
 
 /** Internal message type supporting tool-call and tool-result roles for the ReAct loop */
@@ -42,6 +43,7 @@ export class SupervisorService {
   private readonly logger: PinoLogger | null;
   private readonly cache: ScreenCachePort | null;
   private readonly intentRouter: IntentRouterService | null;
+  private readonly circuitBreaker: CircuitBreakerService | null;
 
   constructor(
     private readonly llm: LlmPort,
@@ -52,12 +54,20 @@ export class SupervisorService {
     logger?: PinoLogger,
     cache?: ScreenCachePort,
     intentRouter?: IntentRouterService,
+    circuitBreaker?: CircuitBreakerService,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
     this.cache = cache ?? null;
     this.intentRouter = intentRouter ?? null;
+    this.circuitBreaker = circuitBreaker ?? null;
     this.logger?.setContext(SupervisorService.name);
+  }
+
+  /** Expose circuit breaker state for the status endpoint */
+  getLlmStatus(): { available: boolean; state: string } {
+    if (!this.circuitBreaker) return { available: true, state: 'closed' };
+    return { available: this.circuitBreaker.isAvailable(), state: this.circuitBreaker.getState() };
   }
 
   registerAgent(toolName: string, agent: SubAgentPort): void {
@@ -74,6 +84,12 @@ export class SupervisorService {
       const cached = this.tryScreenCacheHit(request);
       if (cached) return cached;
 
+      // Check circuit breaker before calling LLM
+      if (this.circuitBreaker && !this.circuitBreaker.isAvailable()) {
+        this.logger?.warn({ state: this.circuitBreaker.getState() }, 'LLM unavailable (circuit breaker open)');
+        return this.buildDegradedResponse();
+      }
+
       const conversationId = this.initializeConversation(request);
       const context: IterationContext = {
         messages: this.buildInitialMessages(request),
@@ -85,6 +101,7 @@ export class SupervisorService {
       for (let iteration = 0; iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS; iteration++) {
         const result = await this.executeIteration(request, context, iteration);
         if (result) {
+          this.circuitBreaker?.recordSuccess();
           this.tryCacheStore(request, result);
           this.cacheIntentResult(request, result);
           this.persistAgentResponse(conversationId, result);
@@ -467,12 +484,24 @@ export class SupervisorService {
   }
 
   private handleError(error: unknown): AgentResponse {
+    this.circuitBreaker?.recordFailure();
     this.logger?.error({
       err: error instanceof Error ? { message: error.message, stack: error.stack } : error,
     }, 'Supervisor error processing request');
     return {
       ...this.buildUnknownResponse(),
       replyText: 'Sorry, I encountered an error processing your request. Please try again.',
+    };
+  }
+
+  private buildDegradedResponse(): AgentResponse {
+    return {
+      screenType: 'unknown',
+      screenData: { type: 'unknown' },
+      replyText: 'AI chat is temporarily unavailable. Please use the quick actions below or try again shortly.',
+      suggestions: ['Show my balance', 'What bundles are available?', 'Check my usage', 'I need support', 'Show my account'],
+      confidence: 0.1,
+      processingSteps: [{ label: 'Service temporarily unavailable', status: 'done' }],
     };
   }
 
