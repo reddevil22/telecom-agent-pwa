@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSelector } from '@xstate/react';
 import type { ActorRefFrom } from 'xstate';
 import type { orchestratorMachine } from '../../machines/orchestratorMachine';
@@ -9,6 +9,9 @@ import { ProcessingIndicator } from '../ProcessingIndicator/ProcessingIndicator'
 import { ChatBubble } from '../ChatBubble/ChatBubble';
 import { SessionList, type SessionSummary } from '../SessionList/SessionList';
 import { LlmErrorScreen } from '../LlmErrorScreen/LlmErrorScreen';
+import { QuickActionBar } from '../QuickActionBar/QuickActionBar';
+import { DegradedBanner } from '../DegradedBanner/DegradedBanner';
+import { llmStatusService, type LlmStatus } from '../../services/llmStatusService';
 import { selectHasReceivedFirstResponse, selectProcessingSteps, selectState, selectConversationHistory } from '../../hooks/useSelectors';
 import { historyService } from '../../services/historyService';
 import styles from './AppShell.module.css';
@@ -26,6 +29,23 @@ export function AppShell({ actor }: Props) {
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [isDegraded, setIsDegraded] = useState(false);
+
+  // LLM status polling
+  useEffect(() => {
+    const unsub = llmStatusService.subscribe((status: LlmStatus) => {
+      setIsDegraded(status.mode === 'degraded');
+    });
+    llmStatusService.startPolling();
+    return () => {
+      unsub();
+      llmStatusService.stopPolling();
+    };
+  }, []);
+
+  const handleQuickAction = useCallback((prompt: string) => {
+    actor.send({ type: 'SUBMIT_PROMPT', prompt });
+  }, [actor]);
 
   const state = useSelector(actor, selectState);
   const hasReceivedFirstResponse = useSelector(actor, selectHasReceivedFirstResponse);
@@ -107,6 +127,9 @@ export function AppShell({ actor }: Props) {
       </header>
 
       <div className={styles.main}>
+        {/* Degraded mode banner */}
+        {isDegraded && <DegradedBanner />}
+
         {/* Main content */}
         <div className={styles.content}>
           {/* Tabs */}
@@ -180,7 +203,8 @@ export function AppShell({ actor }: Props) {
           {/* Prompt area - only show in chat tab */}
           {activeTab === 'chat' && (
             <div className={styles.promptArea}>
-              <PromptContainer actor={actor} />
+              <QuickActionBar onAction={handleQuickAction} />
+              {!isDegraded && <PromptContainer actor={actor} />}
             </div>
           )}
         </div>
