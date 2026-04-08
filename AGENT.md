@@ -12,34 +12,96 @@ A React 19 + TypeScript Progressive Web App providing an AI-powered telecom cust
 - **Styling**: CSS Modules with CSS custom properties (design tokens)
 - **Fonts**: DM Sans (body), DM Serif Display (headings)
 
-## Tech Stack
-
-- **Framework**: React 19 with TypeScript (strict mode)
-- **Build Tool**: Vite 8 with `vite-plugin-pwa` for service worker
-- **State Management**: XState v5 (state machines) with `@xstate/react`
-- **Styling**: CSS Modules with CSS custom properties (design tokens)
-- **Fonts**: DM Sans (body), DM Serif Display (headings)
-
 ## LLM
 
 The backend's LLM provider is OpenAI-compatible. During development, **GLM-5.1** was used as the model powering the telecom agent's ReAct loop. The provider is configurable via environment variables (`LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL_NAME` for local; `DASHSCOPE_*` for Alibaba Cloud DashScope).
 
+## LLM Resilience Layer (2026-04)
+
+The app no longer depends on the LLM for every interaction. A three-tier intent router handles ~80% of requests deterministically, a circuit breaker degrades gracefully when the LLM is down, and quick-action buttons work without the LLM entirely.
+
+### Hybrid Intent Routing
+```
+User prompt
+  │
+  ├─ Tier 1: Exact keyword match → execute sub-agent directly (no LLM)
+  │   Covers: balance, usage, bundles, support, account
+  │
+  ├─ Tier 2: Fuzzy intent cache → Jaccard similarity on token sets (≥0.6)
+  │   After first LLM resolution, similar phrasings hit the cache
+  │
+  └─ Tier 3: LLM ReAct loop → full tool-calling (existing behavior)
+      Required for: purchase, top-up, create ticket (entity extraction)
+```
+
+### Circuit Breaker
+- 3 consecutive LLM failures → circuit opens → all requests go through Tier 1/2 only
+- After 30s → half-open → one probe request → close on success, reopen on failure
+- `GET /api/agent/status` returns `{ llm, mode, circuitState }` for frontend polling
+
+### Frontend Degraded Mode
+- `llmStatusService` polls `/api/agent/status` every 15 seconds
+- When `mode: "degraded"`:
+  - `DegradedBanner` appears (yellow warning bar)
+  - Text input is hidden
+  - Quick-action buttons remain functional (Tier 1 routing)
+
+### Quick-Action Buttons
+- Persistent button bar below chat: Balance, Bundles, Usage, Support, Account
+- `GET /api/agent/quick-actions` returns static config (cached 5 minutes)
+- Clicking sends a synthetic prompt through the orchestrator
+
+### SSE Streaming
+- `POST /api/agent/chat/stream` returns SSE events for real-time processing updates
+- Events: `step` (label + status), `result` (full AgentResponse), `error`
+- Falls back to standard POST `/api/agent/chat` if SSE fails
+
+### New Components
+| Component | Purpose |
+|-----------|---------|
+| `QuickActionBar` | Persistent quick-action button bar |
+| `DegradedBanner` | Warning banner when LLM is unavailable |
+| `llmStatusService` | Polls LLM status, notifies subscribers |
+
+### New Backend Services
+| Service | Purpose |
+|---------|---------|
+| `IntentRouterService` | Three-tier intent classification |
+| `IntentCacheService` | Fuzzy token-set matching with Jaccard similarity |
+| `CircuitBreakerService` | CLOSED → OPEN → HALF_OPEN state machine |
+
+### New API Endpoints
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/agent/status` | GET | LLM availability and circuit state |
+| `/api/agent/quick-actions` | GET | Static quick-action button config |
+| `/api/agent/chat/stream` | POST | SSE streaming variant of chat |
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         AppShell                             │
-│  ┌─────────────┐  ┌─────────────────────────────────────┐ │
-│  │   Sidebar   │  │         Content Area                 │ │
-│  │             │  │  ┌─────────────────────────────────┐│ │
-│  │ • Balance   │  │  │        ScreenRenderer            ││ │
-│  │ • Data      │  │  │  ┌───────┐ ┌───────┐ ┌───────┐ ││ │
-│  │ • Voice     │  │  │  │Balance│ │Bundles│ │Usage  │ ││ │
-│  │ • SMS       │  │  │  │Screen │ │Screen │ │Screen │ ││ │
-│  │             │  │  │  └───────┘ └───────┘ └───────┘ ││ │
-│  └─────────────┘  │  └─────────────────────────────────┘│ │
-│                    │  ┌─────────────────────────────────┐│ │
-│                    │  │     ChatHistory + PromptArea    ││ │
-│                    │  └─────────────────────────────────┘│ │
-│                    └─────────────────────────────────────┘ │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  DegradedBanner (shown when LLM unavailable)         │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  QuickActionBar: [💰 Balance] [📦 Bundles] [📊 Usage] │  │
+│  │                  [🎧 Support] [👤 Account]            │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │              Content Area                              │  │
+│  │  ┌──────────────────────────────────────────────────┐│  │
+│  │  │           ScreenRenderer                         ││  │
+│  │  │  ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐       ││  │
+│  │  │  │Balance│ │Bundles│ │Usage  │ │Support│ ...   ││  │
+│  │  │  └───────┘ └───────┘ └───────┘ └───────┘       ││  │
+│  │  └──────────────────────────────────────────────────┘│  │
+│  │  ┌──────────────────────────────────────────────────┐│  │
+│  │  │     ChatHistory + ProcessingIndicator            ││  │
+│  │  └──────────────────────────────────────────────────┘│  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  PromptContainer (hidden when degraded)               │  │
+│  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -65,43 +127,42 @@ The backend's LLM provider is OpenAI-compatible. During development, **GLM-5.1**
 ```
 src/
 ├── components/
-│   ├── AppShell/           # Main layout with header, sidebar, content
+│   ├── AppShell/           # Main layout with header, degraded banner, content
 │   ├── ChatBubble/         # User/agent message bubbles
-│   ├── ProcessingIndicator/ # Loading animation during processing
+│   ├── DegradedBanner/     # Warning banner when LLM is unavailable
+│   ├── ProcessingIndicator/ # Loading animation with step indicators
 │   ├── PromptContainer/    # Input field and suggestion chips
+│   ├── QuickActionBar/     # Persistent quick-action button bar (balance, bundles, usage, support, account)
 │   ├── ScreenRenderer/     # Renders appropriate screen based on state
-│   └── SuggestionChips/   # Quick action buttons
+│   └── SuggestionChips/    # Quick action buttons
 ├── hooks/
-│   └── useSelectors.ts    # XState selectors
+│   └── useSelectors.ts     # XState selectors
 ├── machines/
-│   └── orchestratorMachine.ts  # Main conversation state machine
+│   └── orchestratorMachine.ts  # Main conversation state machine (supports STEP_UPDATE events)
 ├── screens/
-│   ├── BalanceScreen/     # Account balance display
-│   ├── BundlesScreen/     # Available bundles/cards
+│   ├── BalanceScreen/      # Account balance display
+│   ├── BundlesScreen/      # Available bundles/cards
 │   ├── BundleDetailScreen/ # Bundle purchase confirmation
 │   ├── SupportScreen/      # Tickets and FAQ
-│   ├── UsageScreen/       # Data/voice/SMS usage
-│   ├── AccountScreen/     # Full account overview (profile, subscriptions, activity, tickets)
-│   └── registry.ts        # Screen component map
+│   ├── UsageScreen/        # Data/voice/SMS usage
+│   ├── AccountScreen/      # Full account overview (profile, subscriptions, activity, tickets)
+│   └── registry.ts         # Screen component map
 ├── services/
-│   ├── agentService.ts    # Main agent (routes to sub-agents)
-│   ├── intentClassifier.ts # Classifies user intent
-│   └── subAgents/         # Domain-specific agents
-│       ├── balanceAgent.ts
-│       ├── bundlesAgent.ts
-│       ├── supportAgent.ts
-│       └── usageAgent.ts
+│   ├── agentService.ts     # Agent API calls (standard + SSE streaming)
+│   ├── llmStatusService.ts # Polls /api/agent/status, notifies subscribers on mode changes
+│   ├── historyService.ts   # Session persistence (localStorage + API)
+│   └── intentClassifier.ts # Client-side intent classification
 ├── theme/
-│   ├── tokens.css         # Design tokens (colors, spacing, typography)
+│   ├── tokens.css          # Design tokens (colors, spacing, typography)
 │   └── brands/
-│       └── default.css    # Brand overrides
+│       └── default.css     # Brand overrides
 ├── types/
-│   ├── agent.ts           # Agent protocol types
-│   ├── screens.ts         # Screen data types
-│   └── index.ts           # Domain types
-├── App.tsx               # Root component
-├── main.tsx              # Entry point
-└── index.css             # Global styles + scrollbar
+│   ├── agent.ts            # Agent protocol types (AgentRequest, AgentResponse, ScreenData)
+│   ├── screens.ts          # Screen component registry types
+│   └── index.ts            # Domain types
+├── App.tsx                # Root component
+├── main.tsx               # Entry point
+└── index.css              # Global styles + scrollbar
 ```
 
 ## State Machine (orchestratorMachine)
@@ -113,8 +174,12 @@ src/
 - **error**: Error occurred
 
 ### Events
-- `SUBMIT_PROMPT` — User submits text input
+- `SUBMIT_PROMPT` — User submits text input or clicks quick-action button
+- `STEP_UPDATE` — SSE streaming step update (received during processing state)
 - `SELECT_SUGGESTION` — User clicks suggestion chip
+- `LOAD_SESSION` — Load a previous conversation
+- `NEW_SESSION` — Start a new conversation
+- `RESET` — Reset from error state
 
 ### Selectors
 - `selectState` — Current machine state
@@ -175,6 +240,9 @@ The frontend communicates with the backend via REST calls. The backend provides:
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/agent/chat` | POST | Process user prompt and return response |
+| `/api/agent/chat/stream` | POST | SSE streaming variant — returns step events then final response |
+| `/api/agent/status` | GET | LLM availability and circuit breaker state (`{ llm, mode, circuitState }`) |
+| `/api/agent/quick-actions` | GET | Static quick-action button config (cached 5 min) |
 | `/api/health` | GET | Backend health check |
 | `/api/health/live` | GET | Liveness probe |
 | `/api/health/ready` | GET | Readiness probe |

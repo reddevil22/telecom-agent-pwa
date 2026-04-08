@@ -8,13 +8,15 @@ NestJS backend that orchestrates an LLM-powered telecom customer service agent. 
 src/
 ├── domain/                  # Pure business logic — zero framework deps
 │   ├── constants/           # tool-registry.ts (single source of truth), security-constants.ts, processing-steps.ts
-│   ├── ports/               # Interfaces: LlmPort, SubAgentPort, BffPorts, ConversationStoragePort
+│   ├── ports/               # Interfaces: LlmPort, SubAgentPort, BffPorts, ConversationStoragePort, IntentRouterPort, CircuitBreakerPort
+│   ├── services/            # IntentRouterService (three-tier routing), CircuitBreakerService (state machine)
 │   ├── tokens.ts            # DI injection tokens (Symbols)
-│   └── types/               # agent.ts (request/response), domain.ts (entities)
+│   └── types/               # agent.ts (request/response), domain.ts (entities), intent.ts (TelecomIntent enum)
 │
 ├── application/             # Use-case orchestration
-│   ├── supervisor/          # SupervisorService — LLM routing & tool dispatch
-│   │   ├── supervisor.service.ts   # Main orchestrator (refactored into 12 focused methods)
+│   ├── supervisor/          # SupervisorService — hybrid routing + LLM tool dispatch
+│   │   ├── supervisor.service.ts   # Main orchestrator (intent router → screen cache → circuit breaker → LLM)
+│   │   ├── intent-cache.service.ts # Fuzzy token-set matching with Jaccard similarity (per-user, 5-min TTL)
 │   │   ├── system-prompt.ts        # LLM system prompt with security rules
 │   │   ├── tool-definitions.ts     # Auto-generated from tool-registry.ts
 │   │   └── tool-resolver.ts        # toolName → SubAgentPort registry
@@ -26,7 +28,8 @@ src/
 │
 ├── adapters/
 │   ├── driving/rest/        # Inbound — HTTP API
-│   │   ├── agent.controller.ts     # POST /api/agent/chat
+│   │   ├── agent.controller.ts     # POST /api/agent/chat, /chat/stream, GET /status, /quick-actions
+│   │   ├── quick-actions.config.ts # Static quick-action button definitions
 │   │   ├── history.controller.ts   # GET/DELETE /api/history/*
 │   │   ├── llm-health.controller.ts # GET /api/health/llm
 │   │   ├── dto/                    # AgentRequestDto with class-validator
@@ -37,6 +40,8 @@ src/
 │       └── bff/             # BFF adapters delegating to MockTelcoService
 │
 ├── infrastructure/
+│   ├── cache/               # Screen cache
+│   │   └── in-memory-screen-cache.adapter.ts  # In-memory cache with 5-min TTL
 │   ├── data/                # SQLite persistence
 │   │   ├── sqlite-connection.service.ts  # Database connection with WAL mode
 │   │   ├── sqlite-data.module.ts         # NestJS module (exports SqliteConnectionService)
@@ -49,7 +54,7 @@ src/
 │       └── llm-health.service.ts         # LLM server health checks
 │
 ├── config/                  # ConfigModule + envValidationSchema
-├── app.agent-module.ts      # Wires all ports, adapters, and sub-agents via DI
+├── app.agent-module.ts      # Wires all ports, adapters, sub-agents, IntentRouter, CircuitBreaker via DI
 ├── app.module.ts            # Root: ConfigModule + AgentModule + SqliteDataModule + JsonDataModule
 └── main.ts                  # Bootstrap: ValidationPipe (whitelist+forbid), CORS, /api prefix
 ```
@@ -63,14 +68,46 @@ POST /api/agent/chat
   → ValidationPipe (class-validator DTO checks)
   → PromptSanitizerPipe (control chars, blocked injection patterns)
   → SupervisorService.processRequest()
-      → Get or create conversation (SQLite)
-      → Store user message (SQLite)
-      → buildMessages() — caps history to 10, wraps userId in <user_context>, 8000-char budget
-      → LlmPort.chatCompletion() — sends to llama-server with tool definitions
-      → validateToolCall() — verifies tool name + args against ALLOWED_TOOLS whitelist
-      → ToolResolver → SubAgentPort.handle(userId) — always uses request.userId, never LLM args
-      → Store agent response (SQLite)
-      → Returns AgentResponse with screenType + screenData
+      1. Try IntentRouterService (three-tier routing):
+         Tier 1: Exact keyword match → execute sub-agent directly (no LLM)
+         Tier 2: Fuzzy intent cache (Jaccard similarity ≥ 0.6) → execute sub-agent directly
+         Tier 3: Fall through to LLM
+      2. Check screen cache (previously fetched screens by userId + screenType)
+      3. Check circuit breaker — if open, return degraded response
+      4. LLM ReAct loop (up to 3 iterations):
+         → LlmPort.chatCompletion() — sends to llama-server with tool definitions
+         → validateToolCall() — verifies tool name + args against ALLOWED_TOOLS whitelist
+         → ToolResolver → SubAgentPort.handle(userId) — always uses request.userId
+         → On success: recordSuccess() on circuit breaker, cache intent result, store in screen cache
+         → On error: recordFailure() on circuit breaker
+      5. Store agent response (SQLite)
+      6. Returns AgentResponse with screenType + screenData
+```
+
+### SSE Streaming Flow
+```
+POST /api/agent/chat/stream
+  → Same guards and pipes as /chat
+  → Sets SSE headers (Content-Type: text/event-stream, no-cache)
+  → Emits 'step' events as processing progresses
+  → Emits 'result' event with full AgentResponse
+  → Emits 'error' event on failure
+```
+
+### Agent Status Flow
+```
+GET /api/agent/status
+  → SupervisorService.getLlmStatus()
+  → Returns { llm: "available"|"unavailable", mode: "normal"|"degraded", circuitState }
+  → No Cache-Control (no-store)
+```
+
+### Quick Actions Flow
+```
+GET /api/agent/quick-actions
+  → Returns static config from quick-actions.config.ts
+  → Cache-Control: public, max-age=300 (5 minutes)
+  → No LLM dependency — works even when circuit breaker is open
 ```
 
 ### History Flow
@@ -103,6 +140,9 @@ GET /api/health/llm
 ## Key Design Decisions
 
 - **Hexagonal Architecture**: Domain layer has zero NestJS imports. Ports are plain TypeScript interfaces.
+- **Hybrid Intent Routing**: `IntentRouterService` in `domain/services/` provides three-tier classification before falling through to the LLM. Tier 1 (exact keyword match) and Tier 2 (fuzzy cache) handle ~80% of traffic deterministically. Only Tier 3 intents that require entity extraction (`view_bundle`, `purchase_bundle`, `top_up`, `create_ticket`) always route through the LLM. The intent taxonomy is defined in `domain/types/intent.ts` as a canonical `TelecomIntent` enum.
+- **Fuzzy Intent Cache**: `IntentCacheService` stores tokenized prompt → TelecomIntent mappings with Jaccard similarity matching. Per-user, 50-entry LRU, 5-minute TTL. Only Tier 1-eligible intents (those requiring only `userId`) are cached — entity-extraction intents are excluded.
+- **Circuit Breaker**: `CircuitBreakerService` in `domain/services/` implements CLOSED → OPEN → HALF_OPEN state transitions. Opens after 3 consecutive failures, auto-recovers after 30 seconds. Injectable clock (`() => Date.now()`) for testability. When open, `SupervisorService` returns a degraded response without calling the LLM.
 - **Mock Telco BFF Service**: A stateful `MockTelcoService` backed by SQLite simulates a real telecom OSS/BSS. It manages subscriber accounts, bundle catalog, active subscriptions, CDR-style usage records, and support tickets — all persisted in `telco_*` tables alongside the conversation data. Lazy time-aware simulation increments usage and progresses ticket statuses on every read (configurable via `TELCO_SIMULATION_INTERVAL_MS`).
 - **SQLite Persistence**: Conversations persisted with soft deletes. Telco state persisted alongside in the same database. Stored in `backend/data/telecom.db`.
 - **userId trust boundary**: The supervisor always passes `request.userId` (from session) to sub-agents, never the value parsed from LLM tool call arguments.
@@ -111,6 +151,7 @@ GET /api/health/llm
 - **LLM adapter**: OpenAI-compatible (`/v1/chat/completions`). Supports local llama-server and DashScope (Alibaba Cloud). The LLM used during development was **GLM-5.1**.
 - **LLM health monitoring**: Background health checks with 5-second cache. Converts `localhost` to `127.0.0.1` automatically.
 - **Soft deletes**: Conversations are soft-deleted (deleted_at timestamp) for audit trail.
+- **SSE streaming**: `POST /api/agent/chat/stream` returns Server-Sent Events for real-time processing step updates. The frontend's orchestrator machine accepts `STEP_UPDATE` events during the processing state. Falls back to standard POST if streaming fails.
 
 ## Environment Variables
 
@@ -219,7 +260,8 @@ New `MockTelco*BffAdapter` classes implement the same `BalanceBffPort`, `Bundles
 - DTO validation uses `class-validator` decorators with `whitelist: true` and `forbidNonWhitelisted: true` — extra fields are rejected with 400.
 - Sub-agents implement `SubAgentPort` and are registered in `app.agent-module.ts` via `SupervisorService.registerAgent()`.
 - Screen types: `balance | bundles | bundleDetail | usage | support | confirmation | account | unknown`. Mapped from tool names via `TOOL_TO_SCREEN` constant.
-- New tools require: Add entry to `TOOL_REGISTRY` in `tool-registry.ts`, implement `SubAgentPort` (or use generic classes), register in `app.agent-module.ts`.
+- New tools require: Add entry to `TOOL_REGISTRY` in `tool-registry.ts`, add `TelecomIntent` to `intent.ts` (with tier eligibility), implement `SubAgentPort` (or use generic classes), register in `app.agent-module.ts`.
+- Intent taxonomy: All intents defined as `TelecomIntent` enum in `domain/types/intent.ts`. `TIER1_INTENTS` marks which can be resolved without LLM. `INTENT_TOOL_MAP` maps intents to tool names.
 - Conversation persistence is automatic — every request/response pair is stored in SQLite.
 - BFF adapters delegate to `MockTelcoService` which owns all telco state. The old `JsonDataStore`/`File*BffAdapter` implementations are retained in the codebase but no longer wired.
 - Mock telco data is seeded by migration `004_mock_telco`. Delete `backend/data/telecom.db` to force a fresh seed.
@@ -235,3 +277,41 @@ Added a `get_account_summary` tool that aggregates all user data into a single s
 Registered as a `SimpleQuerySubAgent` in `app.agent-module.ts`, delegating to `MockTelcoService.getAccountSummary()`. Migration `005_add_account_screen_type` adds `'account'` to the `messages.screen_type` CHECK constraint.
 
 **Files:** `infrastructure/telco/mock-telco.service.ts` (new `getAccountSummary` method), `domain/constants/tool-registry.ts` (new tool entry), `domain/types/agent.ts` (AccountScreenData type), `domain/types/domain.ts` (AccountProfile, ActiveSubscription, TransactionEntry, OpenTicket interfaces), `infrastructure/data/migrations/005_add_account_screen_type.ts`.
+
+### LLM Resilience Layer (2026-04)
+
+Added five resilience mechanisms to reduce LLM dependency and degrade gracefully:
+
+**1. Hybrid Intent Router** (`domain/services/intent-router.service.ts`):
+- Three-tier routing: Tier 1 exact keywords → Tier 2 fuzzy cache → Tier 3 LLM
+- Tier 1 handles 5 single-arg intents (balance, usage, bundles, support, account) without any LLM call
+- Tier 3-only intents (view_bundle, purchase_bundle, top_up, create_ticket) always need LLM for entity extraction
+
+**2. Intent Taxonomy** (`domain/types/intent.ts`):
+- Canonical `TelecomIntent` enum with 9 values
+- `TIER1_INTENTS` set marks which intents can be resolved deterministically
+- `INTENT_TOOL_MAP` maps each intent to its tool name
+- `INTENT_KEYWORDS` provides keyword lists for Tier 1 matching
+
+**3. Fuzzy Intent Cache** (`application/supervisor/intent-cache.service.ts`):
+- Stores tokenized prompt → TelecomIntent mappings (intent class only, not args)
+- Jaccard similarity on token sets with 0.6 threshold
+- Per-user, max 50 entries LRU, 5-minute TTL
+- Only Tier 1-eligible intents cached; invalidated on write operations
+
+**4. Circuit Breaker** (`domain/services/circuit-breaker.service.ts`):
+- CLOSED → OPEN on 3 consecutive failures
+- OPEN → HALF_OPEN after 30 seconds
+- HALF_OPEN → CLOSED on success, back to OPEN on failure
+- Injectable clock for testability; in-memory (resets on server restart)
+
+**5. New API Endpoints**:
+- `GET /api/agent/status` — returns LLM availability and circuit breaker state
+- `GET /api/agent/quick-actions` — static button config, no LLM dependency, cached 5 min
+- `POST /api/agent/chat/stream` — SSE variant with real-time processing step updates
+
+**Integration**: `SupervisorService.processRequest()` now tries IntentRouter → screen cache → circuit breaker check → LLM. On LLM success, caches the intent mapping. On failure, records to circuit breaker. `IntentRouterService` and `CircuitBreakerService` are instantiated in `app.agent-module.ts` alongside the existing cache.
+
+**Files:** `domain/types/intent.ts`, `domain/ports/intent-router.port.ts`, `domain/ports/circuit-breaker.port.ts`, `domain/services/intent-router.service.ts`, `domain/services/circuit-breaker.service.ts`, `application/supervisor/intent-cache.service.ts`, `application/supervisor/supervisor.service.ts` (modified), `adapters/driving/rest/agent.controller.ts` (modified), `adapters/driving/rest/quick-actions.config.ts`, `app.agent-module.ts` (modified).
+
+**Tests**: 172 backend tests (up from 157). New test suites for intent taxonomy (7 tests), intent router (25 tests), and circuit breaker (13 tests).
