@@ -31,6 +31,9 @@ backend/.env
 # Playwright MCP state
 .playwright-mcp/
 
+# Playwright test output
+test-results/
+
 # Screenshots
 *.png
 
