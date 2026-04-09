@@ -26,11 +26,12 @@ User prompt
   │
   ├─ Tier 1: Exact keyword match → execute sub-agent directly (no LLM)
   │   Covers: balance, usage, bundles, support, account
+  │   Skips BROWSE_BUNDLES when action signals detected (buy, purchase, order, etc.)
   │
   ├─ Tier 2: Fuzzy intent cache → Jaccard similarity on token sets (≥0.6)
   │   After first LLM resolution, similar phrasings hit the cache
   │
-  └─ Tier 3: LLM ReAct loop → full tool-calling (existing behavior)
+  └─ Tier 3: LLM ReAct loop → single tool call per request (no chaining)
       Required for: purchase, top-up, create ticket (entity extraction)
 ```
 
@@ -275,7 +276,6 @@ interface AgentResponse {
   suggestions: string[];
   confidence: number;
   processingSteps: ProcessingStep[];
-  supplementaryResults?: ToolResult[];
 }
 ```
 
@@ -334,9 +334,10 @@ Added `BundleDetailScreen` component for two-phase bundle purchase flow:
 
 **Purpose**: Prevents accidental purchases by requiring explicit confirmation
 
-### ScreenRenderer Updates (2025-01)
-- Modified to skip supplementary results when main screen is `confirmation` type
-- Prevents duplicate balance display on purchase confirmation
+### ScreenRenderer Updates (2026-04)
+- Renders only the primary screen — no supplementary screens. Every request produces exactly one screen.
+- Auto-scrolls to the bottom of the content area when a response appears
+- Auto-focuses the chat input after the response is returned
 
 ### Mock Telco Backend (2026-04)
 
@@ -362,6 +363,21 @@ Added `AccountScreen` component — a read-only dashboard aggregating four secti
 **Trigger**: The LLM dispatches the `get_account_summary` tool when the user asks something like "show my account" or "account overview". The backend's `MockTelcoService.getAccountSummary()` aggregates data from `telco_accounts`, `telco_subscriptions` (JOINed with `telco_bundles_catalog`), and `telco_tickets`.
 
 **Frontend files**: `src/screens/AccountScreen/AccountScreen.tsx` + `AccountScreen.module.css`
+
+### Single-Screen Rendering & UX Fixes (2026-04)
+
+Enforced one screen per request — the supervisor returns immediately after the first successful tool call, and the frontend no longer renders supplementary screens.
+
+**Key changes:**
+- **Action signal detection**: Tier 1 keyword matching now skips `BROWSE_BUNDLES` when purchase-intent words are present (buy, purchase, order, subscribe, activate, etc.). This prevents "buy the Weekend Pass" from incorrectly routing to the bundle list.
+- **Corrected bundle names**: Tool-registry descriptions now match the database — b4=Weekend Pass, b5=Travel Roaming (previously "Social Saver" and "Traveler Pass").
+- **System prompt**: Updated to list all 9 tools with explicit purchase flow: `view_bundle_details` first → wait for user confirmation → `purchase_bundle`.
+- **Auto-scroll**: Content area smooth-scrolls to the bottom when a response appears.
+- **Auto-focus**: Chat input is focused after each response so the user can immediately type the next message.
+
+**Files:** `backend/src/application/supervisor/supervisor.service.ts`, `backend/src/application/supervisor/system-prompt.ts`, `backend/src/domain/services/intent-router.service.ts`, `backend/src/domain/constants/tool-registry.ts`, `src/components/ScreenRenderer/ScreenRenderer.tsx`, `src/components/AppShell/AppShell.tsx`, `src/components/PromptContainer/PromptContainer.tsx`.
+
+**Tests**: 174 backend tests. Updated supervisor tests for single-screen behavior.
 
 ## Design Principles
 

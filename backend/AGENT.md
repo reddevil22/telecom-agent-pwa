@@ -78,7 +78,8 @@ POST /api/agent/chat
          → LlmPort.chatCompletion() — sends to llama-server with tool definitions
          → validateToolCall() — verifies tool name + args against ALLOWED_TOOLS whitelist
          → ToolResolver → SubAgentPort.handle(userId) — always uses request.userId
-         → On success: recordSuccess() on circuit breaker, cache intent result, store in screen cache
+         → On first successful tool call: return immediately (single screen per request)
+         → On invalid tool call: feed error back to LLM and retry
          → On error: recordFailure() on circuit breaker
       5. Store agent response (SQLite)
       6. Returns AgentResponse with screenType + screenData
@@ -140,7 +141,7 @@ GET /api/health/llm
 ## Key Design Decisions
 
 - **Hexagonal Architecture**: Domain layer has zero NestJS imports. Ports are plain TypeScript interfaces.
-- **Hybrid Intent Routing**: `IntentRouterService` in `domain/services/` provides three-tier classification before falling through to the LLM. Tier 1 (exact keyword match) and Tier 2 (fuzzy cache) handle ~80% of traffic deterministically. Only Tier 3 intents that require entity extraction (`view_bundle`, `purchase_bundle`, `top_up`, `create_ticket`) always route through the LLM. The intent taxonomy is defined in `domain/types/intent.ts` as a canonical `TelecomIntent` enum.
+- **Hybrid Intent Routing**: `IntentRouterService` in `domain/services/` provides three-tier classification before falling through to the LLM. Tier 1 (exact keyword match) and Tier 2 (fuzzy cache) handle ~80% of traffic deterministically. Tier 1 skips `BROWSE_BUNDLES` when action signals are detected (buy, purchase, order, subscribe, etc.) so purchase-intent prompts fall through to the LLM for entity extraction. Only Tier 3 intents that require entity extraction (`view_bundle`, `purchase_bundle`, `top_up`, `create_ticket`) always route through the LLM. The intent taxonomy is defined in `domain/types/intent.ts` as a canonical `TelecomIntent` enum.
 - **Fuzzy Intent Cache**: `IntentCacheService` stores tokenized prompt → TelecomIntent mappings with Jaccard similarity matching. Per-user, 50-entry LRU, 5-minute TTL. Only Tier 1-eligible intents (those requiring only `userId`) are cached — entity-extraction intents are excluded.
 - **Circuit Breaker**: `CircuitBreakerService` in `domain/services/` implements CLOSED → OPEN → HALF_OPEN state transitions. Opens after 3 consecutive failures, auto-recovers after 30 seconds. Injectable clock (`() => Date.now()`) for testability. When open, `SupervisorService` returns a degraded response without calling the LLM.
 - **Mock Telco BFF Service**: A stateful `MockTelcoService` backed by SQLite simulates a real telecom OSS/BSS. It manages subscriber accounts, bundle catalog, active subscriptions, CDR-style usage records, and support tickets — all persisted in `telco_*` tables alongside the conversation data. Lazy time-aware simulation increments usage and progresses ticket statuses on every read (configurable via `TELCO_SIMULATION_INTERVAL_MS`).
@@ -152,6 +153,8 @@ GET /api/health/llm
 - **LLM health monitoring**: Background health checks with 5-second cache. Converts `localhost` to `127.0.0.1` automatically.
 - **Soft deletes**: Conversations are soft-deleted (deleted_at timestamp) for audit trail.
 - **SSE streaming**: `POST /api/agent/chat/stream` returns Server-Sent Events for real-time processing step updates. The frontend's orchestrator machine accepts `STEP_UPDATE` events during the processing state. Falls back to standard POST if streaming fails.
+- **Single screen per request**: The supervisor returns immediately after the first successful tool call. No supplementary results are returned. The LLM cannot chain multiple tool calls in a single request — only invalid tool calls trigger retries (up to `SUPERVISOR_MAX_ITERATIONS`). This ensures the user sees exactly one screen per interaction.
+- **System prompt**: Lists all 9 tools with explicit purchase flow instructions. Bundle IDs referenced as b1 (Starter Pack), b2 (Value Plus), b3 (Unlimited Pro), b4 (Weekend Pass), b5 (Travel Roaming).
 
 ## Environment Variables
 
@@ -314,4 +317,4 @@ Added five resilience mechanisms to reduce LLM dependency and degrade gracefully
 
 **Files:** `domain/types/intent.ts`, `domain/ports/intent-router.port.ts`, `domain/ports/circuit-breaker.port.ts`, `domain/services/intent-router.service.ts`, `domain/services/circuit-breaker.service.ts`, `application/supervisor/intent-cache.service.ts`, `application/supervisor/supervisor.service.ts` (modified), `adapters/driving/rest/agent.controller.ts` (modified), `adapters/driving/rest/quick-actions.config.ts`, `app.agent-module.ts` (modified).
 
-**Tests**: 172 backend tests (up from 157). New test suites for intent taxonomy (7 tests), intent router (25 tests), and circuit breaker (13 tests).
+**Tests**: 174 backend tests (up from 157). New test suites for intent taxonomy (7 tests), intent router (25 tests), and circuit breaker (13 tests). Supervisor tests updated for single-screen behavior (no supplementary results).
