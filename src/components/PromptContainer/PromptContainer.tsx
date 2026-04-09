@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSelector } from '@xstate/react';
 import type { ActorRefFrom } from 'xstate';
+import type { RefObject } from 'react';
 import type { orchestratorMachine } from '../../machines/orchestratorMachine';
 import { selectCurrentSuggestions, selectState } from '../../hooks/useSelectors';
 import { SuggestionChips } from '../SuggestionChips/SuggestionChips';
@@ -10,9 +11,10 @@ type Actor = ActorRefFrom<typeof orchestratorMachine>;
 
 interface Props {
   actor: Actor;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }
 
-export function PromptContainer({ actor }: Props) {
+export function PromptContainer({ actor, inputRef }: Props) {
   const [input, setInput] = useState('');
   const state = useSelector(actor, selectState);
   const suggestions = useSelector(actor, selectCurrentSuggestions);
@@ -35,6 +37,7 @@ export function PromptContainer({ actor }: Props) {
       <SuggestionChips suggestions={suggestions} onSelect={submit} />
       <form onSubmit={handleSubmit} className={styles.inputRow}>
         <input
+          ref={inputRef}
           className={styles.input}
           type="text"
           placeholder="Ask about balance, bundles, usage, or support"

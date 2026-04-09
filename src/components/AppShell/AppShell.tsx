@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector } from '@xstate/react';
 import type { ActorRefFrom } from 'xstate';
 import type { orchestratorMachine } from '../../machines/orchestratorMachine';
@@ -30,6 +30,8 @@ export function AppShell({ actor }: Props) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [isDegraded, setIsDegraded] = useState(false);
+  const contentAreaRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // LLM status polling
   useEffect(() => {
@@ -57,6 +59,16 @@ export function AppShell({ actor }: Props) {
   const isInitial = !hasReceivedFirstResponse && !isProcessing && !hasMessages;
 
   const sessionId = useSelector(actor, (s) => s.context.sessionId);
+
+  // Scroll to bottom when response appears and focus input
+  useEffect(() => {
+    if (!isInitial && !isProcessing && !isError && contentAreaRef.current) {
+      const el = contentAreaRef.current;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      // Focus the input after a short delay to let the scroll finish
+      setTimeout(() => inputRef.current?.focus(), 300);
+    }
+  }, [isProcessing, isInitial, isError]);
 
   useEffect(() => {
     loadSessions();
@@ -166,7 +178,7 @@ export function AppShell({ actor }: Props) {
                 />
               </div>
             ) : (
-              <div className={`${styles.contentArea} ${isInitial ? styles['contentArea--initial'] : ''}`}>
+              <div ref={contentAreaRef} className={`${styles.contentArea} ${isInitial ? styles['contentArea--initial'] : ''}`}>
                 {isInitial && (
                   <div className={styles.initialContent}>
                     <h2 className={styles.initialTitle}>How can I help you today?</h2>
@@ -204,7 +216,7 @@ export function AppShell({ actor }: Props) {
           {activeTab === 'chat' && (
             <div className={styles.promptArea}>
               <QuickActionBar onAction={handleQuickAction} />
-              {!isDegraded && <PromptContainer actor={actor} />}
+              {!isDegraded && <PromptContainer actor={actor} inputRef={inputRef} />}
             </div>
           )}
         </div>

@@ -96,9 +96,12 @@ describe('IntentRouterService', () => {
     it.each([
       'buy the Value Plus bundle',
       'purchase starter pack',
+      'buy travel roaming bundle',
+      'I want to order the Unlimited Pro plan',
+      'subscribe to Value Plus',
       'top up 20 dollars',
       'recharge my phone with 50',
-    ])('returns null for "%s" (no single keyword match)', async (prompt) => {
+    ])('returns null for "%s" (action signal prevents BROWSE_BUNDLES)', async (prompt) => {
       const result = await router.classify(prompt, 'user-1');
       expect(result).toBeNull();
     });

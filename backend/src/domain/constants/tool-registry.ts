@@ -48,7 +48,7 @@ export const TOOL_REGISTRY: Record<string, ToolMetadata> = {
     allowedArgs: ['userId', 'bundleId'],
     replyText: 'Here are the details for this bundle.',
     suggestions: ['Confirm purchase', 'Show my balance', 'View other bundles'],
-    description: 'CRITICAL: Use this tool FIRST when the user wants to buy, purchase, or view details of a specific bundle. Shows detailed information including price, features, and balance check. Presents a confirmation screen where the user can review before purchasing. Available bundle IDs: b1 (Starter Pack), b2 (Value Plus), b3 (Unlimited Pro), b4 (Social Saver), b5 (Traveler Pass). NEVER skip this step - always show details first!',
+    description: 'CRITICAL: Use this tool FIRST when the user wants to buy, purchase, or view details of a specific bundle. Shows detailed information including price, features, and balance check. Presents a confirmation screen where the user can review before purchasing. Available bundle IDs: b1 (Starter Pack), b2 (Value Plus), b3 (Unlimited Pro), b4 (Weekend Pass), b5 (Travel Roaming). NEVER skip this step - always show details first!',
     parameters: {
       type: 'object',
       properties: {
@@ -94,7 +94,7 @@ export const TOOL_REGISTRY: Record<string, ToolMetadata> = {
     allowedArgs: ['userId', 'bundleId'],
     replyText: 'Your request has been processed.',
     suggestions: ['Show my balance', 'What bundles are available?', 'Check my usage'],
-    description: 'Purchase or activate a specific bundle for the user. ONLY use this tool AFTER the user has viewed bundle details and explicitly confirmed they want to purchase. Do NOT use this for initial purchase requests - use view_bundle_details first. Available bundle IDs: b1 (Starter Pack), b2 (Value Plus), b3 (Unlimited Pro), b4 (Social Saver), b5 (Traveler Pass).',
+    description: 'Purchase or activate a specific bundle for the user. ONLY use this tool AFTER the user has viewed bundle details and explicitly confirmed they want to purchase. Do NOT use this for initial purchase requests - use view_bundle_details first. Available bundle IDs: b1 (Starter Pack), b2 (Value Plus), b3 (Unlimited Pro), b4 (Weekend Pass), b5 (Travel Roaming).',
     parameters: {
       type: 'object',
       properties: {

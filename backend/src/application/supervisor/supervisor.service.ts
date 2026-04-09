@@ -323,13 +323,15 @@ export class SupervisorService {
     const toolResult = await this.executeSubAgent(request, subAgent, toolCall, screenType);
     this.updatePrimaryResult(context, toolResult, iteration, iterStart);
 
-    // For screens that require user confirmation, stop here
-    if (screenType === 'bundleDetail') {
+    // Every screen-producing tool call is terminal — return immediately.
+    // Only one screen is shown at a time. The LLM should not chain calls.
+    if (context.primaryResult) {
       this.logger?.info({
-        screenType: context.primaryResult?.screenType,
+        screenType: context.primaryResult.screenType,
+        toolName: toolResult.toolName,
         iterations: iteration + 1,
-      }, 'Supervisor pausing for user confirmation');
-      return this.buildResponse(context.primaryResult!, context.collectedResults);
+      }, 'Supervisor completed — returning single screen');
+      return this.buildResponse(context.primaryResult, []);
     }
 
     this.feedResultBackToLlm(context.messages, toolCall, toolResult);

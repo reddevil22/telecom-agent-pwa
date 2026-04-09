@@ -35,12 +35,20 @@ export class IntentRouterService implements IntentRouterPort {
     }
   }
 
+  /** Words that signal a purchase/action intent requiring entity extraction */
+  private static readonly ACTION_SIGNALS = ['buy', 'purchase', 'order', 'subscribe', 'activate', 'get me', 'i want', 'i need'];
+
   private tier1KeywordMatch(prompt: string, userId: string): IntentResolution | null {
     const lower = prompt.toLowerCase();
     const matches: TelecomIntent[] = [];
 
+    const hasActionSignal = IntentRouterService.ACTION_SIGNALS.some(signal => lower.includes(signal));
+
     for (const [intentKey, keywords] of Object.entries(INTENT_KEYWORDS)) {
       const intent = intentKey as TelecomIntent;
+      // If the prompt has a purchase/action signal, skip BROWSE_BUNDLES —
+      // "buy travel roaming bundle" should go to LLM for entity extraction, not list_bundles
+      if (hasActionSignal && intent === TelecomIntent.BROWSE_BUNDLES) continue;
       if (keywords.some(kw => lower.includes(kw))) {
         matches.push(intent);
       }
