@@ -184,7 +184,7 @@
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: 500;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -195,6 +195,7 @@
 .tab.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
+  font-weight: 600;
 }
 
 .contentAreaWrapper {

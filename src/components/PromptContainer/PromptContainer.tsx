@@ -37,7 +37,7 @@ export function PromptContainer({ actor }: Props) {
         <input
           className={styles.input}
           type="text"
-          placeholder="Ask me anything..."
+          placeholder="Ask about balance, bundles, usage, or support"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={isProcessing}

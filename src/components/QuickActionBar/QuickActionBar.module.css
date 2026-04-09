@@ -16,9 +16,9 @@
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
-  background: var(--color-bg-input);
+  background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--radius-full);
   color: var(--color-text-secondary);
   font-size: var(--text-xs);
   font-family: var(--font-sans);
@@ -29,9 +29,8 @@
 }
 
 .button:hover:not(:disabled) {
-  background: var(--color-surface-hover);
   color: var(--color-text-primary);
-  border-color: var(--color-primary);
+  border-color: var(--color-text-muted);
 }
 
 .button:active:not(:disabled) {
@@ -41,6 +40,19 @@
 .button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Balance is primary action — most commonly used */
+.button[data-testid="quick-action-balance"] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.button[data-testid="quick-action-balance"]:hover:not(:disabled) {
+  opacity: 0.9;
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
 }
 
 .icon {

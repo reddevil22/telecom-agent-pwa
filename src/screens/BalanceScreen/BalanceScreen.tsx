@@ -10,7 +10,6 @@ interface Props {
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', {
-    year: 'numeric',
     month: 'short',
     day: 'numeric',
   });
@@ -31,26 +30,10 @@ export function BalanceScreen({ data, actor }: Props) {
   }
 
   return (
-    <div className={styles.card}>
-      <div className={styles.header}>
-        <div>
-          <div className={styles.label}>Current Balance</div>
-          <div className={styles.balance}>
-            <span className={styles.amount}>${balance.current.toFixed(2)}</span>
-            <span className={styles.currency}>{balance.currency}</span>
-          </div>
-        </div>
-        <span className={styles.statusBadge}>Active</span>
-      </div>
-      <div className={styles.meta}>
-        <div className={styles.metaItem}>
-          <span className={styles.metaLabel}>Last Top-up</span>
-          <span className={styles.metaValue}>{formatDate(balance.lastTopUp)}</span>
-        </div>
-        <div className={styles.metaItem}>
-          <span className={styles.metaLabel}>Next Billing</span>
-          <span className={styles.metaValue}>{formatDate(balance.nextBillingDate)}</span>
-        </div>
+    <div className={styles.balanceContainer}>
+      <div className={styles.balanceRow}>
+        <span className={styles.balanceAmount}>${balance.current.toFixed(2)}</span>
+        <span className={styles.balanceNote}>auto-renews {formatDate(balance.nextBillingDate)}</span>
       </div>
 
       {showTopUp ? (
@@ -69,8 +52,8 @@ export function BalanceScreen({ data, actor }: Props) {
           <button className={styles.cancelBtn} onClick={() => { setShowTopUp(false); setAmount(''); }}>Cancel</button>
         </div>
       ) : (
-        <button className={styles.topUpTrigger} onClick={() => setShowTopUp(true)}>
-          + Top Up
+        <button className={styles.topUpLink} onClick={() => setShowTopUp(true)}>
+          + Add funds
         </button>
       )}
     </div>

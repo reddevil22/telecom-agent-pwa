@@ -9,27 +9,45 @@
   box-shadow: var(--shadow-sm);
   align-self: flex-start;
   max-width: 280px;
+  animation: indicatorIn 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes indicatorIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .typingDots {
   display: flex;
-  gap: 3px;
+  gap: 4px;
 }
 
 .typingDot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   background: var(--color-text-muted);
   border-radius: 50%;
-  animation: typing 1.4s ease-in-out infinite;
+  animation: typing 1.2s ease-in-out infinite;
 }
 
-.typingDot:nth-child(2) { animation-delay: 0.15s; }
-.typingDot:nth-child(3) { animation-delay: 0.3s; }
+.typingDot:nth-child(2) { animation-delay: 0.2s; }
+.typingDot:nth-child(3) { animation-delay: 0.4s; }
 
 @keyframes typing {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-4px); opacity: 1; }
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-3px);
+    opacity: 0.8;
+  }
 }
 
 /* Signal wave animation - telecom motif */
@@ -37,7 +55,7 @@
   display: flex;
   gap: 2px;
   align-items: center;
-  height: 16px;
+  height: 14px;
   margin-left: var(--space-xs);
 }
 
@@ -45,18 +63,28 @@
   width: 2px;
   background: var(--color-primary);
   border-radius: 1px;
-  animation: wave 1s ease-in-out infinite;
+  animation: wave 1.2s ease-out infinite;
 }
 
-.signalWave span:nth-child(1) { height: 5px; animation-delay: 0s; }
-.signalWave span:nth-child(2) { height: 9px; animation-delay: 0.1s; }
-.signalWave span:nth-child(3) { height: 13px; animation-delay: 0.2s; }
-.signalWave span:nth-child(4) { height: 9px; animation-delay: 0.3s; }
-.signalWave span:nth-child(5) { height: 5px; animation-delay: 0.4s; }
+.signalWave span:nth-child(1) { height: 4px; animation-delay: 0s; }
+.signalWave span:nth-child(2) { height: 8px; animation-delay: 0.1s; }
+.signalWave span:nth-child(3) { height: 12px; animation-delay: 0.2s; }
+.signalWave span:nth-child(4) { height: 8px; animation-delay: 0.3s; }
+.signalWave span:nth-child(5) { height: 4px; animation-delay: 0.4s; }
 
 @keyframes wave {
-  0%, 100% { transform: scaleY(0.6); opacity: 0.4; }
-  50% { transform: scaleY(1); opacity: 1; }
+  0% {
+    transform: scaleY(0.5);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scaleY(0.5);
+    opacity: 0.3;
+  }
 }
 
 /* Legacy spinner style - kept for compatibility */
@@ -76,7 +104,7 @@
 .steps {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   width: 100%;
   max-width: 240px;
 }
@@ -85,9 +113,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
-  transition: color var(--transition-fast);
+  transition: color 0.2s ease;
 }
 
 .step--done {
@@ -99,14 +127,25 @@
 }
 
 .stepDot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: var(--radius-full);
   background: currentColor;
   flex-shrink: 0;
-  transition: transform var(--transition-fast);
+  transition: transform 0.2s ease;
 }
 
 .step--active .stepDot {
-  transform: scale(1.5);
+  transform: scale(1.4);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .indicator {
+    animation: none;
+  }
+  .typingDot,
+  .signalWave span {
+    animation: none;
+  }
 }
