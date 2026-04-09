@@ -336,8 +336,8 @@ Added `BundleDetailScreen` component for two-phase bundle purchase flow:
 
 ### ScreenRenderer Updates (2026-04)
 - Renders only the primary screen — no supplementary screens. Every request produces exactly one screen.
-- Auto-scrolls to the bottom of the content area when a response appears
-- Auto-focuses the chat input after the response is returned
+- Auto-scrolls only when user is already near the bottom (within 100px), avoiding forced scroll override
+- Auto-focuses the chat input only when no element in the content area currently has focus
 
 ### Mock Telco Backend (2026-04)
 
@@ -372,17 +372,42 @@ Enforced one screen per request — the supervisor returns immediately after the
 - **Action signal detection**: Tier 1 keyword matching now skips `BROWSE_BUNDLES` when purchase-intent words are present (buy, purchase, order, subscribe, activate, etc.). This prevents "buy the Weekend Pass" from incorrectly routing to the bundle list.
 - **Corrected bundle names**: Tool-registry descriptions now match the database — b4=Weekend Pass, b5=Travel Roaming (previously "Social Saver" and "Traveler Pass").
 - **System prompt**: Updated to list all 9 tools with explicit purchase flow: `view_bundle_details` first → wait for user confirmation → `purchase_bundle`.
-- **Auto-scroll**: Content area smooth-scrolls to the bottom when a response appears.
-- **Auto-focus**: Chat input is focused after each response so the user can immediately type the next message.
+- **Auto-scroll**: Content area smooth-scrolls to the bottom when a response appears, but only if user is already near the bottom.
+- **Auto-focus**: Chat input is focused after each response only when no screen element has active focus.
 
 **Files:** `backend/src/application/supervisor/supervisor.service.ts`, `backend/src/application/supervisor/system-prompt.ts`, `backend/src/domain/services/intent-router.service.ts`, `backend/src/domain/constants/tool-registry.ts`, `src/components/ScreenRenderer/ScreenRenderer.tsx`, `src/components/AppShell/AppShell.tsx`, `src/components/PromptContainer/PromptContainer.tsx`.
 
 **Tests**: 174 backend tests. Updated supervisor tests for single-screen behavior.
+
+### Frontend Audit Fixes (2026-04)
+
+Fixed issues found during comprehensive frontend audit:
+
+**SSE streaming** (`agentService.ts`):
+- Error events now properly propagate — catch block checks for `SyntaxError` (JSON parse) instead of silently swallowing all errors
+- Incomplete SSE data logged with `console.warn` instead of silent drop
+
+**Division by zero** (`UsageScreen.tsx`, `AccountScreen.tsx`):
+- Usage bar calculations guard against zero denominators (`total > 0` check)
+- Prevents `Infinity`/`NaN` in progress bars when total allowance is 0
+
+**State machine** (`orchestratorMachine.ts`):
+- `NEW_SESSION` now generates a fresh session ID and resets all state (history, screen, suggestions, flags)
+- `loadSessionData` clears stale screen state (screenType, screenData, suggestions, processing steps) when loading a previous session
+
+**Auto-scroll/auto-focus** (`AppShell.tsx`):
+- Auto-scroll only triggers when user is already near the bottom (within 100px)
+- Auto-focus only triggers when no element inside the content area has focus, preventing focus theft from screen interactions
+
+**Accessibility** (multiple components):
+- Tab navigation: `role="tablist"` and `role="tab"` with `aria-selected`, keyboard arrow-key navigation
+- ARIA labels on all interactive elements: quick-action buttons, bundle detail buttons, confirm/cancel buttons, chat input, send button
+- Removed unused `llmStatusService` import from `QuickActionBar.tsx`
 
 ## Design Principles
 
 1. **Warm minimal** — Soft edges, generous whitespace, approachable feel
 2. **Information density** — Sidebar shows quick stats, main area shows detail
 3. **Progressive disclosure** — Simple start, sophisticated on interaction
-4. **Accessibility** — WCAG AA contrast ratios, semantic HTML
+4. **Accessibility** — WCAG AA contrast ratios, semantic HTML, ARIA labels, keyboard navigation
 5. **Responsive** — Mobile-first, sidebar hidden on small screens
