@@ -7,9 +7,8 @@
 /* Featured bundle - hero treatment */
 .featured {
   background: var(--color-bg-elevated);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-md);
   overflow: hidden;
 }
 
@@ -59,7 +58,7 @@
 
 .priceAmount {
   font-family: var(--font-display);
-  font-size: var(--text-4xl);
+  font-size: var(--text-2xl);
   font-weight: 400;
   color: var(--color-text-primary);
   line-height: 1;
@@ -72,7 +71,7 @@
 
 .featuredMeta {
   display: flex;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   align-items: center;
 }
 
@@ -111,16 +110,15 @@
   font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  transition: opacity var(--transition-fast);
 }
 
 .buyBtnFeatured:hover {
   opacity: 0.9;
-  transform: translateY(-1px);
 }
 
 .buyBtnFeatured:active {
-  transform: translateY(0);
+  opacity: 0.85;
 }
 
 /* Regular bundles - compact list */

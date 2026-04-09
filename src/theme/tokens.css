@@ -5,10 +5,9 @@
 
 :root {
   /* === BRAND COLORS (Light Mode) === */
-  --color-primary: #00A3E0;
-  --color-primary-light: #33B5E6;
-  --color-primary-dark: #0077B8;
-  --color-secondary: #7C3AED;
+  --color-primary: #E8633A;
+  --color-primary-light: #F08B60;
+  --color-primary-dark: #C44E2B;
 
   /* === SURFACES (Light Mode) === */
   --color-bg: #FAFBFC;
@@ -21,7 +20,6 @@
   --color-text-primary: #1A1D26;
   --color-text-secondary: #5A6170;
   --color-text-muted: #9099A8;
-  --color-text-accent: #00A3E0;
   --color-text-inverse: #FFFFFF;
 
   /* === BORDERS === */
@@ -30,7 +28,9 @@
 
   /* === STATUS COLORS === */
   --color-success: #22C55E;
+  --color-success-bg: rgba(34, 197, 94, 0.12);
   --color-error: #EF4444;
+  --color-error-bg: rgba(239, 68, 68, 0.12);
   --color-warning: #F59E0B;
 
   /* === SPACING === */
@@ -81,34 +81,13 @@
   /* === SAFE AREAS (iOS) === */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-
-  /* === CHAT BUBBLE SEMANTIC TOKENS === */
-  --chat-bubble-user-bg: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-  --chat-bubble-user-text: var(--color-text-inverse);
-  --chat-bubble-agent-bg: var(--color-bg-elevated);
-  --chat-bubble-agent-text: var(--color-text-primary);
-  --chat-bubble-user-border-radius: 16px 16px 4px 16px;
-  --chat-bubble-agent-border-radius: 16px 16px 16px 4px;
-
-  /* === INPUT SEMANTIC TOKENS === */
-  --input-bg: var(--color-bg-input);
-  --input-border: var(--color-border);
-  --input-focus-border: var(--color-primary);
-  --input-radius: 24px;
-
-  /* === BUTTON SEMANTIC TOKENS === */
-  --button-primary-bg: var(--color-primary);
-  --button-primary-text: var(--color-text-inverse);
-  --button-secondary-bg: var(--color-bg-input);
-  --button-secondary-text: var(--color-text-primary);
 }
 
 /* === DARK MODE === */
 [data-theme="dark"] {
-  --color-primary: #00C9FF;
-  --color-primary-light: #33D6FF;
-  --color-primary-dark: #0099CC;
-  --color-secondary: #A78BFA;
+  --color-primary: #FF9166;
+  --color-primary-light: #FFA880;
+  --color-primary-dark: #CC5A2A;
 
   --color-bg: #0F1117;
   --color-bg-elevated: #181B24;
@@ -119,23 +98,19 @@
   --color-text-primary: #F0F2F5;
   --color-text-secondary: #9CA3AF;
   --color-text-muted: #6B7280;
-  --color-text-accent: #00C9FF;
   --color-text-inverse: #0F1117;
 
   --color-border: rgba(255, 255, 255, 0.08);
   --color-border-focus: var(--color-primary);
 
   --color-success: #22C55E;
+  --color-success-bg: rgba(34, 197, 94, 0.12);
   --color-error: #EF4444;
+  --color-error-bg: rgba(239, 68, 68, 0.12);
   --color-warning: #F59E0B;
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
-
-  --chat-bubble-user-bg: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-  --chat-bubble-user-text: var(--color-text-inverse);
-  --chat-bubble-agent-bg: var(--color-bg-elevated);
-  --chat-bubble-agent-text: var(--color-text-primary);
 }

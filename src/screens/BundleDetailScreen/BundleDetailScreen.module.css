@@ -134,7 +134,7 @@
 }
 
 .insufficient {
-  color: var(--color-error, #ef4444);
+  color: var(--color-error);
 }
 
 .warning {
@@ -142,7 +142,7 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
-  background: var(--color-error-bg, rgba(239, 68, 68, 0.1));
+  background: var(--color-error-bg);
   border-radius: var(--radius-md);
   margin-top: var(--space-sm);
 }
@@ -153,7 +153,7 @@
 
 .warningText {
   font-size: var(--text-sm);
-  color: var(--color-error, #ef4444);
+  color: var(--color-error);
 }
 
 .actions {

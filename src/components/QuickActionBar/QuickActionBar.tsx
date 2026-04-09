@@ -43,7 +43,7 @@ export function QuickActionBar({ onAction, disabled }: Props) {
       {actions.map(action => (
         <button
           key={action.id}
-          className={styles.button}
+          className={`${styles.button}${action.id === 'balance' ? ' ' + styles.balanceButton : ''}`}
           onClick={() => onAction(action.syntheticPrompt)}
           disabled={disabled}
           data-testid={`quick-action-${action.id}`}

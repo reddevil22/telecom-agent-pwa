@@ -52,6 +52,10 @@
   transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.barFill.overLimit {
+  background: var(--color-warning);
+}
+
 .values {
   display: flex;
   justify-content: space-between;
@@ -72,5 +76,15 @@
   font-family: var(--font-display);
   font-size: var(--text-xl);
   font-weight: 400;
-  color: var(--color-primary);
+  color: var(--color-text-secondary);
+}
+
+.valuesPercent.overLimit {
+  color: var(--color-warning);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barFill {
+    transition: none;
+  }
 }

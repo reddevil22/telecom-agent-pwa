@@ -43,13 +43,13 @@
 }
 
 /* Balance is primary action — most commonly used */
-.button[data-testid="quick-action-balance"] {
+.button.balanceButton {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: var(--color-text-inverse);
 }
 
-.button[data-testid="quick-action-balance"]:hover:not(:disabled) {
+.button.balanceButton:hover:not(:disabled) {
   opacity: 0.9;
   color: var(--color-text-inverse);
   border-color: var(--color-primary);

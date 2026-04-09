@@ -41,14 +41,14 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  background: var(--color-primary);
   border-radius: var(--radius-md);
 }
 
 .brandIconRing {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  background: var(--color-primary);
   border-radius: var(--radius-md);
   animation: ringPulse 2.5s ease-out infinite;
 }

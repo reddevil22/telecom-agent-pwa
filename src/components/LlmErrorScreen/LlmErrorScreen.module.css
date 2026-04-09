@@ -75,14 +75,14 @@
 }
 
 .status.healthy {
-  background: #22c55e20;
-  color: #22c55e;
+  background: var(--color-success-bg);
+  color: var(--color-success);
 }
 
 .status.unhealthy,
 .status.unknown {
-  background: #ef444420;
-  color: #ef4444;
+  background: var(--color-error-bg);
+  color: var(--color-error);
 }
 
 .url {
@@ -98,7 +98,7 @@
 
 .error {
   font-size: var(--text-sm);
-  color: var(--color-danger, #ef4444);
+  color: var(--color-error);
   word-break: break-word;
   text-align: right;
 }

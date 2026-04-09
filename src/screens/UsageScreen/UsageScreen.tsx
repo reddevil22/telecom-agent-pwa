@@ -14,7 +14,9 @@ export function UsageScreen({ data }: Props) {
   return (
     <div className={styles.list}>
       {usage.map((u) => {
-        const pct = u.total > 0 ? Math.min((u.used / u.total) * 100, 100) : 0;
+        const rawPct = u.total > 0 ? (u.used / u.total) * 100 : 0;
+        const displayPct = Math.min(rawPct, 100);
+        const isOverLimit = rawPct > 100;
         return (
           <div key={u.type} className={styles.card}>
             <div className={styles.header}>
@@ -22,13 +24,18 @@ export function UsageScreen({ data }: Props) {
               <span className={styles.period}>{u.period}</span>
             </div>
             <div className={styles.barTrack}>
-              <div className={styles.barFill} style={{ width: `${pct}%` }} />
+              <div
+                className={`${styles.barFill}${isOverLimit ? ' ' + styles.overLimit : ''}`}
+                style={{ width: `${displayPct}%` }}
+              />
             </div>
             <div className={styles.values}>
               <span className={styles.valuesMain}>
                 <strong>{u.used}</strong> / {u.total} {u.unit}
               </span>
-              <span className={styles.valuesPercent}>{Math.round(pct)}%</span>
+              <span className={`${styles.valuesPercent}${isOverLimit ? ' ' + styles.overLimit : ''}`}>
+                {Math.round(rawPct)}%
+              </span>
             </div>
           </div>
         );
