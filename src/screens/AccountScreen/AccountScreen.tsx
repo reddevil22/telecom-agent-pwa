@@ -67,9 +67,9 @@ export function AccountScreen({ data }: Props) {
                   <span className={styles.subExpiry}>expires {formatIsoDate(sub.expiresAt)}</span>
                 </div>
                 <div className={styles.subUsage}>
-                  <UsageBar label="Data" used={`${formatMbToGb(sub.dataUsedMb)} / ${formatMbToGb(sub.dataTotalMb)} GB`} pct={(sub.dataUsedMb / sub.dataTotalMb) * 100} />
-                  <UsageBar label="Voice" used={`${sub.minutesUsed} / ${sub.minutesTotal} min`} pct={(sub.minutesUsed / sub.minutesTotal) * 100} />
-                  <UsageBar label="SMS" used={`${sub.smsUsed} / ${sub.smsTotal}`} pct={(sub.smsUsed / sub.smsTotal) * 100} />
+                  <UsageBar label="Data" used={`${formatMbToGb(sub.dataUsedMb)} / ${formatMbToGb(sub.dataTotalMb)} GB`} pct={sub.dataTotalMb > 0 ? Math.min((sub.dataUsedMb / sub.dataTotalMb) * 100, 100) : 0} />
+                  <UsageBar label="Voice" used={`${sub.minutesUsed} / ${sub.minutesTotal} min`} pct={sub.minutesTotal > 0 ? Math.min((sub.minutesUsed / sub.minutesTotal) * 100, 100) : 0} />
+                  <UsageBar label="SMS" used={`${sub.smsUsed} / ${sub.smsTotal}`} pct={sub.smsTotal > 0 ? Math.min((sub.smsUsed / sub.smsTotal) * 100, 100) : 0} />
                 </div>
               </div>
             ))}

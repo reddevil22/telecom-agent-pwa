@@ -14,7 +14,7 @@ export function UsageScreen({ data }: Props) {
   return (
     <div className={styles.list}>
       {usage.map((u) => {
-        const pct = Math.min((u.used / u.total) * 100, 100);
+        const pct = u.total > 0 ? Math.min((u.used / u.total) * 100, 100) : 0;
         return (
           <div key={u.type} className={styles.card}>
             <div className={styles.header}>

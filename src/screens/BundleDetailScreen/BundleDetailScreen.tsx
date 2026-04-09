@@ -86,10 +86,11 @@ export function BundleDetailScreen({ data, actor }: Props) {
             className={styles.confirmBtn}
             onClick={handleConfirm}
             disabled={hasInsufficientBalance}
+            aria-label={hasInsufficientBalance ? 'Insufficient balance to purchase' : `Confirm purchase of ${bundle.name}`}
           >
             {hasInsufficientBalance ? 'Insufficient Balance' : 'Confirm Purchase'}
           </button>
-          <button className={styles.cancelBtn} onClick={handleCancel}>
+          <button className={styles.cancelBtn} onClick={handleCancel} aria-label="Cancel and go back to bundles">
             Cancel
           </button>
         </div>

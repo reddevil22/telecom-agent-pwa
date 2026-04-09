@@ -64,9 +64,17 @@ export function AppShell({ actor }: Props) {
   useEffect(() => {
     if (!isInitial && !isProcessing && !isError && contentAreaRef.current) {
       const el = contentAreaRef.current;
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-      // Focus the input after a short delay to let the scroll finish
-      setTimeout(() => inputRef.current?.focus(), 300);
+      // Only scroll if user is already near the bottom (within 100px)
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+      if (nearBottom) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }
+      // Only focus input if nothing in the content area has focus
+      const activeEl = document.activeElement;
+      const contentHasFocus = activeEl && el.contains(activeEl);
+      if (!contentHasFocus) {
+        setTimeout(() => inputRef.current?.focus(), 300);
+      }
     }
   }, [isProcessing, isInitial, isError]);
 
@@ -111,6 +119,13 @@ export function AppShell({ actor }: Props) {
     }
   };
 
+  function handleTabKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setActiveTab((prev) => (prev === 'chat' ? 'history' : 'chat'));
+    }
+  }
+
   function toggleTheme() {
     const next = theme === 'light' ? 'dark' : 'light';
     setTheme(next);
@@ -145,11 +160,13 @@ export function AppShell({ actor }: Props) {
         {/* Main content */}
         <div className={styles.content}>
           {/* Tabs */}
-          <div className={styles.tabs}>
+          <div className={styles.tabs} role="tablist" onKeyDown={handleTabKeyDown}>
             <button
               className={`${styles.tab} ${activeTab === 'chat' ? styles.active : ''}`}
               onClick={() => setActiveTab('chat')}
               data-testid="chat-tab"
+              role="tab"
+              aria-selected={activeTab === 'chat'}
             >
               Chat
             </button>
@@ -157,6 +174,8 @@ export function AppShell({ actor }: Props) {
               className={`${styles.tab} ${activeTab === 'history' ? styles.active : ''}`}
               onClick={() => setActiveTab('history')}
               data-testid="history-tab"
+              role="tab"
+              aria-selected={activeTab === 'history'}
             >
               History
             </button>

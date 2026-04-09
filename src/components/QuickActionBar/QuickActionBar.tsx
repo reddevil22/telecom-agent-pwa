@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { llmStatusService } from '../../services/llmStatusService';
 import styles from './QuickActionBar.module.css';
 
 interface QuickAction {
@@ -48,6 +47,7 @@ export function QuickActionBar({ onAction, disabled }: Props) {
           onClick={() => onAction(action.syntheticPrompt)}
           disabled={disabled}
           data-testid={`quick-action-${action.id}`}
+          aria-label={action.syntheticPrompt}
         >
           <span className={styles.icon}>{action.icon}</span>
           <span className={styles.label}>{action.label}</span>

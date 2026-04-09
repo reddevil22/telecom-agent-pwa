@@ -70,8 +70,9 @@ export async function invokeAgentStream(
             throw new Error(parsed.message ?? 'Streaming error');
           }
         } catch (e) {
-          if (e instanceof Error && e.message !== 'Streaming error') {
-            // Ignore JSON parse errors for incomplete data
+          if (e instanceof SyntaxError) {
+            // JSON parse failed — likely incomplete SSE data
+            console.warn('Failed to parse SSE data, skipping:', data);
           } else {
             throw e;
           }

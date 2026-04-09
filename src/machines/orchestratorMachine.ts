@@ -136,6 +136,12 @@ export const orchestratorMachine = setup({
         }
         return [];
       },
+      currentScreenType: () => null,
+      currentScreenData: () => null,
+      lastAgentReply: () => null,
+      processingSteps: () => [],
+      supplementaryResults: () => [],
+      hasReceivedFirstResponse: () => true,
     }),
     setError: assign({
       error: ({ event }) => {
@@ -144,6 +150,27 @@ export const orchestratorMachine = setup({
       },
     }),
     clearError: assign({ error: () => null }),
+    resetForNewSession: assign({
+      sessionId: () => {
+        const newId = `session-${crypto.randomUUID()}`;
+        historyService.setCurrentSessionId(newId);
+        return newId;
+      },
+      conversationHistory: () => [],
+      currentScreenType: () => null,
+      currentScreenData: () => null,
+      currentSuggestions: () => [
+        'Show my balance',
+        'What bundles are available?',
+        'Check my usage',
+        'I need support',
+      ],
+      lastAgentReply: () => null,
+      processingSteps: () => [],
+      supplementaryResults: () => [],
+      hasReceivedFirstResponse: () => false,
+      error: () => null,
+    }),
     updateSteps: assign({
       processingSteps: ({ event }) => {
         if (event.type !== 'STEP_UPDATE') return [];
@@ -185,7 +212,7 @@ export const orchestratorMachine = setup({
           target: 'loadingSession',
         },
         NEW_SESSION: {
-          actions: 'clearError',
+          actions: 'resetForNewSession',
         },
       },
     },
@@ -217,7 +244,7 @@ export const orchestratorMachine = setup({
           target: 'loadingSession',
         },
         NEW_SESSION: {
-          actions: 'clearError',
+          actions: 'resetForNewSession',
         },
       },
     },
@@ -267,7 +294,7 @@ export const orchestratorMachine = setup({
         },
         NEW_SESSION: {
           target: 'idle',
-          actions: 'clearError',
+          actions: 'resetForNewSession',
         },
       },
     },

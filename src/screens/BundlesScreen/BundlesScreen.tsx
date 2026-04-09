@@ -57,6 +57,7 @@ export function BundlesScreen({ data, actor }: Props) {
             <button
               className={styles.buyBtnFeatured}
               onClick={() => handleViewDetails(featured.id)}
+              aria-label={`View details for ${featured.name}`}
             >
               View Details
             </button>
@@ -83,6 +84,7 @@ export function BundlesScreen({ data, actor }: Props) {
               <button
                 className={styles.buyBtnCompact}
                 onClick={() => handleViewDetails(b.id)}
+                aria-label={`View details for ${b.name}`}
               >
                 Details
               </button>
