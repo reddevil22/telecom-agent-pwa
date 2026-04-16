@@ -36,6 +36,27 @@ interface ToolExecutionResult {
   processingSteps: AgentResponse['processingSteps'];
 }
 
+/** Step label emitted by the streaming generator */
+type StepYield = { label: string; status: 'active' | 'done' | 'error' };
+
+/**
+ * Maps tool names to human-readable step labels for the streaming response.
+ */
+function getStepLabel(toolName: string): string {
+  switch (toolName) {
+    case 'get_balance': return 'Checking your balance';
+    case 'get_bundles': return 'Finding the best bundles for you';
+    case 'get_usage': return 'Reviewing your usage';
+    case 'get_support': return 'Loading support options';
+    case 'get_account': return 'Fetching your account';
+    case 'purchase_bundle': return 'Activating your bundle';
+    case 'create_ticket': return 'Creating your support ticket';
+    case 'top_up': return 'Adding funds to your account';
+    case 'view_bundle_details': return 'Loading bundle details';
+    default: return toolName;
+  }
+}
+
 export class SupervisorService {
   private static readonly CACHEABLE_SCREENS = new Set<ScreenType>(['balance', 'bundles', 'usage', 'support', 'account']);
 
@@ -74,20 +95,32 @@ export class SupervisorService {
     this.toolResolver.register(toolName, agent);
   }
 
-  async processRequest(request: AgentRequest): Promise<AgentResponse> {
+  async *processRequest(request: AgentRequest): AsyncGenerator<StepYield | AgentResponse> {
     try {
+      // Start: yield Analyzing request step
+      yield { label: 'Analyzing request', status: 'done' };
+
       // Try intent router (keyword + fuzzy cache) before LLM
-      const routed = await this.tryIntentRouter(request);
-      if (routed) return routed;
+      for await (const routed of this.tryIntentRouter(request)) {
+        yield routed;
+        return;
+      }
 
       // Try screen cache (previously fetched screens)
       const cached = this.tryScreenCacheHit(request);
-      if (cached) return cached;
+      if (cached) {
+        yield { label: 'Retrieving saved data', status: 'done' };
+        yield cached;
+        return;
+      }
 
       // Check circuit breaker before calling LLM
       if (this.circuitBreaker && !this.circuitBreaker.isAvailable()) {
         this.logger?.warn({ state: this.circuitBreaker.getState() }, 'LLM unavailable (circuit breaker open)');
-        return this.buildDegradedResponse();
+        yield { label: 'Checking service status', status: 'done' };
+        const degraded = this.buildDegradedResponse();
+        yield degraded;
+        return;
       }
 
       const conversationId = this.initializeConversation(request);
@@ -99,27 +132,36 @@ export class SupervisorService {
       };
 
       for (let iteration = 0; iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS; iteration++) {
+        yield { label: 'Thinking...', status: 'active' };
+
         const result = await this.executeIteration(request, context, iteration);
+
+        yield { label: 'Thinking...', status: 'done' };
+
         if (result) {
           this.circuitBreaker?.recordSuccess();
           this.tryCacheStore(request, result);
           this.cacheIntentResult(request, result);
           this.persistAgentResponse(conversationId, result);
-          return result;
+          yield result;
+          return;
         }
       }
 
-      return this.handleMaxIterationsReached(context);
+      const maxIterationsResponse = this.handleMaxIterationsReached(context);
+      yield maxIterationsResponse;
     } catch (error) {
-      return this.handleError(error);
+      yield { label: 'Error', status: 'error' };
+      const errorResponse = this.handleError(error);
+      yield errorResponse;
     }
   }
 
-  private async tryIntentRouter(request: AgentRequest): Promise<AgentResponse | null> {
-    if (!this.intentRouter) return null;
+  private async *tryIntentRouter(request: AgentRequest): AsyncGenerator<StepYield | AgentResponse> {
+    if (!this.intentRouter) return;
 
     const resolution = await this.intentRouter.classify(request.prompt, request.userId);
-    if (!resolution) return null;
+    if (!resolution) return;
 
     this.logger?.info({
       intent: resolution.intent,
@@ -129,10 +171,15 @@ export class SupervisorService {
     }, 'Intent router resolved — skipping LLM');
 
     const subAgent = this.toolResolver.resolve(resolution.toolName);
-    if (!subAgent) return null;
+    if (!subAgent) return;
 
     const conversationId = this.initializeConversation(request);
+
+    yield { label: getStepLabel(resolution.toolName), status: 'active' };
+
     const { screenData, processingSteps } = await subAgent.handle(request.userId, resolution.args);
+
+    yield { label: getStepLabel(resolution.toolName), status: 'done' };
 
     const screenType = TOOL_TO_SCREEN[resolution.toolName] as ScreenType;
     const response = this.buildResponse(
@@ -143,7 +190,7 @@ export class SupervisorService {
     // Store in screen cache for future hits
     this.tryCacheStore(request, response);
     this.persistAgentResponse(conversationId, response);
-    return response;
+    yield response;
   }
 
   private tryScreenCacheHit(request: AgentRequest): AgentResponse | null {
