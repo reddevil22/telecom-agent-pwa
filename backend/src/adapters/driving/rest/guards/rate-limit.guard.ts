@@ -58,18 +58,13 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
 
   private resolveKey(request: {
     body?: { sessionId?: string };
-    headers?: Record<string, string>;
     ip?: string;
   }): string | null {
     // POST requests: rate limit by sessionId from body
     if (request.body?.sessionId) {
       return `session:${request.body.sessionId}`;
     }
-    // GET/other requests: rate limit by IP (or x-user-id header)
-    const userId = request.headers?.['x-user-id'];
-    if (userId) {
-      return `user:${userId}`;
-    }
+    // GET/other requests: rate limit by source IP only
     return request.ip ? `ip:${request.ip}` : null;
   }
 

@@ -2,11 +2,12 @@ import { RateLimitGuard } from './rate-limit.guard';
 import { SECURITY_LIMITS } from '../../../../domain/constants/security-constants';
 import { ExecutionContext, HttpException } from '@nestjs/common';
 
-function makeContext(sessionId?: string): ExecutionContext {
+function makeContext(sessionId?: string, ip = '127.0.0.1'): ExecutionContext {
   return {
     switchToHttp: () => ({
       getRequest: () => ({
         body: sessionId ? { sessionId } : {},
+        ip,
       }),
     }),
   } as unknown as ExecutionContext;
@@ -22,7 +23,7 @@ describe('RateLimitGuard', () => {
     if (guard.cleanupTimer) clearInterval(guard.cleanupTimer);
   });
 
-  it('allows request when no sessionId is provided', () => {
+  it('allows request when no sessionId is provided (IP fallback)', () => {
     const ctx = makeContext();
     expect(guard.canActivate(ctx)).toBe(true);
   });
@@ -56,6 +57,17 @@ describe('RateLimitGuard', () => {
     }
 
     // session-2 should still be allowed
+    expect(guard.canActivate(ctx2)).toBe(true);
+  });
+
+  it('tracks different IP addresses independently when sessionId is missing', () => {
+    const ctx1 = makeContext(undefined, '10.0.0.1');
+    const ctx2 = makeContext(undefined, '10.0.0.2');
+
+    for (let i = 0; i < SECURITY_LIMITS.RATE_LIMIT_MAX_REQUESTS; i++) {
+      guard.canActivate(ctx1);
+    }
+
     expect(guard.canActivate(ctx2)).toBe(true);
   });
 
