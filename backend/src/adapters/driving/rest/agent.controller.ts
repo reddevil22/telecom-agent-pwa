@@ -7,6 +7,8 @@ import type { AgentResponse } from '../../../domain/types/agent';
 import { QUICK_ACTIONS } from './quick-actions.config';
 import type { Request, Response } from 'express';
 
+type AuthedRequest = Request & { userId?: string };
+
 @Controller('agent')
 @UseGuards(RateLimitGuard)
 export class AgentController {
@@ -15,37 +17,43 @@ export class AgentController {
   ) {}
 
   @Post('chat')
-  async chat(@Body(new PromptSanitizerPipe()) dto: AgentRequestDto): Promise<AgentResponse> {
-    return this.supervisor.processRequest(dto);
+  async chat(
+    @Req() req: AuthedRequest,
+    @Body(new PromptSanitizerPipe()) dto: AgentRequestDto,
+  ): Promise<AgentResponse> {
+    dto.userId = req.userId ?? dto.userId;
+    let finalResponse: AgentResponse | undefined;
+    for await (const event of this.supervisor.processRequest(dto)) {
+      if ('screenType' in event) {
+        finalResponse = event;
+      }
+    }
+    return finalResponse as AgentResponse;
   }
 
   @Post('chat/stream')
   async chatStream(
+    @Req() req: AuthedRequest,
     @Body(new PromptSanitizerPipe()) dto: AgentRequestDto,
     @Res() res: Response,
   ): Promise<void> {
+    dto.userId = req.userId ?? dto.userId;
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
-    // Emit processing step events
-    const emitStep = (label: string, status: string) => {
-      res.write(`event: step\ndata: ${JSON.stringify({ label, status })}\n\n`);
-    };
-
-    emitStep('Understanding your request', 'done');
-    emitStep('Processing', 'active');
-
     try {
-      const result = await this.supervisor.processRequest(dto);
-
-      emitStep('Processing', 'done');
-      emitStep('Preparing response', 'done');
-
-      // Send final result
-      res.write(`event: result\ndata: ${JSON.stringify(result)}\n\n`);
+      for await (const event of this.supervisor.processRequest(dto)) {
+        if ('screenType' in event) {
+          // Final AgentResponse
+          res.write(`event: result\ndata: ${JSON.stringify(event)}\n\n`);
+        } else {
+          // ProcessingStep
+          res.write(`event: step\ndata: ${JSON.stringify(event)}\n\n`);
+        }
+      }
     } catch (error) {
       res.write(`event: error\ndata: ${JSON.stringify({ message: 'Processing failed' })}\n\n`);
     } finally {

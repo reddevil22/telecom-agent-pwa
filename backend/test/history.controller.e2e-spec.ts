@@ -4,10 +4,12 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { SqliteConversationDataMapper } from '../src/infrastructure/data/conversation-data.mapper';
 import { CONVERSATION_STORAGE_PORT } from '../src/domain/tokens';
+import { RateLimitGuard } from '../src/adapters/driving/rest/guards/rate-limit.guard';
 
 describe('HistoryController (e2e)', () => {
   let app: INestApplication;
   let storage: SqliteConversationDataMapper;
+  let rateLimitGuard: RateLimitGuard;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -19,6 +21,7 @@ describe('HistoryController (e2e)', () => {
     await app.init();
 
     storage = moduleFixture.get<SqliteConversationDataMapper>(CONVERSATION_STORAGE_PORT);
+    rateLimitGuard = moduleFixture.get<RateLimitGuard>(RateLimitGuard);
   });
 
   afterAll(async () => {
@@ -29,27 +32,44 @@ describe('HistoryController (e2e)', () => {
     const db = (storage as any).db as import('better-sqlite3').Database;
     db.exec('DELETE FROM messages');
     db.exec('DELETE FROM conversations');
+    (rateLimitGuard as unknown as { requests: Map<string, unknown> }).requests.clear();
   });
 
-  describe('GET /api/history/sessions', () => {
-    it('should return 400 when userId is missing', () => {
+  describe('GET /history/sessions', () => {
+    it('should use authenticated user when userId is missing', () => {
+      const userId = 'sessions-missing';
       return request(app.getHttpServer())
-        .get('/api/history/sessions')
-        .expect(400)
+        .get('/history/sessions')
+        .set('x-user-id', userId)
+        .expect(200)
         .expect((res) => {
-          expect(res.body.message).toContain('userId');
+          expect(res.body).toEqual([]);
         });
     });
 
-    it('should return 400 when userId is empty string', () => {
+    it('should use authenticated user when userId is empty string', () => {
+      const userId = 'sessions-empty';
       return request(app.getHttpServer())
-        .get('/api/history/sessions?userId=')
-        .expect(400);
+        .get('/history/sessions?userId=')
+        .set('x-user-id', userId)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toEqual([]);
+        });
+    });
+
+    it('should return 403 when query userId does not match authenticated user', () => {
+      return request(app.getHttpServer())
+        .get('/history/sessions?userId=user-2')
+        .set('x-user-id', 'sessions-authz')
+        .expect(403);
     });
 
     it('should return empty array for user with no conversations', () => {
+      const userId = 'sessions-empty-data';
       return request(app.getHttpServer())
-        .get('/api/history/sessions?userId=user-new')
+        .get(`/history/sessions?userId=${userId}`)
+        .set('x-user-id', userId)
         .expect(200)
         .expect((res) => {
           expect(res.body).toEqual([]);
@@ -57,11 +77,13 @@ describe('HistoryController (e2e)', () => {
     });
 
     it('should return conversations for user', () => {
-      const conversationId = storage.createConversation('session-1', 'user-1');
+      const userId = 'sessions-has-data';
+      const conversationId = storage.createConversation('session-1', userId);
       storage.addMessage(conversationId, 'user', 'Hello', null, Date.now());
 
       return request(app.getHttpServer())
-        .get('/api/history/sessions?userId=user-1')
+        .get(`/history/sessions?userId=${userId}`)
+        .set('x-user-id', userId)
         .expect(200)
         .expect((res) => {
           expect(res.body.length).toBe(1);
@@ -72,12 +94,14 @@ describe('HistoryController (e2e)', () => {
     });
 
     it('should respect limit parameter', () => {
-      storage.createConversation('session-1', 'user-1');
-      storage.createConversation('session-2', 'user-1');
-      storage.createConversation('session-3', 'user-1');
+      const userId = 'sessions-limit';
+      storage.createConversation('session-1', userId);
+      storage.createConversation('session-2', userId);
+      storage.createConversation('session-3', userId);
 
       return request(app.getHttpServer())
-        .get('/api/history/sessions?userId=user-1&limit=2')
+        .get(`/history/sessions?userId=${userId}&limit=2`)
+        .set('x-user-id', userId)
         .expect(200)
         .expect((res) => {
           expect(res.body.length).toBe(2);
@@ -85,12 +109,14 @@ describe('HistoryController (e2e)', () => {
     });
 
     it('should exclude soft-deleted conversations', () => {
-      const id = storage.createConversation('session-1', 'user-1');
-      storage.createConversation('session-2', 'user-1');
+      const userId = 'sessions-soft-delete';
+      const id = storage.createConversation('session-1', userId);
+      storage.createConversation('session-2', userId);
       storage.softDeleteConversation(id);
 
       return request(app.getHttpServer())
-        .get('/api/history/sessions?userId=user-1')
+        .get(`/history/sessions?userId=${userId}`)
+        .set('x-user-id', userId)
         .expect(200)
         .expect((res) => {
           expect(res.body.length).toBe(1);
@@ -99,29 +125,43 @@ describe('HistoryController (e2e)', () => {
     });
   });
 
-  describe('GET /api/history/session/:sessionId', () => {
+  describe('GET /history/session/:sessionId', () => {
     it('should return 404 for non-existent session', () => {
       return request(app.getHttpServer())
-        .get('/api/history/session/nonexistent')
+        .get('/history/session/nonexistent')
+        .set('x-user-id', 'session-missing')
         .expect(404);
     });
 
     it('should return 404 for soft-deleted session', () => {
-      const id = storage.createConversation('session-1', 'user-1');
+      const userId = 'session-soft-deleted';
+      const id = storage.createConversation('session-1', userId);
       storage.softDeleteConversation(id);
 
       return request(app.getHttpServer())
-        .get('/api/history/session/session-1')
+        .get('/history/session/session-1')
+        .set('x-user-id', userId)
+        .expect(404);
+    });
+
+    it('should return 404 when session belongs to another user', () => {
+      storage.createConversation('session-1', 'user-2');
+
+      return request(app.getHttpServer())
+        .get('/history/session/session-1')
+        .set('x-user-id', 'user-1')
         .expect(404);
     });
 
     it('should return conversation with messages', () => {
-      const id = storage.createConversation('session-1', 'user-1');
+      const userId = 'session-has-messages';
+      const id = storage.createConversation('session-1', userId);
       storage.addMessage(id, 'user', 'Check my balance', null, Date.now());
       storage.addMessage(id, 'agent', 'Your balance is $42.50', 'balance', Date.now() + 1000);
 
       return request(app.getHttpServer())
-        .get('/api/history/session/session-1')
+        .get('/history/session/session-1')
+        .set('x-user-id', userId)
         .expect(200)
         .expect((res) => {
           expect(res.body.id).toBeDefined();
@@ -133,11 +173,13 @@ describe('HistoryController (e2e)', () => {
     });
 
     it('should return camelCase properties', () => {
-      const id = storage.createConversation('session-1', 'user-1');
+      const userId = 'session-camel-case';
+      const id = storage.createConversation('session-1', userId);
       storage.addMessage(id, 'user', 'Hello', null, Date.now());
 
       return request(app.getHttpServer())
-        .get('/api/history/session/session-1')
+        .get('/history/session/session-1')
+        .set('x-user-id', userId)
         .expect(200)
         .expect((res) => {
           expect(res.body).toHaveProperty('sessionId');
@@ -149,18 +191,21 @@ describe('HistoryController (e2e)', () => {
     });
   });
 
-  describe('DELETE /api/history/session/:sessionId', () => {
+  describe('DELETE /history/session/:sessionId', () => {
     it('should return 404 for non-existent session', () => {
       return request(app.getHttpServer())
-        .delete('/api/history/session/nonexistent')
+        .delete('/history/session/nonexistent')
+        .set('x-user-id', 'delete-missing')
         .expect(404);
     });
 
     it('should soft delete existing session', () => {
-      storage.createConversation('session-1', 'user-1');
+      const userId = 'delete-own-session';
+      storage.createConversation('session-1', userId);
 
       return request(app.getHttpServer())
-        .delete('/api/history/session/session-1')
+        .delete('/history/session/session-1')
+        .set('x-user-id', userId)
         .expect(200)
         .expect((res) => {
           expect(res.body.deleted).toBe(true);
@@ -168,17 +213,29 @@ describe('HistoryController (e2e)', () => {
         })
         .then(() => {
           return request(app.getHttpServer())
-            .get('/api/history/session/session-1')
+            .get('/history/session/session-1')
+            .set('x-user-id', userId)
             .expect(404);
         });
     });
 
+    it('should return 404 when deleting session owned by another user', () => {
+      storage.createConversation('session-1', 'user-2');
+
+      return request(app.getHttpServer())
+        .delete('/history/session/session-1')
+        .set('x-user-id', 'user-1')
+        .expect(404);
+    });
+
     it('should be idempotent (delete already deleted returns 404)', () => {
-      const id = storage.createConversation('session-1', 'user-1');
+      const userId = 'delete-idempotent';
+      const id = storage.createConversation('session-1', userId);
       storage.softDeleteConversation(id);
 
       return request(app.getHttpServer())
-        .delete('/api/history/session/session-1')
+        .delete('/history/session/session-1')
+        .set('x-user-id', userId)
         .expect(404);
     });
   });
