@@ -63,6 +63,16 @@ function createMockSubAgent(screenType: string): SubAgentPort {
   } as unknown as SubAgentPort;
 }
 
+async function collectResult(stream: AsyncGenerator<any>): Promise<any> {
+  let result;
+  for await (const event of stream) {
+    if ('screenType' in event) {
+      result = event;
+    }
+  }
+  return result;
+}
+
 function createMockStorage(): ConversationStoragePort {
   return {
     createConversation: jest.fn().mockResolvedValue({
@@ -110,7 +120,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('balance');
     expect(result.screenData.type).toBe('balance');
@@ -123,7 +133,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('list_bundles'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('bundles');
     expect(bundlesAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
@@ -133,7 +143,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_usage'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('usage');
     expect(usageAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
@@ -143,7 +153,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('get_support'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('support');
     expect(supportAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
@@ -155,7 +165,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_balance', { userId: 'attacker-controlled' }));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('balance');
     expect(balanceAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
@@ -167,7 +177,7 @@ describe('SupervisorService', () => {
   it('returns unknown with LLM text as replyText when LLM gives no tool call', async () => {
     (mockLlm.chatCompletion as jest.Mock).mockResolvedValueOnce(mockTextResponse('Could you rephrase your question?'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('unknown');
     expect(result.replyText).toBe('Could you rephrase your question?');
@@ -177,7 +187,7 @@ describe('SupervisorService', () => {
   it('returns generic unknown when LLM gives no tool call and no content', async () => {
     (mockLlm.chatCompletion as jest.Mock).mockResolvedValueOnce({ message: { content: null } });
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('unknown');
     expect(result.replyText).toBe("I'm not sure what you're looking for. Here are some things I can help with.");
@@ -190,7 +200,7 @@ describe('SupervisorService', () => {
       .mockResolvedValueOnce(mockToolCall('execute_sql', { query: 'DROP TABLE users' }))
       .mockResolvedValueOnce(mockTextResponse('I cannot do that'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('unknown');
   });
@@ -200,7 +210,7 @@ describe('SupervisorService', () => {
       .mockResolvedValueOnce(mockToolCall('execute_sql', { query: 'DROP TABLE users' }))
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('balance');
     expect(balanceAgent.handle).toHaveBeenCalledWith('user-42', expect.any(Object));
@@ -212,7 +222,7 @@ describe('SupervisorService', () => {
       .mockResolvedValueOnce(mockToolCall('check_balance', { userId: 'u1', extra: 'malicious' }))
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    await service.processRequest(makeRequest());
+    await collectResult(service.processRequest(makeRequest()));
 
     // Verify the second call includes a tool error message
     const secondCallMessages = (mockLlm.chatCompletion as jest.Mock).mock.calls[1][0].messages;
@@ -235,7 +245,7 @@ describe('SupervisorService', () => {
       })
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('balance');
     expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
@@ -246,7 +256,7 @@ describe('SupervisorService', () => {
       .mockResolvedValueOnce(mockToolCall('nonexistent_tool'))
       .mockResolvedValueOnce(mockToolCall('check_usage'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('usage');
   });
@@ -257,7 +267,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('balance');
     expect(result.supplementaryResults).toBeUndefined();
@@ -269,7 +279,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('balance');
     expect(result.supplementaryResults).toBeUndefined();
@@ -286,7 +296,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValue(mockToolCall('check_balance'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('balance');
     // Only 1 LLM call — returned immediately after first tool
@@ -298,7 +308,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValue(mockToolCall('bad_tool'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.screenType).toBe('unknown');
     expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS);
@@ -309,7 +319,7 @@ describe('SupervisorService', () => {
   it('returns error response when LLM throws', async () => {
     (mockLlm.chatCompletion as jest.Mock).mockRejectedValueOnce(new Error('LLM down'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
 
     expect(result.replyText).toContain('Sorry, I encountered an error');
   });
@@ -333,7 +343,7 @@ describe('SupervisorService', () => {
         },
       });
 
-    const result = await serviceWithLogger.processRequest(makeRequest());
+    const result = await collectResult(serviceWithLogger.processRequest(makeRequest()));
     expect(result.screenType).toBe('balance');
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ iteration: 0 }),
@@ -347,7 +357,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    const result = await service.processRequest(makeRequest());
+    const result = await collectResult(service.processRequest(makeRequest()));
     expect(result.suggestions).toEqual(['What bundles are available?', 'Check my usage', 'I need support']);
   });
 
@@ -363,7 +373,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    await service.processRequest(makeRequest({ conversationHistory: longHistory }));
+    await collectResult(service.processRequest(makeRequest({ conversationHistory: longHistory })));
 
     const callArgs = (mockLlm.chatCompletion as jest.Mock).mock.calls[0][0];
     // System prompt + capped history + current user message
@@ -382,7 +392,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    await service.processRequest(makeRequest({ conversationHistory: hugeHistory }));
+    await collectResult(service.processRequest(makeRequest({ conversationHistory: hugeHistory })));
 
     const callArgs = (mockLlm.chatCompletion as jest.Mock).mock.calls[0][0];
     const totalChars = callArgs.messages.reduce((sum: number, m: { content: string }) => sum + m.content.length, 0);
@@ -393,7 +403,7 @@ describe('SupervisorService', () => {
     (mockLlm.chatCompletion as jest.Mock)
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    await service.processRequest(makeRequest());
+    await collectResult(service.processRequest(makeRequest()));
 
     const callArgs = (mockLlm.chatCompletion as jest.Mock).mock.calls[0][0];
     const messages = callArgs.messages;
@@ -411,7 +421,7 @@ describe('SupervisorService', () => {
       .mockResolvedValueOnce(mockToolCall('bad_tool'))
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    await service.processRequest(makeRequest());
+    await collectResult(service.processRequest(makeRequest()));
 
     // Second call (retry) should include the error tool result
     const secondCallMessages = (mockLlm.chatCompletion as jest.Mock).mock.calls[1][0].messages;
@@ -425,7 +435,7 @@ describe('SupervisorService', () => {
       .mockResolvedValueOnce(mockToolCall('bad_tool', {}, 'call-abc'))
       .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-    await service.processRequest(makeRequest());
+    await collectResult(service.processRequest(makeRequest()));
 
     const secondCallMessages = (mockLlm.chatCompletion as jest.Mock).mock.calls[1][0].messages;
     const toolMessage = secondCallMessages.find((m: { role: string }) => m.role === 'tool');
@@ -458,12 +468,12 @@ describe('SupervisorService', () => {
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-      const first = await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      const first = await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
       expect(first.screenType).toBe('balance');
       expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(1);
 
       // Second call: should hit cache
-      const second = await cachedService.processRequest(makeRequest({ prompt: 'What is my balance?' }));
+      const second = await collectResult(cachedService.processRequest(makeRequest({ prompt: 'What is my balance?' })));
       expect(second.screenType).toBe('balance');
       expect(second.processingSteps[0].label).toBe('Retrieved from cache');
       // No additional LLM calls
@@ -474,13 +484,13 @@ describe('SupervisorService', () => {
       // Prime cache with a balance entry
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('check_balance'));
-      await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
 
       // Ambiguous prompt containing both balance and usage keywords
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('check_usage'));
 
-      const result = await cachedService.processRequest(makeRequest({ prompt: 'Show my balance and usage' }));
+      const result = await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance and usage' })));
       expect(result.screenType).toBe('usage');
       // LLM was called (not cached)
       expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
@@ -490,7 +500,7 @@ describe('SupervisorService', () => {
       // Prime balance cache
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('check_balance'));
-      await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
       expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(1);
 
       // Simulate a confirmation (purchase_bundle) response
@@ -504,12 +514,12 @@ describe('SupervisorService', () => {
 
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('purchase_bundle'));
-      await cachedService.processRequest(makeRequest({ prompt: 'Buy the data bundle' }));
+      await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Buy the data bundle' })));
 
       // Balance cache should be invalidated — next balance query hits LLM
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('check_balance'));
-      const result = await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      const result = await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
       expect(result.screenType).toBe('balance');
       // LLM was called again for balance (cache was invalidated)
       expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(3);
@@ -519,7 +529,7 @@ describe('SupervisorService', () => {
       // Prime cache
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('check_balance'));
-      await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
 
       // Advance time past TTL (5 minutes)
       jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 6 * 60 * 1000);
@@ -527,7 +537,7 @@ describe('SupervisorService', () => {
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('check_balance'));
 
-      const result = await cachedService.processRequest(makeRequest({ prompt: 'Show my balance' }));
+      const result = await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
       expect(result.screenType).toBe('balance');
       // LLM was called again (cache expired)
       expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
