@@ -6,6 +6,7 @@ import { ScreenRenderer } from '../ScreenRenderer/ScreenRenderer';
 import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary';
 import { PromptContainer } from '../PromptContainer/PromptContainer';
 import { ProcessingIndicator } from '../ProcessingIndicator/ProcessingIndicator';
+import { SkeletonScreen } from '../SkeletonScreen/SkeletonScreen';
 import { ChatBubble } from '../ChatBubble/ChatBubble';
 import { SessionList, type SessionSummary } from '../SessionList/SessionList';
 import { LlmErrorScreen } from '../LlmErrorScreen/LlmErrorScreen';
@@ -60,6 +61,18 @@ export function AppShell({ actor }: Props) {
 
   const sessionId = useSelector(actor, (s) => s.context.sessionId);
 
+  const loadSessions = useCallback(async () => {
+    try {
+      const userId = 'user-1';
+      const loadedSessions = await historyService.getSavedSessions(userId);
+      setSessions(loadedSessions);
+      setSessionError(null);
+    } catch (error) {
+      console.error('Failed to load sessions:', error);
+      setSessionError(error instanceof Error ? error.message : 'Failed to load sessions');
+    }
+  }, []);
+
   // Scroll to bottom when response appears and focus input
   useEffect(() => {
     if (!isInitial && !isProcessing && !isError && contentAreaRef.current) {
@@ -79,26 +92,18 @@ export function AppShell({ actor }: Props) {
   }, [isProcessing, isInitial, isError]);
 
   useEffect(() => {
-    loadSessions();
-  }, []);
+    queueMicrotask(() => {
+      void loadSessions();
+    });
+  }, [loadSessions]);
 
   useEffect(() => {
     if (activeTab === 'history') {
-      loadSessions();
+      queueMicrotask(() => {
+        void loadSessions();
+      });
     }
-  }, [activeTab, sessionId]);
-
-  const loadSessions = async () => {
-    try {
-      const userId = 'user-1';
-      const loadedSessions = await historyService.getSavedSessions(userId);
-      setSessions(loadedSessions);
-      setSessionError(null);
-    } catch (error) {
-      console.error('Failed to load sessions:', error);
-      setSessionError(error instanceof Error ? error.message : 'Failed to load sessions');
-    }
-  };
+  }, [activeTab, sessionId, loadSessions]);
 
   const handleSelectSession = async (sessionId: string) => {
     try {
@@ -113,7 +118,7 @@ export function AppShell({ actor }: Props) {
   const handleDeleteSession = async (sessionId: string) => {
     try {
       await historyService.deleteSession(sessionId);
-      setSessions(sessions.filter((s) => s.sessionId !== sessionId));
+      setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
     } catch (error) {
       console.error('Failed to delete session:', error);
     }
@@ -216,7 +221,12 @@ export function AppShell({ actor }: Props) {
                   </div>
                 )}
 
-                {!isInitial && isProcessing && <ProcessingIndicator steps={processingSteps} />}
+                {!isInitial && isProcessing && (
+                  <>
+                    <SkeletonScreen />
+                    <ProcessingIndicator steps={processingSteps} />
+                  </>
+                )}
 
                 {!isInitial && !isProcessing && isError && (
                   <LlmErrorScreen onRetry={() => actor.send({ type: 'RESET' })} />

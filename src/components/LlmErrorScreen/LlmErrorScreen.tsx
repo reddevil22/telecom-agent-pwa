@@ -22,7 +22,7 @@ export function LlmErrorScreen({ onRetry }: Props) {
       const res = await fetch('/api/health/llm');
       const data = await res.json();
       setHealth(data);
-    } catch (error) {
+    } catch {
       setHealth({
         status: 'unhealthy',
         url: 'unknown',

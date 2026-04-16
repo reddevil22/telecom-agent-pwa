@@ -16,10 +16,11 @@ function formatDate(dateStr: string): string {
 }
 
 export function BalanceScreen({ data, actor }: Props) {
-  if (data.type !== 'balance') return null;
-  const { balance } = data;
   const [showTopUp, setShowTopUp] = useState(false);
   const [amount, setAmount] = useState('');
+
+  if (data.type !== 'balance') return null;
+  const { balance } = data;
 
   function handleTopUp() {
     const val = parseFloat(amount);

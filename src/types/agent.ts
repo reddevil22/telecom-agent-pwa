@@ -107,7 +107,7 @@ export type ScreenData =
 
 export interface ProcessingStep {
   label: string;
-  status: 'pending' | 'active' | 'done';
+  status: 'pending' | 'active' | 'done' | 'error';
 }
 
 export interface ToolResult {

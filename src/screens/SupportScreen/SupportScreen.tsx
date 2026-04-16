@@ -9,11 +9,12 @@ interface Props {
 }
 
 export function SupportScreen({ data, actor }: Props) {
-  if (data.type !== 'support') return null;
-  const { tickets, faqItems } = data;
   const [showForm, setShowForm] = useState(false);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
+
+  if (data.type !== 'support') return null;
+  const { tickets, faqItems } = data;
 
   function handleSubmit() {
     if (!subject.trim()) return;

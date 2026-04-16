@@ -1,0 +1,36 @@
+.wrapper {
+  width: 100%;
+}
+
+.screenExit {
+  animation: screenExit 200ms ease forwards;
+}
+
+.screenEnter {
+  animation: screenEnter 300ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes screenExit {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes screenEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screenExit,
+  .screenEnter {
+    animation: none;
+  }
+}
