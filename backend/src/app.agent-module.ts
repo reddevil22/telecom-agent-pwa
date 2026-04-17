@@ -45,14 +45,24 @@ import { IntentRouterService } from "./domain/services/intent-router.service";
 import { IntentCacheService } from "./application/supervisor/intent-cache.service";
 import { CircuitBreakerService } from "./domain/services/circuit-breaker.service";
 import { loadIntentRoutingConfig } from "./config/intent-routing.config";
-import { registerBillingAgents } from "./application/sub-agents/billing-agents.provider";
-import { registerBundleAgents } from "./application/sub-agents/bundle-agents.provider";
-import { registerSupportAgents } from "./application/sub-agents/support-agents.provider";
-import { registerAccountAgents } from "./application/sub-agents/account-agents.provider";
+import { createBillingAgentRegistrations } from "./application/sub-agents/billing-agents.provider";
+import { createBundleAgentRegistrations } from "./application/sub-agents/bundle-agents.provider";
+import { createSupportAgentRegistrations } from "./application/sub-agents/support-agents.provider";
+import { createAccountAgentRegistrations } from "./application/sub-agents/account-agents.provider";
 import { SimpleMetricsAdapter } from "./infrastructure/metrics/simple-metrics.adapter";
 import { InMemoryRateLimiterAdapter } from "./infrastructure/rate-limiter/in-memory-rate-limiter.adapter";
+import type { SubAgentRegistration } from "./application/sub-agents/sub-agent-registration";
 
 type IntentRoutingConfig = ReturnType<typeof loadIntentRoutingConfig>;
+
+function registerSubAgents(
+  supervisor: SupervisorService,
+  registrations: SubAgentRegistration[],
+): void {
+  for (const registration of registrations) {
+    supervisor.registerAgent(registration.toolName, registration.agent);
+  }
+}
 
 @Module({
   imports: [
@@ -149,10 +159,22 @@ type IntentRoutingConfig = ReturnType<typeof loadIntentRoutingConfig>;
           metrics,
         );
 
-        registerBillingAgents(supervisor, balanceBff);
-        registerBundleAgents(supervisor, bundlesBff, balanceBff);
-        registerSupportAgents(supervisor, supportBff);
-        registerAccountAgents(supervisor, usageBff, telcoService);
+        registerSubAgents(
+          supervisor,
+          createBillingAgentRegistrations(balanceBff),
+        );
+        registerSubAgents(
+          supervisor,
+          createBundleAgentRegistrations(bundlesBff, balanceBff),
+        );
+        registerSubAgents(
+          supervisor,
+          createSupportAgentRegistrations(supportBff),
+        );
+        registerSubAgents(
+          supervisor,
+          createAccountAgentRegistrations(usageBff, telcoService),
+        );
 
         return supervisor;
       },

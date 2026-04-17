@@ -10,8 +10,6 @@ import {
   TOOL_TO_SCREEN,
 } from "../../domain/constants/agent-constants";
 import {
-  ALLOWED_TOOLS,
-  TOOL_ARG_SCHEMAS,
   SECURITY_LIMITS,
 } from "../../domain/constants/security-constants";
 import { SYSTEM_PROMPT } from "./system-prompt";
@@ -27,13 +25,18 @@ import type { CircuitBreakerService } from "../../domain/services/circuit-breake
 import {
   INTENT_TOOL_MAP,
   TelecomIntent,
-  TIER1_INTENTS,
   INTENT_KEYWORDS,
   type IntentKeywordMap,
 } from "../../domain/types/intent";
 import { AgentErrorCode } from "../../domain/types/errors";
 import { ContextManagerService } from "./context-manager.service";
 import { ToolDegradationService } from "./tool-degradation.service";
+import {
+  ToolValidationService,
+  type LoopToolMessage,
+  type ToolCall,
+} from "./tool-validation.service";
+import { ScreenCacheManager } from "./screen-cache-manager.service";
 
 class LlmCallError extends Error {
   constructor(message: string) {
@@ -47,11 +50,7 @@ interface LoopMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   tool_call_id?: string;
-  tool_calls?: Array<{
-    id: string;
-    type: "function";
-    function: { name: string; arguments: string };
-  }>;
+  tool_calls?: ToolCall[];
 }
 
 interface IterationContext {
@@ -108,31 +107,15 @@ function getStepLabel(toolName: string): string {
 }
 
 export class SupervisorService {
-  private static readonly CACHEABLE_SCREENS = new Set<ScreenType>([
-    "balance",
-    "bundles",
-    "usage",
-    "support",
-    "account",
-  ]);
-  private static readonly CONFIRMATION_CACHE_INVALIDATION: Record<
-    string,
-    ScreenType[]
-  > = {
-    purchase_bundle: ["balance", "bundles"],
-    top_up: ["balance"],
-    create_ticket: ["support"],
-  };
-
   private readonly toolResolver: ToolResolver;
   private readonly logger: PinoLogger | null;
-  private readonly cache: ScreenCachePort | null;
   private readonly intentRouter: IntentRouterService | null;
   private readonly circuitBreaker: CircuitBreakerService | null;
   private readonly metrics: MetricsPort | null;
   private readonly contextManager: ContextManagerService;
   private readonly toolDegradation: ToolDegradationService;
-  private readonly intentKeywords: IntentKeywordMap;
+  private readonly toolValidation: ToolValidationService;
+  private readonly screenCacheManager: ScreenCacheManager;
 
   constructor(
     private readonly llm: LlmPort,
@@ -148,10 +131,11 @@ export class SupervisorService {
     metrics?: MetricsPort,
     contextManager?: ContextManagerService,
     toolDegradation?: ToolDegradationService,
+    toolValidation?: ToolValidationService,
+    screenCacheManager?: ScreenCacheManager,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
-    this.cache = cache ?? null;
     this.intentRouter = intentRouter ?? null;
     this.circuitBreaker = circuitBreaker ?? null;
     this.metrics = metrics ?? null;
@@ -161,7 +145,10 @@ export class SupervisorService {
     this.toolDegradation =
       toolDegradation ??
       new ToolDegradationService(this.logger, this.metrics);
-    this.intentKeywords = intentKeywords;
+    this.toolValidation = toolValidation ?? new ToolValidationService();
+    this.screenCacheManager =
+      screenCacheManager ??
+      new ScreenCacheManager(cache ?? null, this.metrics, this.logger, intentKeywords);
     this.logger?.setContext(SupervisorService.name);
   }
 
@@ -196,7 +183,7 @@ export class SupervisorService {
       }
 
       // Try screen cache (previously fetched screens)
-      const cached = this.tryScreenCacheHit(request);
+      const cached = this.screenCacheManager.tryHit(request);
       if (cached) {
         yield { label: "Retrieving saved data", status: "done" };
         yield cached;
@@ -239,7 +226,7 @@ export class SupervisorService {
 
         if (iterationResult) {
           this.circuitBreaker?.recordSuccess();
-          this.tryCacheStore(
+          this.screenCacheManager.store(
             request,
             iterationResult.response,
             iterationResult.toolName,
@@ -370,43 +357,9 @@ export class SupervisorService {
     });
 
     // Store in screen cache for future hits
-    this.tryCacheStore(request, response, resolution.toolName);
+    this.screenCacheManager.store(request, response, resolution.toolName);
     this.persistAgentResponse(conversationId, response);
     yield response;
-  }
-
-  private tryScreenCacheHit(request: AgentRequest): AgentResponse | null {
-    if (!this.cache) return null;
-
-    // Quick keyword check to determine which screen type to look up
-    const lower = request.prompt.toLowerCase();
-    const matches: ScreenType[] = [];
-    for (const [intentKey, keywords] of Object.entries(this.intentKeywords)) {
-      if (keywords.some((kw) => lower.includes(kw))) {
-        const toolName = INTENT_TOOL_MAP[intentKey as TelecomIntent];
-        const screenType = TOOL_TO_SCREEN[toolName] as ScreenType;
-        if (screenType) matches.push(screenType);
-      }
-    }
-
-    if (matches.length !== 1) {
-      this.metrics?.recordCacheHit("screen", false);
-      return null;
-    }
-
-    const cached = this.cache.get(request.userId, matches[0]);
-    if (cached) {
-      this.metrics?.recordCacheHit("screen", true);
-      this.logger?.info({ screenType: matches[0] }, "Screen cache hit");
-      return {
-        ...cached,
-        processingSteps: [{ label: "Retrieved from cache", status: "done" }],
-      };
-    }
-
-    this.metrics?.recordCacheHit("screen", false);
-
-    return null;
   }
 
   private cacheIntentResult(
@@ -425,32 +378,6 @@ export class SupervisorService {
         );
         return;
       }
-    }
-  }
-
-  private tryCacheStore(
-    request: AgentRequest,
-    response: AgentResponse,
-    toolName?: string,
-  ): void {
-    if (!this.cache) return;
-
-    if (response.screenType === "confirmation") {
-      if (toolName) {
-        const impactedScreens =
-          SupervisorService.CONFIRMATION_CACHE_INVALIDATION[toolName] ?? [];
-        for (const screenType of impactedScreens) {
-          this.cache.invalidate(request.userId, screenType);
-        }
-        return;
-      }
-
-      this.cache.invalidateAll(request.userId);
-      return;
-    }
-
-    if (SupervisorService.CACHEABLE_SCREENS.has(response.screenType)) {
-      this.cache.set(request.userId, response.screenType, response);
     }
   }
 
@@ -618,9 +545,13 @@ export class SupervisorService {
       function: { name: string; arguments: string };
     },
   ): Promise<IterationResult | null> {
-    const validationError = this.validateToolCallWithError(toolCall);
+    const validationError = this.toolValidation.validate(toolCall);
     if (validationError) {
-      this.pushErrorToMessages(context.messages, toolCall, validationError);
+      this.toolValidation.pushErrorToMessages(
+        context.messages as LoopToolMessage[],
+        toolCall,
+        validationError,
+      );
       return null;
     }
 
@@ -649,8 +580,8 @@ export class SupervisorService {
         { toolName: toolCall.function.name, iteration },
         "Unknown tool mapping",
       );
-      this.pushErrorToMessages(
-        context.messages,
+      this.toolValidation.pushErrorToMessages(
+        context.messages as LoopToolMessage[],
         toolCall,
         `Unknown tool mapping: ${toolCall.function.name}`,
       );
@@ -663,8 +594,8 @@ export class SupervisorService {
         { toolName: toolCall.function.name, iteration },
         "No handler registered for tool",
       );
-      this.pushErrorToMessages(
-        context.messages,
+      this.toolValidation.pushErrorToMessages(
+        context.messages as LoopToolMessage[],
         toolCall,
         `No handler registered for tool: ${toolCall.function.name}`,
       );
@@ -746,63 +677,6 @@ export class SupervisorService {
     }
 
     return null;
-  }
-
-  private validateToolCallWithError(toolCall: {
-    function: { name: string; arguments: string };
-  }): string | null {
-    if (!ALLOWED_TOOLS.has(toolCall.function.name)) {
-      return "Invalid tool call. Use only the allowed tools with correct arguments.";
-    }
-
-    const expectedKeys = TOOL_ARG_SCHEMAS[toolCall.function.name];
-    if (!expectedKeys) {
-      return "Invalid tool call. Use only the allowed tools with correct arguments.";
-    }
-
-    let args: Record<string, unknown>;
-    try {
-      args = JSON.parse(toolCall.function.arguments);
-    } catch {
-      return "Invalid tool call. Use only the allowed tools with correct arguments.";
-    }
-
-    const argKeys = Object.keys(args);
-
-    for (const key of argKeys) {
-      if (!expectedKeys.includes(key)) {
-        return "Invalid tool call. Use only the allowed tools with correct arguments.";
-      }
-    }
-
-    for (const key of expectedKeys) {
-      if (typeof args[key] !== "string") {
-        return "Invalid tool call. Use only the allowed tools with correct arguments.";
-      }
-    }
-
-    return null;
-  }
-
-  private pushErrorToMessages(
-    messages: LoopMessage[],
-    toolCall: {
-      id: string;
-      type: "function";
-      function: { name: string; arguments: string };
-    },
-    error: string,
-  ): void {
-    messages.push({
-      role: "assistant",
-      content: "",
-      tool_calls: [toolCall],
-    });
-    messages.push({
-      role: "tool",
-      content: JSON.stringify({ error }),
-      tool_call_id: toolCall.id,
-    });
   }
 
   private resolveScreenType(toolCall: {
