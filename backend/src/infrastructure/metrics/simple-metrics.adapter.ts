@@ -10,6 +10,9 @@ export class SimpleMetricsAdapter implements MetricsPort {
       llmTokens: 0,
       toolCalls: 0,
       toolFailures: 0,
+      toolTemporarilyDisabled: 0,
+      toolBlocked: 0,
+      toolRecovered: 0,
       circuitBreakerTransitions: 0,
     },
     latencies: {
@@ -61,6 +64,21 @@ export class SimpleMetricsAdapter implements MetricsPort {
     this.snapshot.toolStats[toolName] = stats;
 
     this.snapshot.latencies.toolMsTotal += Math.max(0, latencyMs);
+    this.snapshot.updatedAt = Date.now();
+  }
+
+  recordToolTemporarilyDisabled(_toolName: string): void {
+    this.snapshot.counters.toolTemporarilyDisabled += 1;
+    this.snapshot.updatedAt = Date.now();
+  }
+
+  recordToolBlocked(_toolName: string): void {
+    this.snapshot.counters.toolBlocked += 1;
+    this.snapshot.updatedAt = Date.now();
+  }
+
+  recordToolRecovered(_toolName: string): void {
+    this.snapshot.counters.toolRecovered += 1;
     this.snapshot.updatedAt = Date.now();
   }
 

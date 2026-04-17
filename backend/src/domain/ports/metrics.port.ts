@@ -7,6 +7,9 @@ export interface MetricsSnapshot {
     llmTokens: number;
     toolCalls: number;
     toolFailures: number;
+    toolTemporarilyDisabled: number;
+    toolBlocked: number;
+    toolRecovered: number;
     circuitBreakerTransitions: number;
   };
   latencies: {
@@ -23,6 +26,9 @@ export interface MetricsPort {
   recordLlmCall(model: string, tokensUsed: number, latencyMs: number): void;
   recordCacheHit(cacheType: 'intent' | 'screen', hit: boolean): void;
   recordToolCall(toolName: string, success: boolean, latencyMs: number): void;
+  recordToolTemporarilyDisabled(toolName: string): void;
+  recordToolBlocked(toolName: string): void;
+  recordToolRecovered(toolName: string): void;
   recordCircuitBreakerTransition(from: string, to: string): void;
   getSnapshot(): MetricsSnapshot;
 }

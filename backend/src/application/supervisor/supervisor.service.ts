@@ -218,11 +218,12 @@ export class SupervisorService {
     if (!subAgent) return;
 
     if (this.isToolTemporarilyDisabled(request.userId, resolution.toolName)) {
+      this.metrics?.recordToolBlocked(resolution.toolName);
       this.logger?.warn({ toolName: resolution.toolName, userId: request.userId }, 'Intent-routed tool is temporarily disabled');
       yield { label: getStepLabel(resolution.toolName), status: 'error' };
       yield this.buildUnknownResponse(
         'This capability is temporarily unavailable. Please try again shortly.',
-        AgentErrorCode.TOOL_FAILED,
+        AgentErrorCode.TOOL_TEMPORARILY_UNAVAILABLE,
       );
       return;
     }
@@ -450,11 +451,12 @@ export class SupervisorService {
     }
 
     if (this.isToolTemporarilyDisabled(request.userId, toolCall.function.name)) {
+      this.metrics?.recordToolBlocked(toolCall.function.name);
       this.logger?.warn({ toolName: toolCall.function.name, userId: request.userId }, 'Tool call blocked because tool is temporarily disabled');
       return {
         response: this.buildUnknownResponse(
           'This capability is temporarily unavailable. Please try again shortly.',
-          AgentErrorCode.TOOL_FAILED,
+          AgentErrorCode.TOOL_TEMPORARILY_UNAVAILABLE,
         ),
       };
     }
@@ -694,6 +696,7 @@ export class SupervisorService {
 
     if (disabledUntil <= Date.now()) {
       this.disabledToolsUntil.delete(key);
+      this.metrics?.recordToolRecovered(toolName);
       return false;
     }
 
@@ -708,6 +711,7 @@ export class SupervisorService {
     if (next >= SECURITY_LIMITS.SUB_AGENT_FAILURE_THRESHOLD) {
       this.toolFailureCounts.delete(key);
       this.disabledToolsUntil.set(key, Date.now() + SECURITY_LIMITS.SUB_AGENT_DISABLE_MS);
+      this.metrics?.recordToolTemporarilyDisabled(toolName);
       this.logger?.warn({
         toolName,
         userId,

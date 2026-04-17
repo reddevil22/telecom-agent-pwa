@@ -6,6 +6,7 @@ import type { AgentRequest } from '../../domain/types/agent';
 import type { ScreenCachePort } from '../../domain/ports/screen-cache.port';
 import { InMemoryScreenCacheAdapter } from '../../infrastructure/cache/in-memory-screen-cache.adapter';
 import { SECURITY_LIMITS } from '../../domain/constants/security-constants';
+import { AgentErrorCode } from '../../domain/types/errors';
 
 function makeRequest(overrides: Partial<AgentRequest> = {}): AgentRequest {
   return {
@@ -130,9 +131,59 @@ describe('SupervisorService', () => {
     expect(second.screenType).toBe('unknown');
     expect(third.screenType).toBe('unknown');
     expect(fourth.screenType).toBe('unknown');
+    expect(fourth.errorCode).toBe(AgentErrorCode.TOOL_TEMPORARILY_UNAVAILABLE);
 
     expect(failingAgent.handle).toHaveBeenCalledTimes(3);
     expect(fourth.replyText).toContain('temporarily unavailable');
+
+    const fourthLlmInput = (mockLlm.chatCompletion as jest.Mock).mock.calls[3]?.[0] as {
+      tools?: Array<{ function: { name: string } }>;
+    };
+    expect(fourthLlmInput.tools?.some((tool) => tool.function.name === 'check_balance')).toBe(false);
+  });
+
+  it('scopes temporary tool disable per user', async () => {
+    const failingAgent: SubAgentPort = {
+      handle: jest.fn().mockRejectedValue(new Error('BFF down')),
+    } as unknown as SubAgentPort;
+
+    service.registerAgent('check_balance', failingAgent);
+    (mockLlm.chatCompletion as jest.Mock).mockResolvedValue(mockToolCall('check_balance'));
+
+    await collectResult(service.processRequest(makeRequest({ userId: 'user-a' })));
+    await collectResult(service.processRequest(makeRequest({ userId: 'user-a' })));
+    await collectResult(service.processRequest(makeRequest({ userId: 'user-a' })));
+    const blockedForUserA = await collectResult(service.processRequest(makeRequest({ userId: 'user-a' })));
+    const firstFailureForUserB = await collectResult(service.processRequest(makeRequest({ userId: 'user-b' })));
+
+    expect(blockedForUserA.errorCode).toBe(AgentErrorCode.TOOL_TEMPORARILY_UNAVAILABLE);
+    expect(firstFailureForUserB.errorCode).toBe(AgentErrorCode.TOOL_FAILED);
+    expect(failingAgent.handle).toHaveBeenCalledTimes(4);
+  });
+
+  it('re-enables temporarily disabled tools after cooldown', async () => {
+    const failingAgent: SubAgentPort = {
+      handle: jest.fn().mockRejectedValue(new Error('BFF down')),
+    } as unknown as SubAgentPort;
+
+    service.registerAgent('check_balance', failingAgent);
+    (mockLlm.chatCompletion as jest.Mock).mockResolvedValue(mockToolCall('check_balance'));
+
+    await collectResult(service.processRequest(makeRequest()));
+    await collectResult(service.processRequest(makeRequest()));
+    await collectResult(service.processRequest(makeRequest()));
+    const blocked = await collectResult(service.processRequest(makeRequest()));
+    expect(blocked.errorCode).toBe(AgentErrorCode.TOOL_TEMPORARILY_UNAVAILABLE);
+
+    const nowSpy = jest.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(Date.now() + SECURITY_LIMITS.SUB_AGENT_DISABLE_MS + 1);
+
+    const afterCooldown = await collectResult(service.processRequest(makeRequest()));
+
+    expect(afterCooldown.errorCode).toBe(AgentErrorCode.TOOL_FAILED);
+    expect(failingAgent.handle).toHaveBeenCalledTimes(4);
+
+    nowSpy.mockRestore();
   });
 
   // ── Single-shot happy path (loop exits when LLM gives no second tool call) ──

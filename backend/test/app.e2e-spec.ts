@@ -7,6 +7,7 @@ import { LLM_PORT, RATE_LIMITER_PORT } from '../src/domain/tokens';
 import type { LlmPort } from '../src/domain/ports/llm.port';
 import type { RateLimiterPort } from '../src/domain/ports/rate-limiter.port';
 import { SupervisorService } from '../src/application/supervisor/supervisor.service';
+import { SECURITY_LIMITS } from '../src/domain/constants/security-constants';
 
 function mockToolCallResponse(name: string): ReturnType<LlmPort['chatCompletion']> {
   return Promise.resolve({
@@ -374,6 +375,69 @@ describe('App (e2e)', () => {
 
     expect(status.body.mode).toBe('normal');
     expect(status.body.circuitState).toBe('closed');
+  });
+
+  it('POST /api/agent/chat — disables only failing tool while keeping other tools available', async () => {
+    mockLlm.chatCompletion.mockReset();
+    const userId = 'tool-disable-scope-user';
+
+    for (let i = 0; i < SECURITY_LIMITS.SUB_AGENT_FAILURE_THRESHOLD; i++) {
+      const failureRes = await postChat(app, userId)
+        .send(makeBody({ prompt: `show my balance`, userId }))
+        .expect(201);
+
+      expect(failureRes.body.screenType).toBe('unknown');
+      expect(failureRes.body.errorCode).toBe('ERR_TOOL_FAILED');
+    }
+
+    const disabledRes = await postChat(app, userId)
+      .send(makeBody({ prompt: 'show my balance', userId }))
+      .expect(201);
+
+    expect(disabledRes.body.screenType).toBe('unknown');
+    expect(disabledRes.body.errorCode).toBe('ERR_TOOL_TEMPORARILY_UNAVAILABLE');
+    expect(disabledRes.body.replyText).toContain('temporarily unavailable');
+
+    const supportRes = await postChat(app, userId)
+      .send(makeBody({ prompt: 'I need support', userId }))
+      .expect(201);
+
+    expect(supportRes.body.screenType).toBe('support');
+
+    const status = await request(app.getHttpServer())
+      .get('/api/agent/status')
+      .expect(200);
+
+    expect(status.body.mode).toBe('normal');
+    expect(status.body.circuitState).toBe('closed');
+  });
+
+  it('POST /api/agent/chat — re-enables a tool after temporary disable window expires', async () => {
+    mockLlm.chatCompletion.mockReset();
+    const userId = 'tool-disable-recovery-user';
+
+    for (let i = 0; i < SECURITY_LIMITS.SUB_AGENT_FAILURE_THRESHOLD; i++) {
+      await postChat(app, userId)
+        .send(makeBody({ prompt: 'show my balance', userId }))
+        .expect(201);
+    }
+
+    const disabledRes = await postChat(app, userId)
+      .send(makeBody({ prompt: 'show my balance', userId }))
+      .expect(201);
+
+    expect(disabledRes.body.errorCode).toBe('ERR_TOOL_TEMPORARILY_UNAVAILABLE');
+
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + SECURITY_LIMITS.SUB_AGENT_DISABLE_MS + 1000);
+
+    const afterCooldownRes = await postChat(app, userId)
+      .send(makeBody({ prompt: 'show my balance', userId }))
+      .expect(201);
+
+    expect(afterCooldownRes.body.screenType).toBe('unknown');
+    expect(afterCooldownRes.body.errorCode).toBe('ERR_TOOL_FAILED');
+
+    nowSpy.mockRestore();
   });
 
   // ── Conversation with history ──
