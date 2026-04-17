@@ -6,6 +6,7 @@ import { AppModule } from '../src/app.module';
 import { LLM_PORT, RATE_LIMITER_PORT } from '../src/domain/tokens';
 import type { LlmPort } from '../src/domain/ports/llm.port';
 import type { RateLimiterPort } from '../src/domain/ports/rate-limiter.port';
+import { SupervisorService } from '../src/application/supervisor/supervisor.service';
 
 function mockToolCallResponse(name: string): ReturnType<LlmPort['chatCompletion']> {
   return Promise.resolve({
@@ -151,17 +152,28 @@ describe('App (e2e)', () => {
       .send(makeBody({ prompt: 'Show my balance' }))
       .expect(201);
 
+    expect(res.headers['content-type']).toContain('text/event-stream');
+
     const events = parseSseEvents(res.text);
     expect(events.length).toBeGreaterThan(0);
     expect(events.some((e) => e.event === 'step')).toBe(true);
     expect(events.some((e) => e.event === 'result')).toBe(true);
+
+    const firstResultIndex = events.findIndex((e) => e.event === 'result');
+    const lastStepIndex = events.reduce((lastIndex, event, index) => (
+      event.event === 'step' ? index : lastIndex
+    ), -1);
+
+    expect(firstResultIndex).toBeGreaterThan(-1);
+    expect(lastStepIndex).toBeGreaterThan(-1);
+    expect(firstResultIndex).toBeGreaterThan(lastStepIndex);
 
     const resultEvent = events.find((e) => e.event === 'result');
     expect(resultEvent).toBeDefined();
     expect((resultEvent?.data as { screenType: string }).screenType).toBe('balance');
   });
 
-  it('POST /api/agent/chat/stream emits error event when processing fails', async () => {
+  it('POST /api/agent/chat/stream returns fallback unknown result when LLM processing fails', async () => {
     mockLlm.chatCompletion.mockReset();
     mockLlm.chatCompletion.mockRejectedValueOnce(new Error('LLM unavailable'));
 
@@ -173,6 +185,27 @@ describe('App (e2e)', () => {
     const errorEvent = events.find((e) => e.event === 'result');
     expect(errorEvent).toBeDefined();
     expect((errorEvent?.data as { screenType: string }).screenType).toBe('unknown');
+  });
+
+  it('POST /api/agent/chat/stream emits error event when stream iteration throws', async () => {
+    const supervisor = app.get(SupervisorService);
+    const processRequestSpy = jest
+      .spyOn(supervisor, 'processRequest')
+      .mockImplementation((async function* () {
+        throw new Error('forced stream failure');
+      }) as unknown as SupervisorService['processRequest']);
+
+    const res = await postChatStream(app)
+      .send(makeBody({ prompt: 'trigger stream catch branch' }))
+      .expect(201);
+
+    const events = parseSseEvents(res.text);
+    const errorEvent = events.find((e) => e.event === 'error');
+
+    expect(errorEvent).toBeDefined();
+    expect((errorEvent?.data as { message: string }).message).toBe('Processing failed');
+
+    processRequestSpy.mockRestore();
   });
 
   it('POST /api/agent/chat/stream supports tier-1 quick action while degraded', async () => {
