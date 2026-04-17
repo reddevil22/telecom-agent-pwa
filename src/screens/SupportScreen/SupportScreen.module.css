@@ -198,6 +198,12 @@
   border-color: var(--color-primary);
 }
 
+.errorText {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-error);
+}
+
 .formSubmit {
   padding: var(--space-sm) var(--space-md);
   background: var(--color-primary);

@@ -11,6 +11,16 @@ export interface AgentRequest {
   timestamp: number;
 }
 
+export type AgentErrorCode =
+  | 'ERR_RATE_LIMITED'
+  | 'ERR_LLM_TIMEOUT'
+  | 'ERR_LLM_UNAVAILABLE'
+  | 'ERR_TOOL_FAILED'
+  | 'ERR_INSUFFICIENT_BALANCE'
+  | 'ERR_INVALID_BUNDLE'
+  | 'ERR_PROMPT_BLOCKED'
+  | 'ERR_MAX_ITERATIONS';
+
 export type ScreenType = 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'account' | 'unknown';
 
 // ── Screen data (discriminated union) ──
@@ -123,6 +133,7 @@ export interface AgentResponse {
   suggestions: string[];
   confidence: number;
   processingSteps: ProcessingStep[];
+  errorCode?: AgentErrorCode;
   supplementaryResults?: ToolResult[];
 }
 

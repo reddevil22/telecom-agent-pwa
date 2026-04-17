@@ -1,4 +1,5 @@
 import type { Balance, Bundle, UsageEntry, SupportTicket, ConversationMessage, AccountProfile, ActiveSubscription, TransactionEntry, OpenTicket } from './domain';
+import type { AgentErrorCode } from './errors';
 
 export interface AgentRequest {
   prompt: string;
@@ -86,5 +87,6 @@ export interface AgentResponse {
   suggestions: string[];
   confidence: number;
   processingSteps: ProcessingStep[];
+  errorCode?: AgentErrorCode;
   supplementaryResults?: ToolResult[];
 }

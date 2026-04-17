@@ -9,9 +9,11 @@ import type { PinoLogger } from 'nestjs-pino';
 import type { ConversationStoragePort } from '../../domain/ports/conversation-storage.port';
 import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
 import type { ScreenCachePort } from '../../domain/ports/screen-cache.port';
+import type { MetricsPort } from '../../domain/ports/metrics.port';
 import type { IntentRouterService } from '../../domain/services/intent-router.service';
 import type { CircuitBreakerService } from '../../domain/services/circuit-breaker.service';
 import { INTENT_TOOL_MAP, TelecomIntent, TIER1_INTENTS, INTENT_KEYWORDS, type IntentKeywordMap } from '../../domain/types/intent';
+import { AgentErrorCode } from '../../domain/types/errors';
 
 class LlmCallError extends Error {
   constructor(message: string) {
@@ -80,6 +82,7 @@ export class SupervisorService {
   private readonly cache: ScreenCachePort | null;
   private readonly intentRouter: IntentRouterService | null;
   private readonly circuitBreaker: CircuitBreakerService | null;
+  private readonly metrics: MetricsPort | null;
   private readonly intentKeywords: IntentKeywordMap;
   private readonly toolFailureCounts = new Map<string, number>();
   private readonly disabledToolsUntil = new Map<string, number>();
@@ -95,12 +98,14 @@ export class SupervisorService {
     intentRouter?: IntentRouterService,
     circuitBreaker?: CircuitBreakerService,
     intentKeywords: IntentKeywordMap = INTENT_KEYWORDS,
+    metrics?: MetricsPort,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
     this.cache = cache ?? null;
     this.intentRouter = intentRouter ?? null;
     this.circuitBreaker = circuitBreaker ?? null;
+    this.metrics = metrics ?? null;
     this.intentKeywords = intentKeywords;
     this.logger?.setContext(SupervisorService.name);
   }
@@ -183,8 +188,20 @@ export class SupervisorService {
   private async *tryIntentRouter(request: AgentRequest): AsyncGenerator<StepYield | AgentResponse> {
     if (!this.intentRouter) return;
 
+    const intentStart = Date.now();
     const resolution = await this.intentRouter.classify(request.prompt, request.userId);
-    if (!resolution) return;
+    if (!resolution) {
+      this.metrics?.recordCacheHit('intent', false);
+      return;
+    }
+
+    this.metrics?.recordCacheHit('intent', resolution.confidence < 1.0);
+
+    this.metrics?.recordIntentResolution(
+      resolution.confidence === 1.0 ? 1 : 2,
+      resolution.intent,
+      Date.now() - intentStart,
+    );
 
     this.logger?.info({
       intent: resolution.intent,
@@ -199,7 +216,10 @@ export class SupervisorService {
     if (this.isToolTemporarilyDisabled(request.userId, resolution.toolName)) {
       this.logger?.warn({ toolName: resolution.toolName, userId: request.userId }, 'Intent-routed tool is temporarily disabled');
       yield { label: getStepLabel(resolution.toolName), status: 'error' };
-      yield this.buildUnknownResponse('This capability is temporarily unavailable. Please try again shortly.');
+      yield this.buildUnknownResponse(
+        'This capability is temporarily unavailable. Please try again shortly.',
+        AgentErrorCode.TOOL_FAILED,
+      );
       return;
     }
 
@@ -209,19 +229,22 @@ export class SupervisorService {
 
     let screenData: AgentResponse['screenData'];
     let processingSteps: AgentResponse['processingSteps'];
+    const toolStart = Date.now();
     try {
       const result = await subAgent.handle(request.userId, resolution.args);
       screenData = result.screenData;
       processingSteps = result.processingSteps;
       this.recordToolSuccess(request.userId, resolution.toolName);
+      this.metrics?.recordToolCall(resolution.toolName, true, Date.now() - toolStart);
     } catch (error) {
       this.recordToolFailure(request.userId, resolution.toolName);
+      this.metrics?.recordToolCall(resolution.toolName, false, Date.now() - toolStart);
       this.logger?.error({
         toolName: resolution.toolName,
         err: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
       }, 'Intent-routed sub-agent execution failed');
       yield { label: getStepLabel(resolution.toolName), status: 'error' };
-      yield this.buildUnknownResponse('Service temporarily unavailable. Please try again.');
+      yield this.buildUnknownResponse('Service temporarily unavailable. Please try again.', AgentErrorCode.TOOL_FAILED);
       return;
     }
 
@@ -250,16 +273,22 @@ export class SupervisorService {
       }
     }
 
-    if (matches.length !== 1) return null;
+    if (matches.length !== 1) {
+      this.metrics?.recordCacheHit('screen', false);
+      return null;
+    }
 
     const cached = this.cache.get(request.userId, matches[0]);
     if (cached) {
+      this.metrics?.recordCacheHit('screen', true);
       this.logger?.info({ screenType: matches[0] }, 'Screen cache hit');
       return {
         ...cached,
         processingSteps: [{ label: 'Retrieved from cache', status: 'done' }],
       };
     }
+
+    this.metrics?.recordCacheHit('screen', false);
 
     return null;
   }
@@ -343,6 +372,7 @@ export class SupervisorService {
 
   private async callLlm(messages: LoopMessage[], userId: string): Promise<LlmChatResponse> {
     try {
+      const llmStart = Date.now();
       return await this.llm.chatCompletion({
         model: this.modelName,
         messages: messages.map(m => ({
@@ -354,6 +384,14 @@ export class SupervisorService {
         tool_choice: 'auto',
         temperature: this.temperature,
         max_tokens: this.maxTokens,
+      }).then((response) => {
+        this.metrics?.recordLlmCall(
+          this.modelName,
+          (response.usage?.prompt_tokens ?? 0) + (response.usage?.completion_tokens ?? 0),
+          Date.now() - llmStart,
+        );
+        this.metrics?.recordIntentResolution(3, 'llm_fallback', Date.now() - llmStart);
+        return response;
       });
     } catch {
       throw new LlmCallError('LLM call failed');
@@ -410,7 +448,10 @@ export class SupervisorService {
     if (this.isToolTemporarilyDisabled(request.userId, toolCall.function.name)) {
       this.logger?.warn({ toolName: toolCall.function.name, userId: request.userId }, 'Tool call blocked because tool is temporarily disabled');
       return {
-        response: this.buildUnknownResponse('This capability is temporarily unavailable. Please try again shortly.'),
+        response: this.buildUnknownResponse(
+          'This capability is temporarily unavailable. Please try again shortly.',
+          AgentErrorCode.TOOL_FAILED,
+        ),
       };
     }
 
@@ -429,17 +470,25 @@ export class SupervisorService {
     }
 
     let toolResult: ToolExecutionResult;
+    const toolStart = Date.now();
     try {
       toolResult = await this.executeSubAgent(request, subAgent, toolCall, screenType);
       this.recordToolSuccess(request.userId, toolCall.function.name);
+      this.metrics?.recordToolCall(toolCall.function.name, true, Date.now() - toolStart);
     } catch (error) {
       this.recordToolFailure(request.userId, toolCall.function.name);
+      this.metrics?.recordToolCall(toolCall.function.name, false, Date.now() - toolStart);
       this.logger?.error({
         toolName: toolCall.function.name,
         iteration,
         err: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
       }, 'Sub-agent execution failed');
-      return { response: this.buildUnknownResponse('Service temporarily unavailable. Please try again.') };
+      return {
+        response: this.buildUnknownResponse(
+          'Service temporarily unavailable. Please try again.',
+          AgentErrorCode.TOOL_FAILED,
+        ),
+      };
     }
 
     context.primaryResult = {
@@ -555,7 +604,7 @@ export class SupervisorService {
     }
 
     this.logger?.warn('Supervisor hit max iterations with no valid results');
-    return this.buildUnknownResponse();
+    return this.buildUnknownResponse(undefined, AgentErrorCode.MAX_ITERATIONS);
   }
 
   private handleError(error: unknown, shouldRecordFailure = false): AgentResponse {
@@ -566,7 +615,7 @@ export class SupervisorService {
       err: error instanceof Error ? { message: error.message, stack: error.stack } : error,
     }, 'Supervisor error processing request');
     return {
-      ...this.buildUnknownResponse(),
+      ...this.buildUnknownResponse(undefined, shouldRecordFailure ? AgentErrorCode.LLM_UNAVAILABLE : AgentErrorCode.TOOL_FAILED),
       replyText: 'Sorry, I encountered an error processing your request. Please try again.',
     };
   }
@@ -578,17 +627,19 @@ export class SupervisorService {
       replyText: 'AI chat is temporarily unavailable. Please use the quick actions below or try again shortly.',
       suggestions: ['Show my balance', 'What bundles are available?', 'Check my usage', 'I need support', 'Show my account'],
       confidence: 0.1,
+      errorCode: AgentErrorCode.LLM_UNAVAILABLE,
       processingSteps: [{ label: 'Service temporarily unavailable', status: 'done' }],
     };
   }
 
-  private buildUnknownResponse(replyText?: string): AgentResponse {
+  private buildUnknownResponse(replyText?: string, errorCode?: AgentErrorCode): AgentResponse {
     return {
       screenType: 'unknown',
       screenData: { type: 'unknown' },
       replyText: replyText ?? REPLY_MAP.unknown,
       suggestions: SUGGESTION_MAP.unknown,
       confidence: 0.3,
+      ...(errorCode ? { errorCode } : {}),
       processingSteps: [
         { label: 'Understanding your request', status: 'done' },
         { label: 'Processing', status: 'done' },

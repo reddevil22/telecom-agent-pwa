@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
 import { AgentController, HealthController } from './adapters/driving/rest/agent.controller';
+import { MetricsController } from './adapters/driving/rest/metrics.controller';
 import { SupervisorService } from './application/supervisor/supervisor.service';
 import { LlmModule } from './adapters/driven/llm/llm.module';
 import { BalanceBffModule } from './adapters/driven/bff/balance/balance-bff.module';
@@ -9,12 +10,13 @@ import { BundlesBffModule } from './adapters/driven/bff/bundles/bundles-bff.modu
 import { UsageBffModule } from './adapters/driven/bff/usage/usage-bff.module';
 import { SupportBffModule } from './adapters/driven/bff/support/support-bff.module';
 import { SqliteDataModule } from './infrastructure/data/sqlite-data.module';
-import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, INTENT_CACHE_PORT } from './domain/tokens';
+import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, INTENT_CACHE_PORT, METRICS_PORT } from './domain/tokens';
 import type { LlmPort } from './domain/ports/llm.port';
 import type { BalanceBffPort, BundlesBffPort, UsageBffPort, SupportBffPort } from './domain/ports/bff-ports';
 import type { ConversationStoragePort } from './domain/ports/conversation-storage.port';
 import type { ScreenCachePort } from './domain/ports/screen-cache.port';
 import type { IntentCachePort } from './domain/ports/intent-cache.port';
+import type { MetricsPort } from './domain/ports/metrics.port';
 import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
 import { MockTelcoModule } from './infrastructure/telco/mock-telco.module';
 import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
@@ -26,13 +28,14 @@ import { registerBillingAgents } from './application/sub-agents/billing-agents.p
 import { registerBundleAgents } from './application/sub-agents/bundle-agents.provider';
 import { registerSupportAgents } from './application/sub-agents/support-agents.provider';
 import { registerAccountAgents } from './application/sub-agents/account-agents.provider';
+import { SimpleMetricsAdapter } from './infrastructure/metrics/simple-metrics.adapter';
 
 type IntentRoutingConfig = ReturnType<typeof loadIntentRoutingConfig>;
 const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
 
 @Module({
   imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule, MockTelcoModule],
-  controllers: [AgentController, HealthController],
+  controllers: [AgentController, HealthController, MetricsController],
   providers: [
     {
       provide: INTENT_ROUTING_CONFIG,
@@ -47,6 +50,10 @@ const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
         return new IntentCacheService(config.get<number>('INTENT_CACHE_THRESHOLD'));
       },
       inject: [ConfigService],
+    },
+    {
+      provide: METRICS_PORT,
+      useFactory: (): MetricsPort => new SimpleMetricsAdapter(),
     },
     {
       provide: IntentRouterService,
@@ -77,6 +84,7 @@ const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
         intentRouter: IntentRouterService,
         intentRoutingConfig: IntentRoutingConfig,
         telcoService: MockTelcoService,
+        metrics: MetricsPort,
       ) => {
         const provider = config.get<string>('LLM_PROVIDER') ?? 'local';
         const modelName = provider === 'dashscope'
@@ -95,6 +103,7 @@ const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
           intentRouter,
           circuitBreaker,
           intentRoutingConfig.keywords,
+          metrics,
         );
 
         registerBillingAgents(supervisor, balanceBff);
@@ -104,7 +113,7 @@ const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
 
         return supervisor;
       },
-      inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, ConfigService, PinoLogger, IntentRouterService, INTENT_ROUTING_CONFIG, MockTelcoService],
+      inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, ConfigService, PinoLogger, IntentRouterService, INTENT_ROUTING_CONFIG, MockTelcoService, METRICS_PORT],
     },
   ],
 })

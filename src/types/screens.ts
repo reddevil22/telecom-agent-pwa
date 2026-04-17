@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, LazyExoticComponent } from 'react';
 import type { ActorRefFrom } from 'xstate';
 import type { ScreenData } from './agent';
 import type { orchestratorMachine } from '../machines/orchestratorMachine';
@@ -11,7 +11,7 @@ export interface ScreenProps {
 }
 
 export interface ScreenDefinition {
-  component: ComponentType<ScreenProps>;
+  component: ComponentType<ScreenProps> | LazyExoticComponent<ComponentType<ScreenProps>>;
   displayName: string;
 }
 

@@ -1,11 +1,13 @@
+import { lazy } from 'react';
 import type { ScreenRegistry } from '../types/screens';
-import { BalanceScreen } from './BalanceScreen/BalanceScreen';
-import { BundlesScreen } from './BundlesScreen/BundlesScreen';
-import { BundleDetailScreen } from './BundleDetailScreen/BundleDetailScreen';
-import { UsageScreen } from './UsageScreen/UsageScreen';
-import { SupportScreen } from './SupportScreen/SupportScreen';
-import { ConfirmationScreen } from './ConfirmationScreen/ConfirmationScreen';
-import { AccountScreen } from './AccountScreen/AccountScreen';
+
+const BalanceScreen = lazy(async () => ({ default: (await import('./BalanceScreen/BalanceScreen')).BalanceScreen }));
+const BundlesScreen = lazy(async () => ({ default: (await import('./BundlesScreen/BundlesScreen')).BundlesScreen }));
+const BundleDetailScreen = lazy(async () => ({ default: (await import('./BundleDetailScreen/BundleDetailScreen')).BundleDetailScreen }));
+const UsageScreen = lazy(async () => ({ default: (await import('./UsageScreen/UsageScreen')).UsageScreen }));
+const SupportScreen = lazy(async () => ({ default: (await import('./SupportScreen/SupportScreen')).SupportScreen }));
+const ConfirmationScreen = lazy(async () => ({ default: (await import('./ConfirmationScreen/ConfirmationScreen')).ConfirmationScreen }));
+const AccountScreen = lazy(async () => ({ default: (await import('./AccountScreen/AccountScreen')).AccountScreen }));
 
 export const screenRegistry: ScreenRegistry = new Map([
   ['balance', { component: BalanceScreen, displayName: 'Balance' }],

@@ -1,8 +1,10 @@
+import { Suspense } from 'react';
 import { useSelector } from '@xstate/react';
 import type { ActorRefFrom } from 'xstate';
 import type { orchestratorMachine } from '../../machines/orchestratorMachine';
 import { selectCurrentScreenType, selectCurrentScreenData } from '../../hooks/useSelectors';
 import { screenRegistry } from '../../screens/registry';
+import { SkeletonScreen } from '../SkeletonScreen/SkeletonScreen';
 import styles from './ScreenRenderer.module.css';
 
 type Actor = ActorRefFrom<typeof orchestratorMachine>;
@@ -21,8 +23,10 @@ export function ScreenRenderer({ actor }: Props) {
   const Component = entry.component;
 
   return (
-    <div key={screenType} className={`${styles.wrapper} ${styles.screenEnter}`}>
-      <Component data={screenData} actor={actor} />
-    </div>
+    <Suspense fallback={<SkeletonScreen />}>
+      <div key={screenType} className={`${styles.wrapper} ${styles.screenEnter}`}>
+        <Component data={screenData} actor={actor} />
+      </div>
+    </Suspense>
   );
 }

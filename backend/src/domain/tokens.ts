@@ -7,3 +7,4 @@ export const CONVERSATION_STORAGE_PORT = Symbol('CONVERSATION_STORAGE_PORT');
 export const LOGGER = Symbol('LOGGER');
 export const SCREEN_CACHE_PORT = Symbol('SCREEN_CACHE_PORT');
 export const INTENT_CACHE_PORT = Symbol('INTENT_CACHE_PORT');
+export const METRICS_PORT = Symbol('METRICS_PORT');

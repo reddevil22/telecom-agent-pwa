@@ -15,4 +15,5 @@ export const envValidationSchema = {
   NODE_ENV: { type: 'string', default: 'development' },
   LOG_LEVEL: { type: 'string', default: 'info' },
   TELCO_SIMULATION_INTERVAL_MS: { type: 'number', default: 60000 },
+  ADMIN_METRICS_KEY: { type: 'string', default: 'dev-metrics-key' },
 };
