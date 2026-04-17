@@ -14,6 +14,38 @@ import {
 import { historyService } from "../services/historyService";
 import { userSessionService } from "../services/userSessionService";
 
+const DEFAULT_SUGGESTIONS = [
+  "Show my balance",
+  "What bundles are available?",
+  "Check my usage",
+  "I need support",
+];
+
+function createFreshSessionState(): Pick<
+  OrchestratorContext,
+  | "conversationHistory"
+  | "currentScreenType"
+  | "currentScreenData"
+  | "currentSuggestions"
+  | "lastAgentReply"
+  | "processingSteps"
+  | "supplementaryResults"
+  | "hasReceivedFirstResponse"
+  | "error"
+> {
+  return {
+    conversationHistory: [],
+    currentScreenType: null,
+    currentScreenData: null,
+    currentSuggestions: [...DEFAULT_SUGGESTIONS],
+    lastAgentReply: null,
+    processingSteps: [],
+    supplementaryResults: [],
+    hasReceivedFirstResponse: false,
+    error: null,
+  };
+}
+
 function generateSessionId(userId: string): string {
   const existing = historyService.getCurrentSessionId(userId);
   if (existing) return existing;
@@ -64,7 +96,7 @@ export const orchestratorMachine = setup({
         userId: string;
         self: { send: (event: OrchestratorEvents) => void } | null;
       }
-    >(async ({ input, self }) => {
+    >(async ({ input, self, signal }) => {
       const request: AgentRequest = {
         prompt: input.prompt,
         sessionId: input.sessionId,
@@ -76,15 +108,19 @@ export const orchestratorMachine = setup({
       // Try streaming first, fall back to non-streaming
       if (self) {
         try {
-          return await invokeAgentStream(request, (steps) => {
-            self.send({ type: "STEP_UPDATE", steps });
-          });
+          return await invokeAgentStream(
+            request,
+            (steps) => {
+              self.send({ type: "STEP_UPDATE", steps });
+            },
+            { signal },
+          );
         } catch {
           // Streaming failed, fall back to standard call
         }
       }
 
-      return invokeAgentService(request);
+      return invokeAgentService(request, { signal });
     }),
     loadSession: fromPromise<
       ConversationMessage[],
@@ -200,52 +236,26 @@ export const orchestratorMachine = setup({
       },
     }),
     clearError: assign({ error: () => null }),
-    resetForNewSession: assign({
-      sessionId: ({ context }) => {
-        const newId = `session-${crypto.randomUUID()}`;
-        historyService.setCurrentSessionId(newId, context.userId);
-        return newId;
-      },
-      conversationHistory: () => [],
-      currentScreenType: () => null,
-      currentScreenData: () => null,
-      currentSuggestions: () => [
-        "Show my balance",
-        "What bundles are available?",
-        "Check my usage",
-        "I need support",
-      ],
-      lastAgentReply: () => null,
-      processingSteps: () => [],
-      supplementaryResults: () => [],
-      hasReceivedFirstResponse: () => false,
-      error: () => null,
+    resetForNewSession: assign(({ context }) => {
+      const newId = `session-${crypto.randomUUID()}`;
+      historyService.setCurrentSessionId(newId, context.userId);
+      return {
+        sessionId: newId,
+        ...createFreshSessionState(),
+      };
     }),
-    switchUser: assign({
-      userId: ({ event, context }) => {
-        if (event.type !== "USER_CHANGED") return context.userId;
-        return event.userId;
-      },
-      sessionId: ({ event, context }) => {
-        if (event.type !== "USER_CHANGED") return context.sessionId;
-        const newId = `session-${crypto.randomUUID()}`;
-        historyService.setCurrentSessionId(newId, event.userId);
-        return newId;
-      },
-      conversationHistory: () => [],
-      currentScreenType: () => null,
-      currentScreenData: () => null,
-      currentSuggestions: () => [
-        "Show my balance",
-        "What bundles are available?",
-        "Check my usage",
-        "I need support",
-      ],
-      lastAgentReply: () => null,
-      processingSteps: () => [],
-      supplementaryResults: () => [],
-      hasReceivedFirstResponse: () => false,
-      error: () => null,
+    switchUser: assign(({ event, context }) => {
+      if (event.type !== "USER_CHANGED") {
+        return { userId: context.userId, sessionId: context.sessionId };
+      }
+
+      const newId = `session-${crypto.randomUUID()}`;
+      historyService.setCurrentSessionId(newId, event.userId);
+      return {
+        userId: event.userId,
+        sessionId: newId,
+        ...createFreshSessionState(),
+      };
     }),
     updateSteps: assign({
       processingSteps: ({ event }) => {
@@ -268,12 +278,7 @@ export const orchestratorMachine = setup({
     conversationHistory: [],
     currentScreenType: null,
     currentScreenData: null,
-    currentSuggestions: [
-      "Show my balance",
-      "What bundles are available?",
-      "Check my usage",
-      "I need support",
-    ],
+    currentSuggestions: [...DEFAULT_SUGGESTIONS],
     lastAgentReply: null,
     processingSteps: [],
     supplementaryResults: [],

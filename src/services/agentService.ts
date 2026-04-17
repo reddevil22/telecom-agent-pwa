@@ -4,8 +4,13 @@ import type {
   ProcessingStep,
 } from "../types/agent";
 
+interface RequestOptions {
+  signal?: AbortSignal;
+}
+
 export async function invokeAgentService(
   request: AgentRequest,
+  options: RequestOptions = {},
 ): Promise<AgentResponse> {
   const res = await fetch("/api/agent/chat", {
     method: "POST",
@@ -14,6 +19,7 @@ export async function invokeAgentService(
       "x-user-id": request.userId,
     },
     body: JSON.stringify(request),
+    signal: options.signal,
   });
 
   if (!res.ok) {
@@ -28,6 +34,7 @@ export type StepCallback = (steps: ProcessingStep[]) => void;
 export async function invokeAgentStream(
   request: AgentRequest,
   onStep: StepCallback,
+  options: RequestOptions = {},
 ): Promise<AgentResponse> {
   const res = await fetch("/api/agent/chat/stream", {
     method: "POST",
@@ -36,6 +43,7 @@ export async function invokeAgentStream(
       "x-user-id": request.userId,
     },
     body: JSON.stringify(request),
+    signal: options.signal,
   });
 
   if (!res.ok) {
