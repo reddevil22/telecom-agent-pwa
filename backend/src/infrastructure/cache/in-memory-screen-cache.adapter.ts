@@ -52,6 +52,10 @@ export class InMemoryScreenCacheAdapter implements ScreenCachePort, OnModuleDest
     this.evictOldestEntries();
   }
 
+  invalidate(userId: string, screenType: ScreenType): void {
+    this.store.delete(this.key(userId, screenType));
+  }
+
   invalidateAll(userId: string): void {
     const prefix = `${userId}:`;
     for (const key of this.store.keys()) {

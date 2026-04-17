@@ -41,6 +41,11 @@ interface ToolExecutionResult {
   processingSteps: AgentResponse['processingSteps'];
 }
 
+interface IterationResult {
+  response: AgentResponse;
+  toolName?: string;
+}
+
 /** Step label emitted by the streaming generator */
 type StepYield = { label: string; status: 'active' | 'done' | 'error' };
 
@@ -64,6 +69,11 @@ function getStepLabel(toolName: string): string {
 
 export class SupervisorService {
   private static readonly CACHEABLE_SCREENS = new Set<ScreenType>(['balance', 'bundles', 'usage', 'support', 'account']);
+  private static readonly CONFIRMATION_CACHE_INVALIDATION: Record<string, ScreenType[]> = {
+    purchase_bundle: ['balance', 'bundles'],
+    top_up: ['balance'],
+    create_ticket: ['support'],
+  };
 
   private readonly toolResolver: ToolResolver;
   private readonly logger: PinoLogger | null;
@@ -145,16 +155,16 @@ export class SupervisorService {
       for (let iteration = 0; iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS; iteration++) {
         yield { label: 'Thinking...', status: 'active' };
 
-        const result = await this.executeIteration(request, context, iteration);
+        const iterationResult = await this.executeIteration(request, context, iteration);
 
         yield { label: 'Thinking...', status: 'done' };
 
-        if (result) {
+        if (iterationResult) {
           this.circuitBreaker?.recordSuccess();
-          this.tryCacheStore(request, result);
-          this.cacheIntentResult(request, result);
-          this.persistAgentResponse(conversationId, result);
-          yield result;
+          this.tryCacheStore(request, iterationResult.response, iterationResult.toolName);
+          this.cacheIntentResult(request, iterationResult.response);
+          this.persistAgentResponse(conversationId, iterationResult.response);
+          yield iterationResult.response;
           return;
         }
       }
@@ -210,7 +220,7 @@ export class SupervisorService {
     const response = this.buildResponse({ screenType, screenData, processingSteps });
 
     // Store in screen cache for future hits
-    this.tryCacheStore(request, response);
+    this.tryCacheStore(request, response, resolution.toolName);
     this.persistAgentResponse(conversationId, response);
     yield response;
   }
@@ -255,10 +265,18 @@ export class SupervisorService {
     }
   }
 
-  private tryCacheStore(request: AgentRequest, response: AgentResponse): void {
+  private tryCacheStore(request: AgentRequest, response: AgentResponse, toolName?: string): void {
     if (!this.cache) return;
 
     if (response.screenType === 'confirmation') {
+      if (toolName) {
+        const impactedScreens = SupervisorService.CONFIRMATION_CACHE_INVALIDATION[toolName] ?? [];
+        for (const screenType of impactedScreens) {
+          this.cache.invalidate(request.userId, screenType);
+        }
+        return;
+      }
+
       this.cache.invalidateAll(request.userId);
       return;
     }
@@ -298,7 +316,7 @@ export class SupervisorService {
     request: AgentRequest,
     context: IterationContext,
     iteration: number,
-  ): Promise<AgentResponse | null> {
+  ): Promise<IterationResult | null> {
     const iterStart = Date.now();
     const llmResponse = await this.callLlm(context.messages);
     const toolCall = llmResponse.message?.tool_calls?.[0];
@@ -346,23 +364,23 @@ export class SupervisorService {
     iteration: number,
     iterStart: number,
     llmResponse: LlmChatResponse,
-  ): Promise<AgentResponse | null> {
+  ): Promise<IterationResult | null> {
     if (context.primaryResult) {
       this.logger?.info({
         screenType: context.primaryResult.screenType,
         iterations: iteration + 1,
         duration: Date.now() - iterStart,
       }, 'Supervisor completed with primary result');
-      return this.buildResponse(context.primaryResult);
+      return { response: this.buildResponse(context.primaryResult) };
     }
 
     if (llmResponse.message.content) {
       this.logger?.info({ iterations: iteration + 1 }, 'Supervisor returned unknown (LLM text response)');
-      return this.buildUnknownResponse(llmResponse.message.content);
+      return { response: this.buildUnknownResponse(llmResponse.message.content) };
     }
 
     this.logger?.info({ iterations: iteration + 1 }, 'Supervisor returned unknown (no tool call, no content)');
-    return this.buildUnknownResponse();
+    return { response: this.buildUnknownResponse() };
   }
 
   private async handleToolCall(
@@ -371,7 +389,7 @@ export class SupervisorService {
     iteration: number,
     iterStart: number,
     toolCall: { id: string; type: 'function'; function: { name: string; arguments: string } },
-  ): Promise<AgentResponse | null> {
+  ): Promise<IterationResult | null> {
     const validationError = this.validateToolCallWithError(toolCall);
     if (validationError) {
       this.pushErrorToMessages(context.messages, toolCall, validationError);
@@ -401,7 +419,7 @@ export class SupervisorService {
         iteration,
         err: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
       }, 'Sub-agent execution failed');
-      return this.buildUnknownResponse('Service temporarily unavailable. Please try again.');
+      return { response: this.buildUnknownResponse('Service temporarily unavailable. Please try again.') };
     }
 
     context.primaryResult = {
@@ -425,7 +443,10 @@ export class SupervisorService {
         toolName: toolResult.toolName,
         iterations: iteration + 1,
       }, 'Supervisor completed — returning single screen');
-      return this.buildResponse(context.primaryResult);
+      return {
+        response: this.buildResponse(context.primaryResult),
+        toolName: toolResult.toolName,
+      };
     }
 
     return null;

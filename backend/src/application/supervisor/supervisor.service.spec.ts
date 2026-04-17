@@ -490,12 +490,14 @@ describe('SupervisorService', () => {
       expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
     });
 
-    it('invalidates cache after confirmation screen', async () => {
-      // Prime balance cache
+    it('invalidates only impacted screens after confirmation screen', async () => {
+      // Prime balance and support caches
       (mockLlm.chatCompletion as jest.Mock)
-        .mockResolvedValueOnce(mockToolCall('check_balance'));
+        .mockResolvedValueOnce(mockToolCall('check_balance'))
+        .mockResolvedValueOnce(mockToolCall('get_support'));
       await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
-      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(1);
+      await collectResult(cachedService.processRequest(makeRequest({ prompt: 'I need support' })));
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
 
       // Simulate a confirmation (purchase_bundle) response
       const confirmAgent: SubAgentPort = {
@@ -513,10 +515,16 @@ describe('SupervisorService', () => {
       // Balance cache should be invalidated — next balance query hits LLM
       (mockLlm.chatCompletion as jest.Mock)
         .mockResolvedValueOnce(mockToolCall('check_balance'));
-      const result = await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
-      expect(result.screenType).toBe('balance');
+      const balanceResult = await collectResult(cachedService.processRequest(makeRequest({ prompt: 'Show my balance' })));
+      expect(balanceResult.screenType).toBe('balance');
       // LLM was called again for balance (cache was invalidated)
-      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(3);
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(4);
+
+      // Support cache should remain available (purchase does not invalidate support)
+      const supportResult = await collectResult(cachedService.processRequest(makeRequest({ prompt: 'I need support' })));
+      expect(supportResult.screenType).toBe('support');
+      expect(supportResult.processingSteps[0].label).toBe('Retrieved from cache');
+      expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(4);
     });
 
     it('returns null from cache after TTL expiry', async () => {
