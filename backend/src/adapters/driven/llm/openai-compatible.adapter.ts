@@ -23,6 +23,29 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
     temperature?: number;
     max_tokens?: number;
   }): Promise<LlmChatResponse> {
+    try {
+      return await this.requestOnce(params);
+    } catch (error) {
+      if (!this.isTransientError(error)) {
+        throw error;
+      }
+
+      this.logger?.warn({
+        err: error instanceof Error ? error.message : String(error),
+      }, 'LLM transient error, retrying once');
+      await this.delay(1000);
+      return this.requestOnce(params);
+    }
+  }
+
+  private async requestOnce(params: {
+    model: string;
+    messages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>;
+    tools?: import('../../../domain/ports/llm.port').LlmToolDefinition[];
+    tool_choice?: string;
+    temperature?: number;
+    max_tokens?: number;
+  }): Promise<LlmChatResponse> {
     const url = `${this.baseUrl}/chat/completions`;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (this.apiKey) {
@@ -90,5 +113,23 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
       message: choice.message,
       usage: raw.usage,
     };
+  }
+
+  private isTransientError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+
+    if (error.message.includes('timed out')) {
+      return true;
+    }
+
+    if (error.message.includes('network request failed')) {
+      return true;
+    }
+
+    return /LLM request failed: (502|503|504)\b/.test(error.message);
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 }

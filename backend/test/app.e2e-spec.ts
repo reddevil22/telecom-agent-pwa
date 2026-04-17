@@ -53,6 +53,33 @@ function postChat(app: INestApplication, userId = 'user-1') {
     .set('x-user-id', userId);
 }
 
+function postChatStream(app: INestApplication, userId = 'user-1') {
+  return request(app.getHttpServer())
+    .post('/api/agent/chat/stream')
+    .set('x-user-id', userId);
+}
+
+function parseSseEvents(raw: string): Array<{ event: string; data: unknown }> {
+  const chunks = raw
+    .split('\n\n')
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+
+  const events: Array<{ event: string; data: unknown }> = [];
+  for (const chunk of chunks) {
+    const lines = chunk.split('\n');
+    const eventLine = lines.find((line) => line.startsWith('event: '));
+    const dataLine = lines.find((line) => line.startsWith('data: '));
+    if (!eventLine || !dataLine) continue;
+
+    const event = eventLine.slice('event: '.length).trim();
+    const data = JSON.parse(dataLine.slice('data: '.length));
+    events.push({ event, data });
+  }
+
+  return events;
+}
+
 describe('App (e2e)', () => {
   let app: INestApplication;
   let mockLlm: { chatCompletion: jest.Mock };
@@ -114,6 +141,70 @@ describe('App (e2e)', () => {
     expect(res.body.suggestions).toBeInstanceOf(Array);
     expect(res.body.confidence).toBeGreaterThan(0);
     expect(res.body.processingSteps).toBeInstanceOf(Array);
+  });
+
+  it('POST /api/agent/chat/stream emits step events and final result', async () => {
+    mockLlm.chatCompletion
+      .mockResolvedValueOnce(mockToolCallResponse('check_balance'));
+
+    const res = await postChatStream(app)
+      .send(makeBody({ prompt: 'Show my balance' }))
+      .expect(201);
+
+    const events = parseSseEvents(res.text);
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.some((e) => e.event === 'step')).toBe(true);
+    expect(events.some((e) => e.event === 'result')).toBe(true);
+
+    const resultEvent = events.find((e) => e.event === 'result');
+    expect(resultEvent).toBeDefined();
+    expect((resultEvent?.data as { screenType: string }).screenType).toBe('balance');
+  });
+
+  it('POST /api/agent/chat/stream emits error event when processing fails', async () => {
+    mockLlm.chatCompletion.mockReset();
+    mockLlm.chatCompletion.mockRejectedValueOnce(new Error('LLM unavailable'));
+
+    const res = await postChatStream(app)
+      .send(makeBody({ prompt: 'xqz llm stream error probe', userId: 'llm-stream-error-user' }))
+      .expect(201);
+
+    const events = parseSseEvents(res.text);
+    const errorEvent = events.find((e) => e.event === 'result');
+    expect(errorEvent).toBeDefined();
+    expect((errorEvent?.data as { screenType: string }).screenType).toBe('unknown');
+  });
+
+  it('POST /api/agent/chat/stream supports tier-1 quick action while degraded', async () => {
+    mockLlm.chatCompletion.mockReset();
+
+    // Open circuit breaker with 3 LLM failures
+    mockLlm.chatCompletion.mockRejectedValue(new Error('LLM unavailable'));
+    for (let i = 0; i < 3; i++) {
+      await postChat(app)
+        .send(makeBody({ prompt: `xqz stream-breaker-open-${i}` }))
+        .expect(201);
+    }
+
+    const callsBefore = mockLlm.chatCompletion.mock.calls.length;
+    const res = await postChatStream(app)
+      .send(makeBody({ prompt: 'Show my balance' }))
+      .expect(201);
+
+    const events = parseSseEvents(res.text);
+    const resultEvent = events.find((e) => e.event === 'result');
+    expect(resultEvent).toBeDefined();
+    expect((resultEvent?.data as { screenType: string }).screenType).toBe('balance');
+    expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(callsBefore);
+
+    // Recover circuit breaker for test isolation
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+    mockLlm.chatCompletion.mockReset();
+    mockLlm.chatCompletion.mockResolvedValueOnce(await mockToolCallResponse('check_balance'));
+    await postChat(app)
+      .send(makeBody({ prompt: 'probe llm recovery for stream tests' }))
+      .expect(201);
+    nowSpy.mockRestore();
   });
 
   // ── Happy path: all screen types ──

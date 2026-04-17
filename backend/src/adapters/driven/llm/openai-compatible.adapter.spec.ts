@@ -156,7 +156,9 @@ describe('OpenAiCompatibleLlmAdapter', () => {
   it('throws descriptive timeout error when request exceeds timeout', async () => {
     const timeoutError = new Error('Operation timed out');
     timeoutError.name = 'TimeoutError';
-    mockFetch.mockRejectedValueOnce(timeoutError);
+    mockFetch
+      .mockRejectedValueOnce(timeoutError)
+      .mockRejectedValueOnce(timeoutError);
 
     await expect(
       adapter.chatCompletion({
@@ -185,5 +187,43 @@ describe('OpenAiCompatibleLlmAdapter', () => {
     const callArgs = mockFetch.mock.calls[0][1] as { body: string };
     const body = JSON.parse(callArgs.body);
     expect(body).toEqual(params);
+  });
+
+  it('retries once on transient HTTP failures and then succeeds', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        text: async () => 'Service Unavailable',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'ok-after-retry' } }] }),
+      });
+
+    const result = await adapter.chatCompletion({
+      model: 'test',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(result.message.content).toBe('ok-after-retry');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry on non-transient HTTP failures', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () => 'Bad Request',
+    });
+
+    await expect(
+      adapter.chatCompletion({
+        model: 'test',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    ).rejects.toThrow('LLM request failed: 400');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });

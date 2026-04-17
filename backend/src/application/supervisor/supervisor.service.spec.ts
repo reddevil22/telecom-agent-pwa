@@ -108,6 +108,33 @@ describe('SupervisorService', () => {
     service.registerAgent('get_support', supportAgent);
   });
 
+  it('temporarily disables a tool after repeated sub-agent failures', async () => {
+    const failingAgent: SubAgentPort = {
+      handle: jest.fn().mockRejectedValue(new Error('BFF down')),
+    } as unknown as SubAgentPort;
+
+    service.registerAgent('check_balance', failingAgent);
+
+    (mockLlm.chatCompletion as jest.Mock)
+      .mockResolvedValueOnce(mockToolCall('check_balance'))
+      .mockResolvedValueOnce(mockToolCall('check_balance'))
+      .mockResolvedValueOnce(mockToolCall('check_balance'))
+      .mockResolvedValueOnce(mockToolCall('check_balance'));
+
+    const first = await collectResult(service.processRequest(makeRequest()));
+    const second = await collectResult(service.processRequest(makeRequest()));
+    const third = await collectResult(service.processRequest(makeRequest()));
+    const fourth = await collectResult(service.processRequest(makeRequest()));
+
+    expect(first.screenType).toBe('unknown');
+    expect(second.screenType).toBe('unknown');
+    expect(third.screenType).toBe('unknown');
+    expect(fourth.screenType).toBe('unknown');
+
+    expect(failingAgent.handle).toHaveBeenCalledTimes(3);
+    expect(fourth.replyText).toContain('temporarily unavailable');
+  });
+
   // ── Single-shot happy path (loop exits when LLM gives no second tool call) ──
 
   it('routes check_balance tool call to balance sub-agent', async () => {

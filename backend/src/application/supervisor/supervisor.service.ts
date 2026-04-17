@@ -81,6 +81,8 @@ export class SupervisorService {
   private readonly intentRouter: IntentRouterService | null;
   private readonly circuitBreaker: CircuitBreakerService | null;
   private readonly intentKeywords: IntentKeywordMap;
+  private readonly toolFailureCounts = new Map<string, number>();
+  private readonly disabledToolsUntil = new Map<string, number>();
 
   constructor(
     private readonly llm: LlmPort,
@@ -194,6 +196,13 @@ export class SupervisorService {
     const subAgent = this.toolResolver.resolve(resolution.toolName);
     if (!subAgent) return;
 
+    if (this.isToolTemporarilyDisabled(request.userId, resolution.toolName)) {
+      this.logger?.warn({ toolName: resolution.toolName, userId: request.userId }, 'Intent-routed tool is temporarily disabled');
+      yield { label: getStepLabel(resolution.toolName), status: 'error' };
+      yield this.buildUnknownResponse('This capability is temporarily unavailable. Please try again shortly.');
+      return;
+    }
+
     const conversationId = this.initializeConversation(request);
 
     yield { label: getStepLabel(resolution.toolName), status: 'active' };
@@ -204,7 +213,9 @@ export class SupervisorService {
       const result = await subAgent.handle(request.userId, resolution.args);
       screenData = result.screenData;
       processingSteps = result.processingSteps;
+      this.recordToolSuccess(request.userId, resolution.toolName);
     } catch (error) {
+      this.recordToolFailure(request.userId, resolution.toolName);
       this.logger?.error({
         toolName: resolution.toolName,
         err: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
@@ -318,7 +329,7 @@ export class SupervisorService {
     iteration: number,
   ): Promise<IterationResult | null> {
     const iterStart = Date.now();
-    const llmResponse = await this.callLlm(context.messages);
+    const llmResponse = await this.callLlm(context.messages, request.userId);
     const toolCall = llmResponse.message?.tool_calls?.[0];
 
     this.checkForInstructionLeak(iteration, llmResponse, toolCall);
@@ -330,7 +341,7 @@ export class SupervisorService {
     return await this.handleToolCall(request, context, iteration, iterStart, toolCall);
   }
 
-  private async callLlm(messages: LoopMessage[]): Promise<LlmChatResponse> {
+  private async callLlm(messages: LoopMessage[], userId: string): Promise<LlmChatResponse> {
     try {
       return await this.llm.chatCompletion({
         model: this.modelName,
@@ -339,7 +350,7 @@ export class SupervisorService {
           content: m.content,
           ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
         })),
-        tools: TOOL_DEFINITIONS,
+        tools: this.getEnabledToolDefinitions(userId),
         tool_choice: 'auto',
         temperature: this.temperature,
         max_tokens: this.maxTokens,
@@ -396,6 +407,13 @@ export class SupervisorService {
       return null;
     }
 
+    if (this.isToolTemporarilyDisabled(request.userId, toolCall.function.name)) {
+      this.logger?.warn({ toolName: toolCall.function.name, userId: request.userId }, 'Tool call blocked because tool is temporarily disabled');
+      return {
+        response: this.buildUnknownResponse('This capability is temporarily unavailable. Please try again shortly.'),
+      };
+    }
+
     const screenType = this.resolveScreenType(toolCall);
     if (!screenType) {
       this.logger?.warn({ toolName: toolCall.function.name, iteration }, 'Unknown tool mapping');
@@ -413,7 +431,9 @@ export class SupervisorService {
     let toolResult: ToolExecutionResult;
     try {
       toolResult = await this.executeSubAgent(request, subAgent, toolCall, screenType);
+      this.recordToolSuccess(request.userId, toolCall.function.name);
     } catch (error) {
+      this.recordToolFailure(request.userId, toolCall.function.name);
       this.logger?.error({
         toolName: toolCall.function.name,
         iteration,
@@ -626,5 +646,51 @@ export class SupervisorService {
     }
 
     return messages;
+  }
+
+  private getEnabledToolDefinitions(userId: string) {
+    return TOOL_DEFINITIONS.filter((tool) => !this.isToolTemporarilyDisabled(userId, tool.function.name));
+  }
+
+  private isToolTemporarilyDisabled(userId: string, toolName: string): boolean {
+    const key = this.toolKey(userId, toolName);
+    const disabledUntil = this.disabledToolsUntil.get(key);
+    if (!disabledUntil) return false;
+
+    if (disabledUntil <= Date.now()) {
+      this.disabledToolsUntil.delete(key);
+      return false;
+    }
+
+    return true;
+  }
+
+  private recordToolFailure(userId: string, toolName: string): void {
+    const key = this.toolKey(userId, toolName);
+    const current = this.toolFailureCounts.get(key) ?? 0;
+    const next = current + 1;
+
+    if (next >= SECURITY_LIMITS.SUB_AGENT_FAILURE_THRESHOLD) {
+      this.toolFailureCounts.delete(key);
+      this.disabledToolsUntil.set(key, Date.now() + SECURITY_LIMITS.SUB_AGENT_DISABLE_MS);
+      this.logger?.warn({
+        toolName,
+        userId,
+        disabledForMs: SECURITY_LIMITS.SUB_AGENT_DISABLE_MS,
+      }, 'Temporarily disabling tool after repeated sub-agent failures');
+      return;
+    }
+
+    this.toolFailureCounts.set(key, next);
+  }
+
+  private recordToolSuccess(userId: string, toolName: string): void {
+    const key = this.toolKey(userId, toolName);
+    this.toolFailureCounts.delete(key);
+    this.disabledToolsUntil.delete(key);
+  }
+
+  private toolKey(userId: string, toolName: string): string {
+    return `${userId}:${toolName}`;
   }
 }
