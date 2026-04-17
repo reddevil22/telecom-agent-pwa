@@ -24,6 +24,7 @@ import {
   INTENT_CACHE_PORT,
   METRICS_PORT,
   RATE_LIMITER_PORT,
+  INTENT_ROUTING_CONFIG,
 } from "./domain/tokens";
 import type { LlmPort } from "./domain/ports/llm.port";
 import type {
@@ -52,7 +53,6 @@ import { SimpleMetricsAdapter } from "./infrastructure/metrics/simple-metrics.ad
 import { InMemoryRateLimiterAdapter } from "./infrastructure/rate-limiter/in-memory-rate-limiter.adapter";
 
 type IntentRoutingConfig = ReturnType<typeof loadIntentRoutingConfig>;
-const INTENT_ROUTING_CONFIG = Symbol("INTENT_ROUTING_CONFIG");
 
 @Module({
   imports: [

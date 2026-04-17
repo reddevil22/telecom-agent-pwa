@@ -20,7 +20,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply(CorrelationIdMiddleware)
-      .forRoutes('agent/chat');
+      .forRoutes('*');
     consumer
       .apply(AuthMiddleware)
       .forRoutes('*');

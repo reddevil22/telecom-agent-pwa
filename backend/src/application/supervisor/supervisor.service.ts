@@ -33,6 +33,7 @@ import {
 } from "../../domain/types/intent";
 import { AgentErrorCode } from "../../domain/types/errors";
 import { ContextManagerService } from "./context-manager.service";
+import { ToolDegradationService } from "./tool-degradation.service";
 
 class LlmCallError extends Error {
   constructor(message: string) {
@@ -130,9 +131,8 @@ export class SupervisorService {
   private readonly circuitBreaker: CircuitBreakerService | null;
   private readonly metrics: MetricsPort | null;
   private readonly contextManager: ContextManagerService;
+  private readonly toolDegradation: ToolDegradationService;
   private readonly intentKeywords: IntentKeywordMap;
-  private readonly toolFailureCounts = new Map<string, number>();
-  private readonly disabledToolsUntil = new Map<string, number>();
 
   constructor(
     private readonly llm: LlmPort,
@@ -147,6 +147,7 @@ export class SupervisorService {
     intentKeywords: IntentKeywordMap = INTENT_KEYWORDS,
     metrics?: MetricsPort,
     contextManager?: ContextManagerService,
+    toolDegradation?: ToolDegradationService,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
@@ -157,6 +158,9 @@ export class SupervisorService {
     this.contextManager =
       contextManager ??
       new ContextManagerService(this.llm, this.modelName, this.logger);
+    this.toolDegradation =
+      toolDegradation ??
+      new ToolDegradationService(this.logger, this.metrics);
     this.intentKeywords = intentKeywords;
     this.logger?.setContext(SupervisorService.name);
   }
@@ -295,7 +299,12 @@ export class SupervisorService {
     const subAgent = this.toolResolver.resolve(resolution.toolName);
     if (!subAgent) return;
 
-    if (this.isToolTemporarilyDisabled(request.userId, resolution.toolName)) {
+    if (
+      this.toolDegradation.isToolTemporarilyDisabled(
+        request.userId,
+        resolution.toolName,
+      )
+    ) {
       this.metrics?.recordToolBlocked(resolution.toolName);
       this.logger?.warn(
         { toolName: resolution.toolName, userId: request.userId },
@@ -320,14 +329,14 @@ export class SupervisorService {
       const result = await subAgent.handle(request.userId, resolution.args);
       screenData = result.screenData;
       processingSteps = result.processingSteps;
-      this.recordToolSuccess(request.userId, resolution.toolName);
+      this.toolDegradation.recordToolSuccess(request.userId, resolution.toolName);
       this.metrics?.recordToolCall(
         resolution.toolName,
         true,
         Date.now() - toolStart,
       );
     } catch (error) {
-      this.recordToolFailure(request.userId, resolution.toolName);
+      this.toolDegradation.recordToolFailure(request.userId, resolution.toolName);
       this.metrics?.recordToolCall(
         resolution.toolName,
         false,
@@ -616,7 +625,10 @@ export class SupervisorService {
     }
 
     if (
-      this.isToolTemporarilyDisabled(request.userId, toolCall.function.name)
+      this.toolDegradation.isToolTemporarilyDisabled(
+        request.userId,
+        toolCall.function.name,
+      )
     ) {
       this.metrics?.recordToolBlocked(toolCall.function.name);
       this.logger?.warn(
@@ -668,14 +680,14 @@ export class SupervisorService {
         toolCall,
         screenType,
       );
-      this.recordToolSuccess(request.userId, toolCall.function.name);
+      this.toolDegradation.recordToolSuccess(request.userId, toolCall.function.name);
       this.metrics?.recordToolCall(
         toolCall.function.name,
         true,
         Date.now() - toolStart,
       );
     } catch (error) {
-      this.recordToolFailure(request.userId, toolCall.function.name);
+      this.toolDegradation.recordToolFailure(request.userId, toolCall.function.name);
       this.metrics?.recordToolCall(
         toolCall.function.name,
         false,
@@ -942,58 +954,9 @@ export class SupervisorService {
   }
 
   private getEnabledToolDefinitions(userId: string) {
-    return TOOL_DEFINITIONS.filter(
-      (tool) => !this.isToolTemporarilyDisabled(userId, tool.function.name),
+    return this.toolDegradation.getEnabledToolDefinitions(
+      userId,
+      TOOL_DEFINITIONS,
     );
-  }
-
-  private isToolTemporarilyDisabled(userId: string, toolName: string): boolean {
-    const key = this.toolKey(userId, toolName);
-    const disabledUntil = this.disabledToolsUntil.get(key);
-    if (!disabledUntil) return false;
-
-    if (disabledUntil <= Date.now()) {
-      this.disabledToolsUntil.delete(key);
-      this.metrics?.recordToolRecovered(toolName);
-      return false;
-    }
-
-    return true;
-  }
-
-  private recordToolFailure(userId: string, toolName: string): void {
-    const key = this.toolKey(userId, toolName);
-    const current = this.toolFailureCounts.get(key) ?? 0;
-    const next = current + 1;
-
-    if (next >= SECURITY_LIMITS.SUB_AGENT_FAILURE_THRESHOLD) {
-      this.toolFailureCounts.delete(key);
-      this.disabledToolsUntil.set(
-        key,
-        Date.now() + SECURITY_LIMITS.SUB_AGENT_DISABLE_MS,
-      );
-      this.metrics?.recordToolTemporarilyDisabled(toolName);
-      this.logger?.warn(
-        {
-          toolName,
-          userId,
-          disabledForMs: SECURITY_LIMITS.SUB_AGENT_DISABLE_MS,
-        },
-        "Temporarily disabling tool after repeated sub-agent failures",
-      );
-      return;
-    }
-
-    this.toolFailureCounts.set(key, next);
-  }
-
-  private recordToolSuccess(userId: string, toolName: string): void {
-    const key = this.toolKey(userId, toolName);
-    this.toolFailureCounts.delete(key);
-    this.disabledToolsUntil.delete(key);
-  }
-
-  private toolKey(userId: string, toolName: string): string {
-    return `${userId}:${toolName}`;
   }
 }

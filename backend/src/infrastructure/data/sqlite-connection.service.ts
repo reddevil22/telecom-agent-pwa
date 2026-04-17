@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
@@ -8,8 +8,22 @@ import { up as runMigration003 } from './migrations/003_add_bundle_detail_screen
 import { up as runMigration004 } from './migrations/004_mock_telco';
 import { up as runMigration005 } from './migrations/005_add_account_screen_type';
 
+type Migration = {
+  id: string;
+  up: (db: Database.Database) => void;
+};
+
+const MIGRATIONS: Migration[] = [
+  { id: '001_initial', up: runMigration001 },
+  { id: '002_add_confirmation_screen_type', up: runMigration002 },
+  { id: '003_add_bundle_detail_screen_type', up: runMigration003 },
+  { id: '004_mock_telco', up: runMigration004 },
+  { id: '005_add_account_screen_type', up: runMigration005 },
+];
+
 @Injectable()
 export class SqliteConnectionService implements OnModuleDestroy {
+  private readonly logger = new Logger(SqliteConnectionService.name);
   private readonly db: Database.Database;
   private readonly dbPath: string;
 
@@ -43,62 +57,23 @@ export class SqliteConnectionService implements OnModuleDestroy {
 
       const appliedIds = new Set(applied.map((r) => r.id));
 
-      if (!appliedIds.has('001_initial')) {
-        const transaction = this.db.transaction(() => {
-          runMigration001(this.db);
-          this.db
-            .prepare('INSERT INTO _migrations (id) VALUES (?)')
-            .run('001_initial');
-        });
-        transaction();
-        console.log('[SQLite] Applied migration: 001_initial');
-      }
+      for (const migration of MIGRATIONS) {
+        if (appliedIds.has(migration.id)) {
+          continue;
+        }
 
-      if (!appliedIds.has('002_add_confirmation_screen_type')) {
         const transaction = this.db.transaction(() => {
-          runMigration002(this.db);
+          migration.up(this.db);
           this.db
             .prepare('INSERT INTO _migrations (id) VALUES (?)')
-            .run('002_add_confirmation_screen_type');
+            .run(migration.id);
         });
-        transaction();
-        console.log('[SQLite] Applied migration: 002_add_confirmation_screen_type');
-      }
 
-      if (!appliedIds.has('003_add_bundle_detail_screen_type')) {
-        const transaction = this.db.transaction(() => {
-          runMigration003(this.db);
-          this.db
-            .prepare('INSERT INTO _migrations (id) VALUES (?)')
-            .run('003_add_bundle_detail_screen_type');
-        });
         transaction();
-        console.log('[SQLite] Applied migration: 003_add_bundle_detail_screen_type');
-      }
-
-      if (!appliedIds.has('004_mock_telco')) {
-        const transaction = this.db.transaction(() => {
-          runMigration004(this.db);
-          this.db
-            .prepare('INSERT INTO _migrations (id) VALUES (?)')
-            .run('004_mock_telco');
-        });
-        transaction();
-        console.log('[SQLite] Applied migration: 004_mock_telco');
-      }
-
-      if (!appliedIds.has('005_add_account_screen_type')) {
-        const transaction = this.db.transaction(() => {
-          runMigration005(this.db);
-          this.db
-            .prepare('INSERT INTO _migrations (id) VALUES (?)')
-            .run('005_add_account_screen_type');
-        });
-        transaction();
-        console.log('[SQLite] Applied migration: 005_add_account_screen_type');
+        this.logger.log(`[SQLite] Applied migration: ${migration.id}`);
       }
     } catch (error) {
-      console.error('[SQLite] Migration failed:', error);
+      this.logger.error('[SQLite] Migration failed', (error as Error).stack);
       throw error;
     }
   }

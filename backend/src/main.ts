@@ -9,8 +9,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
 
+  const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
-  app.enableCors({ origin: ['http://localhost:5173', 'http://localhost:3000'] });
+  app.enableCors({ origin: corsOrigins });
   app.setGlobalPrefix('api');
 
   // Resolve request-scoped PinoLogger for global interceptor and filter

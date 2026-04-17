@@ -17,6 +17,7 @@ export class InMemoryRateLimiterAdapter
       () => this.cleanup(),
       SECURITY_LIMITS.RATE_LIMIT_CLEANUP_INTERVAL_MS,
     );
+    this.cleanupTimer.unref();
   }
 
   onModuleDestroy(): void {

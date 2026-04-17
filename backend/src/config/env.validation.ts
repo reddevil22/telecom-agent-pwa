@@ -18,6 +18,10 @@ export const envValidationSchema = {
   DASHSCOPE_API_KEY: { type: "string", default: "" },
   DASHSCOPE_MODEL_NAME: { type: "string", default: "qwen3-coder-next" },
   PORT: { type: "number", default: 3001 },
+  CORS_ORIGINS: {
+    type: "string",
+    default: "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
+  },
   NODE_ENV: { type: "string", default: "development" },
   LOG_LEVEL: { type: "string", default: "info" },
   TELCO_SIMULATION_INTERVAL_MS: { type: "number", default: 60000 },

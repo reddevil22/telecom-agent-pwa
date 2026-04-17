@@ -60,7 +60,7 @@ backend/src/
 │
 ├── config/                  # ConfigModule, env validation, intent-routing config loader
 ├── app.agent-module.ts      # Wires ports, adapters, sub-agents, IntentRouter, CircuitBreaker
-├── app.module.ts            # Root: ConfigModule + AgentModule + SqliteDataModule + JsonDataModule
+├── app.module.ts            # Root: ConfigModule + AgentModule + SqliteDataModule
 └── main.ts                  # Bootstrap: ValidationPipe (whitelist+forbid), CORS, /api prefix
 ```
 
@@ -91,7 +91,7 @@ src/
 │   ├── agentService.ts     # REST + SSE streaming to backend
 │   ├── llmStatusService.ts # Polls /api/agent/status every 15s
 │   ├── historyService.ts   # Session persistence (localStorage + API)
-│   └── intentClassifier.ts # Client-side intent classification
+│   └── userSessionService.ts # User/session context manager
 ├── theme/
 │   ├── tokens.css          # Design tokens (colors, spacing, typography)
 │   └── brands/default.css  # Brand overrides

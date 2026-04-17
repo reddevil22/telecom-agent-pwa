@@ -1,5 +1,0 @@
-{
-  "user-1": { "name": "Alice Johnson", "plan": "Value Plus", "currency": "USD" },
-  "user-2": { "name": "Bob Smith", "plan": "Starter Pack", "currency": "USD" },
-  "user-3": { "name": "Carol Davis", "plan": "Unlimited Pro", "currency": "USD" }
-}
