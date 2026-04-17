@@ -1,6 +1,7 @@
 import { RateLimitGuard } from './rate-limit.guard';
 import { SECURITY_LIMITS } from '../../../../domain/constants/security-constants';
 import { ExecutionContext, HttpException } from '@nestjs/common';
+import { InMemoryRateLimiterAdapter } from '../../../../infrastructure/rate-limiter/in-memory-rate-limiter.adapter';
 
 function makeContext(userId?: string, ip = '127.0.0.1'): ExecutionContext {
   return {
@@ -15,95 +16,85 @@ function makeContext(userId?: string, ip = '127.0.0.1'): ExecutionContext {
 
 describe('RateLimitGuard', () => {
   let guard: RateLimitGuard;
+  let limiter: InMemoryRateLimiterAdapter;
 
   beforeEach(() => {
-    guard = new RateLimitGuard();
-    // Prevent cleanup timer from keeping process alive
-    // @ts-expect-error accessing private for cleanup
-    if (guard.cleanupTimer) clearInterval(guard.cleanupTimer);
+    limiter = new InMemoryRateLimiterAdapter();
+    guard = new RateLimitGuard(limiter);
   });
 
-  it('allows request when no userId is provided (IP fallback)', () => {
+  afterEach(() => {
+    limiter.onModuleDestroy();
+    jest.restoreAllMocks();
+  });
+
+  it('allows request when no userId is provided (IP fallback)', async () => {
     const ctx = makeContext();
-    expect(guard.canActivate(ctx)).toBe(true);
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
-  it('allows first request for a user', () => {
+  it('allows first request for a user', async () => {
     const ctx = makeContext('user-1');
-    expect(guard.canActivate(ctx)).toBe(true);
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
-  it('allows requests up to the limit', () => {
+  it('allows requests up to the limit', async () => {
     const ctx = makeContext('user-1');
     for (let i = 0; i < SECURITY_LIMITS.RATE_LIMIT_MAX_REQUESTS; i++) {
-      expect(guard.canActivate(ctx)).toBe(true);
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
     }
   });
 
-  it('blocks requests exceeding the limit', () => {
+  it('blocks requests exceeding the limit', async () => {
     const ctx = makeContext('user-1');
     for (let i = 0; i < SECURITY_LIMITS.RATE_LIMIT_MAX_REQUESTS; i++) {
-      guard.canActivate(ctx);
+      await guard.canActivate(ctx);
     }
-    expect(() => guard.canActivate(ctx)).toThrow(HttpException);
+    await expect(guard.canActivate(ctx)).rejects.toThrow(HttpException);
   });
 
-  it('tracks different users independently', () => {
+  it('tracks different users independently', async () => {
     const ctx1 = makeContext('user-1');
     const ctx2 = makeContext('user-2');
 
     for (let i = 0; i < SECURITY_LIMITS.RATE_LIMIT_MAX_REQUESTS; i++) {
-      guard.canActivate(ctx1);
+      await guard.canActivate(ctx1);
     }
 
     // user-2 should still be allowed
-    expect(guard.canActivate(ctx2)).toBe(true);
+    await expect(guard.canActivate(ctx2)).resolves.toBe(true);
   });
 
-  it('tracks different IP addresses independently when userId is missing', () => {
+  it('tracks different IP addresses independently when userId is missing', async () => {
     const ctx1 = makeContext(undefined, '10.0.0.1');
     const ctx2 = makeContext(undefined, '10.0.0.2');
 
     for (let i = 0; i < SECURITY_LIMITS.RATE_LIMIT_MAX_REQUESTS; i++) {
-      guard.canActivate(ctx1);
+      await guard.canActivate(ctx1);
     }
 
-    expect(guard.canActivate(ctx2)).toBe(true);
+    await expect(guard.canActivate(ctx2)).resolves.toBe(true);
   });
 
-  it('prunes old timestamps outside the window', () => {
+  it('prunes old timestamps outside the window', async () => {
     const ctx = makeContext('user-1');
+    const now = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(now);
 
     // Fill up to limit
     for (let i = 0; i < SECURITY_LIMITS.RATE_LIMIT_MAX_REQUESTS; i++) {
-      guard.canActivate(ctx);
+      await guard.canActivate(ctx);
     }
 
     // Should be blocked now
-    expect(() => guard.canActivate(ctx)).toThrow(HttpException);
+    await expect(guard.canActivate(ctx)).rejects.toThrow(HttpException);
 
-    // Manually expire timestamps by accessing internal state
-    // @ts-expect-error accessing private for test
-    const record = guard.requests.get('user:user-1')!;
-    record.timestamps = record.timestamps.map(() => Date.now() - SECURITY_LIMITS.RATE_LIMIT_WINDOW_MS - 1000);
+    // Move time outside rate-limit window
+    nowSpy.mockReturnValue(now + SECURITY_LIMITS.RATE_LIMIT_WINDOW_MS + 1000);
 
     // Should be allowed again after timestamps expired
-    expect(guard.canActivate(ctx)).toBe(true);
-  });
-
-  it('cleanup removes stale entries', () => {
-    const ctx = makeContext('old-user');
-    guard.canActivate(ctx);
-
-    // Expire the timestamp
-    // @ts-expect-error accessing private for test
-    const record = guard.requests.get('user:old-user')!;
-    record.timestamps = [Date.now() - SECURITY_LIMITS.RATE_LIMIT_WINDOW_MS - 1000];
-
-    // @ts-expect-error accessing private for test
-    guard.cleanup();
-
-    // @ts-expect-error accessing private for test
-    expect(guard.requests.has('user:old-user')).toBe(false);
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    nowSpy.mockRestore();
   });
 });

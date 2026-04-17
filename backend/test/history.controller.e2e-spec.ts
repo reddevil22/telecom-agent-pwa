@@ -3,13 +3,13 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { SqliteConversationDataMapper } from '../src/infrastructure/data/conversation-data.mapper';
-import { CONVERSATION_STORAGE_PORT } from '../src/domain/tokens';
-import { RateLimitGuard } from '../src/adapters/driving/rest/guards/rate-limit.guard';
+import { CONVERSATION_STORAGE_PORT, RATE_LIMITER_PORT } from '../src/domain/tokens';
+import type { RateLimiterPort } from '../src/domain/ports/rate-limiter.port';
 
 describe('HistoryController (e2e)', () => {
   let app: INestApplication;
   let storage: SqliteConversationDataMapper;
-  let rateLimitGuard: RateLimitGuard;
+  let rateLimiter: RateLimiterPort;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -21,7 +21,7 @@ describe('HistoryController (e2e)', () => {
     await app.init();
 
     storage = moduleFixture.get<SqliteConversationDataMapper>(CONVERSATION_STORAGE_PORT);
-    rateLimitGuard = moduleFixture.get<RateLimitGuard>(RateLimitGuard);
+    rateLimiter = moduleFixture.get<RateLimiterPort>(RATE_LIMITER_PORT);
   });
 
   afterAll(async () => {
@@ -32,7 +32,7 @@ describe('HistoryController (e2e)', () => {
     const db = (storage as any).db as import('better-sqlite3').Database;
     db.exec('DELETE FROM messages');
     db.exec('DELETE FROM conversations');
-    (rateLimitGuard as unknown as { requests: Map<string, unknown> }).requests.clear();
+    rateLimiter.reset?.();
   });
 
   describe('GET /history/sessions', () => {

@@ -24,7 +24,9 @@ export interface ConversationDocument {
 
 export const historyService = {
   async getSavedSessions(userId: string): Promise<SessionSummary[]> {
-    const res = await fetch(`/api/history/sessions?userId=${encodeURIComponent(userId)}`);
+    const res = await fetch(`/api/history/sessions?userId=${encodeURIComponent(userId)}`, {
+      headers: { 'x-user-id': userId },
+    });
     if (!res.ok) {
       throw new Error(`Failed to load sessions: ${res.status} ${res.statusText}`);
     }
@@ -36,29 +38,32 @@ export const historyService = {
     }));
   },
 
-  async loadSession(sessionId: string): Promise<ConversationMessage[]> {
-    const res = await fetch(`/api/history/session/${encodeURIComponent(sessionId)}`);
+  async loadSession(sessionId: string, userId: string): Promise<ConversationMessage[]> {
+    const res = await fetch(`/api/history/session/${encodeURIComponent(sessionId)}`, {
+      headers: { 'x-user-id': userId },
+    });
     if (!res.ok) throw new Error('Session not found');
     const conv: ConversationDocument = await res.json();
     return conv.messages;
   },
 
-  async deleteSession(sessionId: string): Promise<void> {
+  async deleteSession(sessionId: string, userId: string): Promise<void> {
     const res = await fetch(`/api/history/session/${encodeURIComponent(sessionId)}`, {
       method: 'DELETE',
+      headers: { 'x-user-id': userId },
     });
     if (!res.ok) throw new Error('Failed to delete session');
   },
 
-  getCurrentSessionId(): string | null {
-    return localStorage.getItem('currentSessionId');
+  getCurrentSessionId(userId: string): string | null {
+    return localStorage.getItem(`currentSessionId:${userId}`);
   },
 
-  setCurrentSessionId(sessionId: string): void {
-    localStorage.setItem('currentSessionId', sessionId);
+  setCurrentSessionId(sessionId: string, userId: string): void {
+    localStorage.setItem(`currentSessionId:${userId}`, sessionId);
   },
 
-  clearCurrentSession(): void {
-    localStorage.removeItem('currentSessionId');
+  clearCurrentSession(userId: string): void {
+    localStorage.removeItem(`currentSessionId:${userId}`);
   },
 };

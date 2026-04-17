@@ -3,9 +3,9 @@ import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { LLM_PORT } from '../src/domain/tokens';
+import { LLM_PORT, RATE_LIMITER_PORT } from '../src/domain/tokens';
 import type { LlmPort } from '../src/domain/ports/llm.port';
-import { RateLimitGuard } from '../src/adapters/driving/rest/guards/rate-limit.guard';
+import type { RateLimiterPort } from '../src/domain/ports/rate-limiter.port';
 
 function mockToolCallResponse(name: string): ReturnType<LlmPort['chatCompletion']> {
   return Promise.resolve({
@@ -83,7 +83,7 @@ function parseSseEvents(raw: string): Array<{ event: string; data: unknown }> {
 describe('App (e2e)', () => {
   let app: INestApplication;
   let mockLlm: { chatCompletion: jest.Mock };
-  let rateLimitGuard: RateLimitGuard;
+  let rateLimiter: RateLimiterPort;
 
   beforeAll(async () => {
     mockLlm = { chatCompletion: jest.fn() };
@@ -102,7 +102,7 @@ describe('App (e2e)', () => {
     app.setGlobalPrefix('api');
     await app.init();
 
-    rateLimitGuard = moduleFixture.get<RateLimitGuard>(RateLimitGuard);
+    rateLimiter = moduleFixture.get<RateLimiterPort>(RATE_LIMITER_PORT);
   });
 
   afterAll(async () => {
@@ -110,7 +110,7 @@ describe('App (e2e)', () => {
   });
 
   beforeEach(() => {
-    (rateLimitGuard as unknown as { requests: Map<string, unknown> }).requests.clear();
+    rateLimiter.reset?.();
   });
 
   // ── Health ──

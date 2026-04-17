@@ -14,6 +14,7 @@ import type { IntentRouterService } from '../../domain/services/intent-router.se
 import type { CircuitBreakerService } from '../../domain/services/circuit-breaker.service';
 import { INTENT_TOOL_MAP, TelecomIntent, TIER1_INTENTS, INTENT_KEYWORDS, type IntentKeywordMap } from '../../domain/types/intent';
 import { AgentErrorCode } from '../../domain/types/errors';
+import { ContextManagerService } from './context-manager.service';
 
 class LlmCallError extends Error {
   constructor(message: string) {
@@ -83,6 +84,7 @@ export class SupervisorService {
   private readonly intentRouter: IntentRouterService | null;
   private readonly circuitBreaker: CircuitBreakerService | null;
   private readonly metrics: MetricsPort | null;
+  private readonly contextManager: ContextManagerService;
   private readonly intentKeywords: IntentKeywordMap;
   private readonly toolFailureCounts = new Map<string, number>();
   private readonly disabledToolsUntil = new Map<string, number>();
@@ -99,6 +101,7 @@ export class SupervisorService {
     circuitBreaker?: CircuitBreakerService,
     intentKeywords: IntentKeywordMap = INTENT_KEYWORDS,
     metrics?: MetricsPort,
+    contextManager?: ContextManagerService,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
@@ -106,6 +109,7 @@ export class SupervisorService {
     this.intentRouter = intentRouter ?? null;
     this.circuitBreaker = circuitBreaker ?? null;
     this.metrics = metrics ?? null;
+    this.contextManager = contextManager ?? new ContextManagerService(this.llm, this.modelName, this.logger);
     this.intentKeywords = intentKeywords;
     this.logger?.setContext(SupervisorService.name);
   }
@@ -154,7 +158,7 @@ export class SupervisorService {
 
       const conversationId = this.initializeConversation(request);
       const context: IterationContext = {
-        messages: this.buildInitialMessages(request),
+        messages: await this.buildInitialMessages(request),
         primaryResult: null,
         conversationId,
       };
@@ -671,32 +675,12 @@ export class SupervisorService {
     };
   }
 
-  private buildInitialMessages(request: AgentRequest): LoopMessage[] {
-    const messages: LoopMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-    ];
-
-    const cappedHistory = request.conversationHistory.slice(-SECURITY_LIMITS.SUPERVISOR_HISTORY_CAP);
-
-    for (const msg of cappedHistory) {
-      messages.push({
-        role: msg.role === 'agent' ? 'assistant' : 'user',
-        content: msg.text,
-      });
-    }
-
-    messages.push({
-      role: 'user',
-      content: `<user_context>\nuserId: ${request.userId}\n</user_context>\n${request.prompt}`,
-    });
-
-    let totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
-    while (totalChars > SECURITY_LIMITS.TOTAL_CHARS_BUDGET && messages.length > 2) {
-      const removed = messages.splice(1, 1)[0];
-      totalChars -= removed.content.length;
-    }
-
-    return messages;
+  private async buildInitialMessages(request: AgentRequest): Promise<LoopMessage[]> {
+    const messages = await this.contextManager.buildMessages(request, SYSTEM_PROMPT);
+    return messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
   }
 
   private getEnabledToolDefinitions(userId: string) {

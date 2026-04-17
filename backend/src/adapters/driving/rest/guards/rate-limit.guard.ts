@@ -1,30 +1,14 @@
-import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable, OnModuleDestroy } from '@nestjs/common';
-import { SECURITY_LIMITS } from '../../../../domain/constants/security-constants';
-
-interface RequestRecord {
-  timestamps: number[];
-}
+import { CanActivate, ExecutionContext, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import type { RateLimiterPort } from '../../../../domain/ports/rate-limiter.port';
+import { RATE_LIMITER_PORT } from '../../../../domain/tokens';
 
 @Injectable()
-export class RateLimitGuard implements CanActivate, OnModuleDestroy {
-  private readonly requests = new Map<string, RequestRecord>();
-  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+export class RateLimitGuard implements CanActivate {
+  constructor(
+    @Inject(RATE_LIMITER_PORT) private readonly rateLimiter: RateLimiterPort,
+  ) {}
 
-  constructor() {
-    this.cleanupTimer = setInterval(
-      () => this.cleanup(),
-      SECURITY_LIMITS.RATE_LIMIT_CLEANUP_INTERVAL_MS,
-    );
-  }
-
-  onModuleDestroy(): void {
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = null;
-    }
-  }
-
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
       body?: { sessionId?: string };
       headers?: Record<string, string>;
@@ -37,23 +21,11 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
       return true;
     }
 
-    const now = Date.now();
-    const windowStart = now - SECURITY_LIMITS.RATE_LIMIT_WINDOW_MS;
-
-    let record = this.requests.get(key);
-    if (!record) {
-      record = { timestamps: [] };
-      this.requests.set(key, record);
-    }
-
-    // Prune timestamps outside the window
-    record.timestamps = record.timestamps.filter((ts) => ts > windowStart);
-
-    if (record.timestamps.length >= SECURITY_LIMITS.RATE_LIMIT_MAX_REQUESTS) {
+    const allowed = await this.rateLimiter.isAllowed(key, Date.now());
+    if (!allowed) {
       throw new HttpException('Too many requests', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    record.timestamps.push(now);
     return true;
   }
 
@@ -69,13 +41,4 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
     return request.ip ? `ip:${request.ip}` : null;
   }
 
-  private cleanup(): void {
-    const cutoff = Date.now() - SECURITY_LIMITS.RATE_LIMIT_WINDOW_MS;
-    for (const [key, record] of this.requests) {
-      record.timestamps = record.timestamps.filter((ts) => ts > cutoff);
-      if (record.timestamps.length === 0) {
-        this.requests.delete(key);
-      }
-    }
-  }
 }

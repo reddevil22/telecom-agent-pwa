@@ -10,13 +10,14 @@ import { BundlesBffModule } from './adapters/driven/bff/bundles/bundles-bff.modu
 import { UsageBffModule } from './adapters/driven/bff/usage/usage-bff.module';
 import { SupportBffModule } from './adapters/driven/bff/support/support-bff.module';
 import { SqliteDataModule } from './infrastructure/data/sqlite-data.module';
-import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, INTENT_CACHE_PORT, METRICS_PORT } from './domain/tokens';
+import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, INTENT_CACHE_PORT, METRICS_PORT, RATE_LIMITER_PORT } from './domain/tokens';
 import type { LlmPort } from './domain/ports/llm.port';
 import type { BalanceBffPort, BundlesBffPort, UsageBffPort, SupportBffPort } from './domain/ports/bff-ports';
 import type { ConversationStoragePort } from './domain/ports/conversation-storage.port';
 import type { ScreenCachePort } from './domain/ports/screen-cache.port';
 import type { IntentCachePort } from './domain/ports/intent-cache.port';
 import type { MetricsPort } from './domain/ports/metrics.port';
+import type { RateLimiterPort } from './domain/ports/rate-limiter.port';
 import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
 import { MockTelcoModule } from './infrastructure/telco/mock-telco.module';
 import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
@@ -29,6 +30,7 @@ import { registerBundleAgents } from './application/sub-agents/bundle-agents.pro
 import { registerSupportAgents } from './application/sub-agents/support-agents.provider';
 import { registerAccountAgents } from './application/sub-agents/account-agents.provider';
 import { SimpleMetricsAdapter } from './infrastructure/metrics/simple-metrics.adapter';
+import { InMemoryRateLimiterAdapter } from './infrastructure/rate-limiter/in-memory-rate-limiter.adapter';
 
 type IntentRoutingConfig = ReturnType<typeof loadIntentRoutingConfig>;
 const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
@@ -36,6 +38,7 @@ const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
 @Module({
   imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule, MockTelcoModule],
   controllers: [AgentController, HealthController, MetricsController],
+  exports: [RATE_LIMITER_PORT],
   providers: [
     {
       provide: INTENT_ROUTING_CONFIG,
@@ -54,6 +57,12 @@ const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
     {
       provide: METRICS_PORT,
       useFactory: (): MetricsPort => new SimpleMetricsAdapter(),
+    },
+    {
+      provide: RATE_LIMITER_PORT,
+      useFactory: (): RateLimiterPort => {
+        return new InMemoryRateLimiterAdapter();
+      },
     },
     {
       provide: IntentRouterService,

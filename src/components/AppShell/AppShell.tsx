@@ -15,6 +15,7 @@ import { DegradedBanner } from '../DegradedBanner/DegradedBanner';
 import { llmStatusService, type LlmStatus } from '../../services/llmStatusService';
 import { selectHasReceivedFirstResponse, selectProcessingSteps, selectState, selectConversationHistory } from '../../hooks/useSelectors';
 import { historyService } from '../../services/historyService';
+import { userSessionService } from '../../services/userSessionService';
 import styles from './AppShell.module.css';
 
 type Actor = ActorRefFrom<typeof orchestratorMachine>;
@@ -54,6 +55,8 @@ export function AppShell({ actor }: Props) {
   const hasReceivedFirstResponse = useSelector(actor, selectHasReceivedFirstResponse);
   const processingSteps = useSelector(actor, selectProcessingSteps);
   const conversationHistory = useSelector(actor, selectConversationHistory);
+  const currentUserId = useSelector(actor, (s) => s.context.userId);
+  const demoUsers = userSessionService.getDemoUsers();
   const isProcessing = state === 'processing';
   const isError = state === 'error';
   const hasMessages = conversationHistory.length > 0;
@@ -63,15 +66,14 @@ export function AppShell({ actor }: Props) {
 
   const loadSessions = useCallback(async () => {
     try {
-      const userId = 'user-1';
-      const loadedSessions = await historyService.getSavedSessions(userId);
+      const loadedSessions = await historyService.getSavedSessions(currentUserId);
       setSessions(loadedSessions);
       setSessionError(null);
     } catch (error) {
       console.error('Failed to load sessions:', error);
       setSessionError(error instanceof Error ? error.message : 'Failed to load sessions');
     }
-  }, []);
+  }, [currentUserId]);
 
   // Scroll to bottom when response appears and focus input
   useEffect(() => {
@@ -103,12 +105,12 @@ export function AppShell({ actor }: Props) {
         void loadSessions();
       });
     }
-  }, [activeTab, sessionId, loadSessions]);
+  }, [activeTab, sessionId, currentUserId, loadSessions]);
 
   const handleSelectSession = async (sessionId: string) => {
     try {
       actor.send({ type: 'LOAD_SESSION', sessionId });
-      historyService.setCurrentSessionId(sessionId);
+      historyService.setCurrentSessionId(sessionId, currentUserId);
       setActiveTab('chat');
     } catch (error) {
       console.error('Failed to load session:', error);
@@ -117,11 +119,18 @@ export function AppShell({ actor }: Props) {
 
   const handleDeleteSession = async (sessionId: string) => {
     try {
-      await historyService.deleteSession(sessionId);
+      await historyService.deleteSession(sessionId, currentUserId);
       setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
     } catch (error) {
       console.error('Failed to delete session:', error);
     }
+  };
+
+  const handleUserChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextUserId = event.target.value;
+    userSessionService.setSelectedUserId(nextUserId);
+    actor.send({ type: 'USER_CHANGED', userId: nextUserId });
+    setActiveTab('chat');
   };
 
   function handleTabKeyDown(e: React.KeyboardEvent) {
@@ -149,13 +158,30 @@ export function AppShell({ actor }: Props) {
           </div>
           <h1 className={styles.brandTitle}>Telecom Agent</h1>
         </div>
-        <button
-          className={styles.themeToggle}
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          {theme === 'light' ? '☾' : '☀'}
-        </button>
+        <div className={styles.headerControls}>
+          <label className={styles.userSelectorLabel}>
+            <span className={styles.userSelectorText}>Demo User</span>
+            <select
+              className={styles.userSelector}
+              value={currentUserId}
+              onChange={handleUserChange}
+              aria-label="Select demo user"
+            >
+              {demoUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name} - {user.plan}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className={styles.themeToggle}
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+          >
+            {theme === 'light' ? '☾' : '☀'}
+          </button>
+        </div>
       </header>
 
       <div className={styles.main}>

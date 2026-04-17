@@ -3,7 +3,10 @@ import type { AgentRequest, AgentResponse, ProcessingStep } from '../types/agent
 export async function invokeAgentService(request: AgentRequest): Promise<AgentResponse> {
   const res = await fetch('/api/agent/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-user-id': request.userId,
+    },
     body: JSON.stringify(request),
   });
 
@@ -22,7 +25,10 @@ export async function invokeAgentStream(
 ): Promise<AgentResponse> {
   const res = await fetch('/api/agent/chat/stream', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-user-id': request.userId,
+    },
     body: JSON.stringify(request),
   });
 

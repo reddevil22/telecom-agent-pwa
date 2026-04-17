@@ -38,6 +38,7 @@ export class MockTelcoService {
       process.env.TELCO_SIMULATION_INTERVAL_MS ?? '60000',
       10,
     );
+    this.ensureDemoUsers();
   }
 
   // ── Account & Balance ──
@@ -377,6 +378,168 @@ export class MockTelcoService {
     return this.db
       .prepare('SELECT question, answer FROM telco_faq')
       .all() as Array<{ question: string; answer: string }>;
+  }
+
+  private ensureDemoUsers(): void {
+    const now = new Date();
+    const cycleStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const cycleEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    const insertAccount = this.db.prepare(`
+      INSERT OR IGNORE INTO telco_accounts (
+        user_id, msisdn, name, balance, currency, plan_name, billing_cycle_start, billing_cycle_end, last_topup_at, last_simulated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const demoAccounts = [
+      {
+        userId: 'user-1',
+        msisdn: '+12025551234',
+        name: 'Alex Morgan',
+        balance: 50,
+        plan: 'Prepaid Basic',
+        lastTopUp: new Date(now.getTime() - 3 * 86400000).toISOString(),
+      },
+      {
+        userId: 'user-2',
+        msisdn: '+12025555678',
+        name: 'Jamie Chen',
+        balance: 18.75,
+        plan: 'Value Plus',
+        lastTopUp: new Date(now.getTime() - 6 * 86400000).toISOString(),
+      },
+      {
+        userId: 'user-3',
+        msisdn: '+12025559876',
+        name: 'Sam Patel',
+        balance: 92.4,
+        plan: 'Unlimited Pro',
+        lastTopUp: new Date(now.getTime() - 1 * 86400000).toISOString(),
+      },
+    ];
+
+    for (const account of demoAccounts) {
+      insertAccount.run(
+        account.userId,
+        account.msisdn,
+        account.name,
+        account.balance,
+        'USD',
+        account.plan,
+        cycleStart,
+        cycleEnd,
+        account.lastTopUp,
+        now.toISOString(),
+      );
+    }
+
+    this.ensureDemoSubscriptions(now);
+    this.ensureDemoTickets(now);
+  }
+
+  private ensureDemoSubscriptions(now: Date): void {
+    const getSubCount = this.db.prepare(
+      "SELECT COUNT(*) as c FROM telco_subscriptions WHERE user_id = ? AND status = 'active'",
+    );
+    const insertSub = this.db.prepare(`
+      INSERT INTO telco_subscriptions (
+        id, user_id, bundle_id, status, data_total_mb, data_used_mb,
+        minutes_total, minutes_used, sms_total, sms_used, activated_at, expires_at
+      ) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const day = 86400000;
+    const demoSubs = [
+      {
+        userId: 'user-2',
+        bundleId: 'b2',
+        dataTotalMb: 10 * 1024,
+        dataUsedMb: 3.2 * 1024,
+        minutesTotal: 500,
+        minutesUsed: 175,
+        smsTotal: 200,
+        smsUsed: 44,
+        activatedAt: new Date(now.getTime() - 11 * day),
+      },
+      {
+        userId: 'user-3',
+        bundleId: 'b3',
+        dataTotalMb: 50 * 1024,
+        dataUsedMb: 19.4 * 1024,
+        minutesTotal: -1,
+        minutesUsed: 0,
+        smsTotal: -1,
+        smsUsed: 0,
+        activatedAt: new Date(now.getTime() - 4 * day),
+      },
+    ];
+
+    for (const sub of demoSubs) {
+      const count = (getSubCount.get(sub.userId) as { c: number }).c;
+      if (count > 0) continue;
+
+      const activatedAt = sub.activatedAt.toISOString().split('T')[0];
+      const expiresAt = new Date(sub.activatedAt.getTime() + 30 * day).toISOString().split('T')[0];
+
+      insertSub.run(
+        `sub-${sub.userId}`,
+        sub.userId,
+        sub.bundleId,
+        sub.dataTotalMb,
+        sub.dataUsedMb,
+        sub.minutesTotal,
+        sub.minutesUsed,
+        sub.smsTotal,
+        sub.smsUsed,
+        activatedAt,
+        expiresAt,
+      );
+    }
+  }
+
+  private ensureDemoTickets(now: Date): void {
+    const getTicketCount = this.db.prepare('SELECT COUNT(*) as c FROM telco_tickets WHERE user_id = ?');
+    const insertTicket = this.db.prepare(`
+      INSERT INTO telco_tickets (id, user_id, status, subject, description, priority, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const demoTickets = [
+      {
+        id: 'TK-2001',
+        userId: 'user-2',
+        status: 'open',
+        subject: 'Unable to redeem weekend promo code',
+        description: 'Promo code validates in app but fails at checkout for weekend bundle.',
+        priority: 'medium',
+        createdAt: new Date(now.getTime() - 2 * 86400000).toISOString(),
+      },
+      {
+        id: 'TK-3001',
+        userId: 'user-3',
+        status: 'in_progress',
+        subject: 'Roaming calls dropping while traveling',
+        description: 'Calls in roaming region disconnect after around 30 seconds.',
+        priority: 'high',
+        createdAt: new Date(now.getTime() - 4 * 86400000).toISOString(),
+      },
+    ];
+
+    for (const ticket of demoTickets) {
+      const count = (getTicketCount.get(ticket.userId) as { c: number }).c;
+      if (count > 0) continue;
+
+      insertTicket.run(
+        ticket.id,
+        ticket.userId,
+        ticket.status,
+        ticket.subject,
+        ticket.description,
+        ticket.priority,
+        ticket.createdAt,
+        ticket.createdAt,
+      );
+    }
   }
 
   // ── Time-aware lazy simulation ──

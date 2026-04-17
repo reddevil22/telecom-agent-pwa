@@ -3,16 +3,18 @@ import type { AgentRequest, AgentResponse, ProcessingStep, ScreenData, ToolResul
 import type { ConversationMessage } from '../types';
 import { invokeAgentService, invokeAgentStream } from '../services/agentService';
 import { historyService } from '../services/historyService';
+import { userSessionService } from '../services/userSessionService';
 
-function generateSessionId(): string {
-  const existing = historyService.getCurrentSessionId();
+function generateSessionId(userId: string): string {
+  const existing = historyService.getCurrentSessionId(userId);
   if (existing) return existing;
   const newId = `session-${crypto.randomUUID()}`;
-  historyService.setCurrentSessionId(newId);
+  historyService.setCurrentSessionId(newId, userId);
   return newId;
 }
 
 export interface OrchestratorContext {
+  userId: string;
   conversationHistory: ConversationMessage[];
   currentScreenType: string | null;
   currentScreenData: ScreenData | null;
@@ -31,6 +33,7 @@ export type OrchestratorEvents =
   | { type: 'LOAD_SESSION'; sessionId: string }
   | { type: 'SESSION_LOADED'; messages: ConversationMessage[] }
   | { type: 'NEW_SESSION' }
+  | { type: 'USER_CHANGED'; userId: string }
   | { type: 'RESET' }
   | { type: 'xstate.done.actor.callAgent'; output: AgentResponse }
   | { type: 'xstate.error.actor.callAgent'; error: Error }
@@ -45,12 +48,12 @@ export const orchestratorMachine = setup({
   actors: {
     callAgent: fromPromise<
       AgentResponse,
-      { prompt: string; conversationHistory: ConversationMessage[]; sessionId: string; self: { send: (event: OrchestratorEvents) => void } | null }
+      { prompt: string; conversationHistory: ConversationMessage[]; sessionId: string; userId: string; self: { send: (event: OrchestratorEvents) => void } | null }
     >(async ({ input, self }) => {
       const request: AgentRequest = {
         prompt: input.prompt,
         sessionId: input.sessionId,
-        userId: 'user-1',
+        userId: input.userId,
         conversationHistory: input.conversationHistory,
         timestamp: Date.now(),
       };
@@ -70,9 +73,9 @@ export const orchestratorMachine = setup({
     }),
     loadSession: fromPromise<
       ConversationMessage[],
-      { sessionId: string }
+      { sessionId: string; userId: string }
     >(async ({ input }) => {
-      return historyService.loadSession(input.sessionId);
+      return historyService.loadSession(input.sessionId, input.userId);
     }),
   },
   actions: {
@@ -151,9 +154,35 @@ export const orchestratorMachine = setup({
     }),
     clearError: assign({ error: () => null }),
     resetForNewSession: assign({
-      sessionId: () => {
+      sessionId: ({ context }) => {
         const newId = `session-${crypto.randomUUID()}`;
-        historyService.setCurrentSessionId(newId);
+        historyService.setCurrentSessionId(newId, context.userId);
+        return newId;
+      },
+      conversationHistory: () => [],
+      currentScreenType: () => null,
+      currentScreenData: () => null,
+      currentSuggestions: () => [
+        'Show my balance',
+        'What bundles are available?',
+        'Check my usage',
+        'I need support',
+      ],
+      lastAgentReply: () => null,
+      processingSteps: () => [],
+      supplementaryResults: () => [],
+      hasReceivedFirstResponse: () => false,
+      error: () => null,
+    }),
+    switchUser: assign({
+      userId: ({ event, context }) => {
+        if (event.type !== 'USER_CHANGED') return context.userId;
+        return event.userId;
+      },
+      sessionId: ({ event, context }) => {
+        if (event.type !== 'USER_CHANGED') return context.sessionId;
+        const newId = `session-${crypto.randomUUID()}`;
+        historyService.setCurrentSessionId(newId, event.userId);
         return newId;
       },
       conversationHistory: () => [],
@@ -181,7 +210,14 @@ export const orchestratorMachine = setup({
 }).createMachine({
   id: 'orchestrator',
   initial: 'initializing',
+  on: {
+    USER_CHANGED: {
+      target: 'idle',
+      actions: 'switchUser',
+    },
+  },
   context: {
+    userId: userSessionService.getSelectedUserId(),
     conversationHistory: [],
     currentScreenType: null,
     currentScreenData: null,
@@ -201,7 +237,7 @@ export const orchestratorMachine = setup({
   states: {
     initializing: {
       entry: assign({
-        sessionId: generateSessionId,
+        sessionId: ({ context }) => generateSessionId(context.userId),
       }),
       on: {
         SUBMIT_PROMPT: {
@@ -220,9 +256,9 @@ export const orchestratorMachine = setup({
       entry: 'clearError',
       invoke: {
         src: 'loadSession',
-        input: ({ event }) => {
+        input: ({ context, event }) => {
           const e = event as Extract<OrchestratorEvents, { type: 'LOAD_SESSION' }>;
-          return { sessionId: e.sessionId };
+          return { sessionId: e.sessionId, userId: context.userId };
         },
         onDone: {
           target: 'idle',
@@ -270,6 +306,7 @@ export const orchestratorMachine = setup({
             prompt: submitEvent.prompt,
             conversationHistory: context.conversationHistory.slice(0, -1),
             sessionId: context.sessionId,
+            userId: context.userId,
             self: self ?? null,
           };
         },
