@@ -45,6 +45,7 @@ backend/coverage/
 
 # SQLite runtime data
 backend/data/
+!backend/data/intent-keywords.json
 
 # Qwen tool config
 .qwen/

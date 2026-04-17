@@ -6,6 +6,7 @@ import { RateLimitGuard } from './guards/rate-limit.guard';
 import type { AgentResponse } from '../../../domain/types/agent';
 import { QUICK_ACTIONS } from './quick-actions.config';
 import type { Request, Response } from 'express';
+import { PinoLogger } from 'nestjs-pino';
 
 type AuthedRequest = Request & { userId?: string };
 
@@ -14,7 +15,10 @@ type AuthedRequest = Request & { userId?: string };
 export class AgentController {
   constructor(
     private readonly supervisor: SupervisorService,
-  ) {}
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(AgentController.name);
+  }
 
   @Post('chat')
   async chat(
@@ -55,6 +59,14 @@ export class AgentController {
         }
       }
     } catch (error) {
+      this.logger.error(
+        {
+          err: error instanceof Error
+            ? { message: error.message, stack: error.stack }
+            : String(error),
+        },
+        'SSE stream processing failed',
+      );
       res.write(`event: error\ndata: ${JSON.stringify({ message: 'Processing failed' })}\n\n`);
     } finally {
       res.end();

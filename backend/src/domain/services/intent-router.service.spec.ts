@@ -58,10 +58,27 @@ describe('IntentRouterService', () => {
   // ── Tier 1: Only single-match returns result ─────────────────
 
   describe('Tier 1 — ambiguous matches', () => {
-    it('returns null when prompt matches multiple intents', async () => {
-      // "account balance" matches both CHECK_BALANCE and ACCOUNT_SUMMARY
-      mockCache.findBestMatch.mockReturnValue(null);
+    it('prefers a specific balance intent for overlapping account/balance phrasing', async () => {
       const result = await router.classify('account balance', 'user-1');
+      expect(result).not.toBeNull();
+      expect(result!.intent).toBe(TelecomIntent.CHECK_BALANCE);
+      expect(result!.toolName).toBe(INTENT_TOOL_MAP[TelecomIntent.CHECK_BALANCE]);
+    });
+
+    it('supports configurable action signal phrases', async () => {
+      const customRouter = new IntentRouterService(
+        mockCache as unknown as IntentCacheService,
+        {
+          [TelecomIntent.CHECK_BALANCE]: ['balance'],
+          [TelecomIntent.CHECK_USAGE]: ['usage'],
+          [TelecomIntent.BROWSE_BUNDLES]: ['bundles'],
+          [TelecomIntent.GET_SUPPORT]: ['support'],
+          [TelecomIntent.ACCOUNT_SUMMARY]: ['account'],
+        },
+        ['sign me up'],
+      );
+
+      const result = await customRouter.classify('sign me up for bundles', 'user-1');
       expect(result).toBeNull();
     });
   });

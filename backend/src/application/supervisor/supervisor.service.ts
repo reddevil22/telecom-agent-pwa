@@ -12,7 +12,7 @@ import type { ScreenCachePort } from '../../domain/ports/screen-cache.port';
 import type { IntentRouterPort } from '../../domain/ports/intent-router.port';
 import type { IntentRouterService } from '../../domain/services/intent-router.service';
 import type { CircuitBreakerService } from '../../domain/services/circuit-breaker.service';
-import { INTENT_TOOL_MAP, TelecomIntent, TIER1_INTENTS, INTENT_KEYWORDS } from '../../domain/types/intent';
+import { INTENT_TOOL_MAP, TelecomIntent, TIER1_INTENTS, INTENT_KEYWORDS, type IntentKeywordMap } from '../../domain/types/intent';
 
 /** Internal message type supporting tool-call and tool-result roles for the ReAct loop */
 interface LoopMessage {
@@ -65,6 +65,7 @@ export class SupervisorService {
   private readonly cache: ScreenCachePort | null;
   private readonly intentRouter: IntentRouterService | null;
   private readonly circuitBreaker: CircuitBreakerService | null;
+  private readonly intentKeywords: IntentKeywordMap;
 
   constructor(
     private readonly llm: LlmPort,
@@ -76,12 +77,14 @@ export class SupervisorService {
     cache?: ScreenCachePort,
     intentRouter?: IntentRouterService,
     circuitBreaker?: CircuitBreakerService,
+    intentKeywords: IntentKeywordMap = INTENT_KEYWORDS,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
     this.cache = cache ?? null;
     this.intentRouter = intentRouter ?? null;
     this.circuitBreaker = circuitBreaker ?? null;
+    this.intentKeywords = intentKeywords;
     this.logger?.setContext(SupervisorService.name);
   }
 
@@ -101,8 +104,12 @@ export class SupervisorService {
       yield { label: 'Analyzing request', status: 'done' };
 
       // Try intent router (keyword + fuzzy cache) before LLM
-      for await (const routed of this.tryIntentRouter(request)) {
-        yield routed;
+      let routedByIntent = false;
+      for await (const routedEvent of this.tryIntentRouter(request)) {
+        routedByIntent = true;
+        yield routedEvent;
+      }
+      if (routedByIntent) {
         return;
       }
 
@@ -199,7 +206,7 @@ export class SupervisorService {
     // Quick keyword check to determine which screen type to look up
     const lower = request.prompt.toLowerCase();
     const matches: ScreenType[] = [];
-    for (const [intentKey, keywords] of Object.entries(INTENT_KEYWORDS)) {
+    for (const [intentKey, keywords] of Object.entries(this.intentKeywords)) {
       if (keywords.some(kw => lower.includes(kw))) {
         const toolName = INTENT_TOOL_MAP[intentKey as TelecomIntent];
         const screenType = TOOL_TO_SCREEN[toolName] as ScreenType;

@@ -1,0 +1,51 @@
+{
+  "actionSignals": [
+    "buy",
+    "purchase",
+    "order",
+    "subscribe",
+    "activate",
+    "get me",
+    "i want",
+    "i need"
+  ],
+  "keywords": {
+    "check_balance": [
+      "balance",
+      "credit",
+      "airtime",
+      "how much money",
+      "account status",
+      "account balance"
+    ],
+    "check_usage": [
+      "usage",
+      "consumption",
+      "remaining",
+      "how much data",
+      "minutes left"
+    ],
+    "browse_bundles": [
+      "bundles",
+      "plans",
+      "packages",
+      "offers",
+      "pricing"
+    ],
+    "get_support": [
+      "support",
+      "help",
+      "ticket",
+      "problem",
+      "complaint",
+      "faq"
+    ],
+    "account_summary": [
+      "account",
+      "dashboard",
+      "profile",
+      "my account",
+      "overview"
+    ]
+  }
+}

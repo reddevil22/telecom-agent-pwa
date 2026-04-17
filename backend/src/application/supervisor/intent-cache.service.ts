@@ -15,7 +15,10 @@ export class IntentCacheService {
 
   private static readonly MAX_ENTRIES_PER_USER = 50;
   private static readonly TTL_MS = 5 * 60 * 1000; // 5 minutes
-  private static readonly SIMILARITY_THRESHOLD = 0.6;
+  private static readonly DEFAULT_SIMILARITY_THRESHOLD = 0.6;
+  private static readonly MIN_TOKENS_FOR_MATCH = 2;
+
+  private readonly similarityThreshold: number;
 
   private static readonly STOP_WORDS = new Set([
     'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
@@ -32,6 +35,13 @@ export class IntentCacheService {
     'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'you', 'your',
     'yours', 'he', 'him', 'his', 'she', 'her', 'hers', 'it', 'its',
   ]);
+
+  constructor(similarityThreshold = IntentCacheService.DEFAULT_SIMILARITY_THRESHOLD) {
+    const parsed = Number.isFinite(similarityThreshold)
+      ? similarityThreshold
+      : IntentCacheService.DEFAULT_SIMILARITY_THRESHOLD;
+    this.similarityThreshold = Math.max(0, Math.min(1, parsed));
+  }
 
   tokenize(text: string): Set<string> {
     return new Set(
@@ -79,7 +89,7 @@ export class IntentCacheService {
 
   findBestMatch(userId: string, prompt: string): FuzzyCacheResult | null {
     const tokenSet = this.tokenize(prompt);
-    if (tokenSet.size === 0) return null;
+    if (tokenSet.size < IntentCacheService.MIN_TOKENS_FOR_MATCH) return null;
 
     const entries = this.entries.get(userId);
     if (!entries || entries.length === 0) return null;
@@ -93,7 +103,7 @@ export class IntentCacheService {
       if (now - entry.createdAt >= IntentCacheService.TTL_MS) continue;
 
       const score = this.jaccardSimilarity(tokenSet, entry.tokenSet);
-      if (score > bestScore && score >= IntentCacheService.SIMILARITY_THRESHOLD) {
+      if (score > bestScore && score >= this.similarityThreshold) {
         bestScore = score;
         bestEntry = entry;
       }

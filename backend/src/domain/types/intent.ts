@@ -16,6 +16,15 @@ export enum TelecomIntent {
   ACCOUNT_SUMMARY = 'account_summary',
 }
 
+export type Tier1Intent =
+  | TelecomIntent.CHECK_BALANCE
+  | TelecomIntent.CHECK_USAGE
+  | TelecomIntent.BROWSE_BUNDLES
+  | TelecomIntent.GET_SUPPORT
+  | TelecomIntent.ACCOUNT_SUMMARY;
+
+export type IntentKeywordMap = Readonly<Record<Tier1Intent, string[]>>;
+
 export interface IntentResolution {
   intent: TelecomIntent;
   /** Maps to a TOOL_REGISTRY key — the tool the supervisor should execute */
@@ -30,7 +39,7 @@ export interface IntentResolution {
  * Tier 1/2-eligible intents — these require only `userId` (always available
  * from request context) and can be resolved without LLM entity extraction.
  */
-export const TIER1_INTENTS: ReadonlySet<TelecomIntent> = new Set([
+export const TIER1_INTENTS: ReadonlySet<Tier1Intent> = new Set([
   TelecomIntent.CHECK_BALANCE,
   TelecomIntent.CHECK_USAGE,
   TelecomIntent.BROWSE_BUNDLES,
@@ -57,8 +66,8 @@ export const INTENT_TOOL_MAP: Readonly<Record<TelecomIntent, string>> = {
  * Keywords for Tier 1 exact-match routing.
  * Only TIER1_INTENTS have keyword lists — Tier 3 intents always need the LLM.
  */
-export const INTENT_KEYWORDS: Readonly<Record<string, string[]>> = {
-  [TelecomIntent.CHECK_BALANCE]: ['balance', 'credit', 'airtime', 'how much money', 'account status'],
+export const INTENT_KEYWORDS: IntentKeywordMap = {
+  [TelecomIntent.CHECK_BALANCE]: ['balance', 'credit', 'airtime', 'how much money', 'account status', 'account balance'],
   [TelecomIntent.CHECK_USAGE]: ['usage', 'consumption', 'remaining', 'how much data', 'minutes left'],
   [TelecomIntent.BROWSE_BUNDLES]: ['bundles', 'plans', 'packages', 'offers', 'pricing'],
   [TelecomIntent.GET_SUPPORT]: ['support', 'help', 'ticket', 'problem', 'complaint', 'faq'],

@@ -106,17 +106,17 @@ describe('App (e2e)', () => {
   // ── Happy path: all screen types ──
 
   it.each([
-    ['list_bundles', 'bundles'],
-    ['check_usage', 'usage'],
-    ['get_support', 'support'],
-  ] as const)('POST /api/agent/chat — routes %s to %s screen', async (tool, screenType) => {
+    ['list_bundles', 'bundles', 'What bundles are available?'],
+    ['check_usage', 'usage', 'Check my usage'],
+    ['get_support', 'support', 'I need support'],
+  ] as const)('POST /api/agent/chat — routes %s to %s screen', async (tool, screenType, prompt) => {
     mockLlm.chatCompletion
       .mockResolvedValueOnce(mockToolCallResponse(tool))
       .mockResolvedValueOnce(mockTextDoneResponse());
 
     const res = await request(app.getHttpServer())
       .post('/api/agent/chat')
-      .send(makeBody())
+      .send(makeBody({ prompt }))
       .expect(201);
 
     expect(res.body.screenType).toBe(screenType);
@@ -125,6 +125,7 @@ describe('App (e2e)', () => {
   // ── No tool call → unknown ──
 
   it('POST /api/agent/chat — returns unknown when LLM gives no tool call', async () => {
+    mockLlm.chatCompletion.mockReset();
     mockLlm.chatCompletion.mockResolvedValueOnce({
       message: { content: 'I can help with that' },
       usage: { prompt_tokens: 5, completion_tokens: 3 },
@@ -132,7 +133,7 @@ describe('App (e2e)', () => {
 
     const res = await request(app.getHttpServer())
       .post('/api/agent/chat')
-      .send(makeBody())
+      .send(makeBody({ prompt: 'xqz unknown intent phrase', userId: 'unknown-test-user' }))
       .expect(201);
 
     expect(res.body.screenType).toBe('unknown');
@@ -227,11 +228,12 @@ describe('App (e2e)', () => {
   // ── LLM error ──
 
   it('POST /api/agent/chat — returns error response when LLM fails', async () => {
+    mockLlm.chatCompletion.mockReset();
     mockLlm.chatCompletion.mockRejectedValueOnce(new Error('LLM unavailable'));
 
     const res = await request(app.getHttpServer())
       .post('/api/agent/chat')
-      .send(makeBody())
+      .send(makeBody({ prompt: 'xqz llm failure path probe', userId: 'llm-error-test-user' }))
       .expect(201);
 
     expect(res.body.replyText).toContain('Sorry, I encountered an error');
@@ -257,5 +259,60 @@ describe('App (e2e)', () => {
       .expect(201);
 
     expect(res.body.screenType).toBe('usage');
+  });
+
+  it('degraded mode flow: opens circuit, serves quick-action path, and recovers from half-open', async () => {
+    mockLlm.chatCompletion.mockReset();
+
+    const breakerPrompt = 'xqz breaker probe request';
+
+    // Trigger 3 consecutive LLM failures to open the circuit breaker
+    mockLlm.chatCompletion.mockRejectedValue(new Error('LLM unavailable'));
+    for (let i = 0; i < 3; i++) {
+      await request(app.getHttpServer())
+        .post('/api/agent/chat')
+        .send(makeBody({ prompt: `${breakerPrompt}-${i}` }))
+        .expect(201);
+    }
+
+    const openStatus = await request(app.getHttpServer())
+      .get('/api/agent/status')
+      .expect(200);
+
+    expect(openStatus.body.mode).toBe('degraded');
+    expect(openStatus.body.llm).toBe('unavailable');
+    expect(openStatus.body.circuitState).toBe('open');
+
+    // Tier 1 quick action should still work while degraded (no LLM call expected)
+    const callsBeforeQuickAction = mockLlm.chatCompletion.mock.calls.length;
+    const quickActionRes = await request(app.getHttpServer())
+      .post('/api/agent/chat')
+      .send(makeBody({ prompt: 'Show my balance' }))
+      .expect(201);
+
+    expect(quickActionRes.body.screenType).toBe('balance');
+    expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(callsBeforeQuickAction);
+
+    // Advance time to half-open window and allow a successful probe request
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+    mockLlm.chatCompletion.mockReset();
+    mockLlm.chatCompletion.mockResolvedValueOnce(await mockToolCallResponse('check_balance'));
+
+    const probeRes = await request(app.getHttpServer())
+      .post('/api/agent/chat')
+      .send(makeBody({ prompt: 'probe llm recovery path' }))
+      .expect(201);
+
+    expect(probeRes.body.screenType).toBe('balance');
+
+    const closedStatus = await request(app.getHttpServer())
+      .get('/api/agent/status')
+      .expect(200);
+
+    expect(closedStatus.body.mode).toBe('normal');
+    expect(closedStatus.body.llm).toBe('available');
+    expect(closedStatus.body.circuitState).toBe('closed');
+
+    nowSpy.mockRestore();
   });
 });

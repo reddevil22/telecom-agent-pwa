@@ -25,6 +25,7 @@ import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
 import { IntentRouterService } from './domain/services/intent-router.service';
 import { IntentCacheService } from './application/supervisor/intent-cache.service';
 import { CircuitBreakerService } from './domain/services/circuit-breaker.service';
+import { loadIntentRoutingConfig } from './config/intent-routing.config';
 
 @Module({
   imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule, MockTelcoModule],
@@ -49,8 +50,13 @@ import { CircuitBreakerService } from './domain/services/circuit-breaker.service
           ? config.get<string>('DASHSCOPE_MODEL_NAME')!
           : config.get<string>('LLM_MODEL_NAME')!;
 
-        const intentCache = new IntentCacheService();
-        const intentRouter = new IntentRouterService(intentCache);
+        const intentRoutingConfig = loadIntentRoutingConfig(config, logger);
+        const intentCache = new IntentCacheService(config.get<number>('INTENT_CACHE_THRESHOLD'));
+        const intentRouter = new IntentRouterService(
+          intentCache,
+          intentRoutingConfig.keywords,
+          intentRoutingConfig.actionSignals,
+        );
         const circuitBreaker = new CircuitBreakerService();
 
         const supervisor = new SupervisorService(
@@ -63,6 +69,7 @@ import { CircuitBreakerService } from './domain/services/circuit-breaker.service
           cache,
           intentRouter,
           circuitBreaker,
+          intentRoutingConfig.keywords,
         );
 
         // Simple query sub-agents (read-only operations)

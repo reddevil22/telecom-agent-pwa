@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 120_000,
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://127.0.0.1:5173',
     headless: false,
     viewport: { width: 390, height: 844 },
     video: 'on',

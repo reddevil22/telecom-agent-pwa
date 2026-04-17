@@ -1,6 +1,6 @@
 import type { IntentRouterPort } from '../ports/intent-router.port';
 import type { IntentResolution } from '../types/intent';
-import { TelecomIntent, TIER1_INTENTS, INTENT_TOOL_MAP, INTENT_KEYWORDS } from '../types/intent';
+import { TelecomIntent, TIER1_INTENTS, INTENT_TOOL_MAP, INTENT_KEYWORDS, type IntentKeywordMap, type Tier1Intent } from '../types/intent';
 import type { IntentCacheService } from '../../application/supervisor/intent-cache.service';
 
 /**
@@ -10,7 +10,11 @@ import type { IntentCacheService } from '../../application/supervisor/intent-cac
  *   Tier 3 — returns null (caller falls through to LLM)
  */
 export class IntentRouterService implements IntentRouterPort {
-  constructor(private readonly cache: IntentCacheService) {}
+  constructor(
+    private readonly cache: IntentCacheService,
+    private readonly intentKeywords: IntentKeywordMap = INTENT_KEYWORDS,
+    private readonly actionSignals: readonly string[] = IntentRouterService.DEFAULT_ACTION_SIGNALS,
+  ) {}
 
   async classify(prompt: string, userId: string): Promise<IntentResolution | null> {
     // Tier 1: Exact keyword match
@@ -30,34 +34,66 @@ export class IntentRouterService implements IntentRouterPort {
    * Only Tier 1-eligible intents are cached (no entity-extraction intents).
    */
   cacheLlmResult(userId: string, prompt: string, intent: TelecomIntent): void {
-    if (TIER1_INTENTS.has(intent)) {
+    if (TIER1_INTENTS.has(intent as Tier1Intent)) {
       this.cache.store(userId, prompt, intent);
     }
   }
 
   /** Words that signal a purchase/action intent requiring entity extraction */
-  private static readonly ACTION_SIGNALS = ['buy', 'purchase', 'order', 'subscribe', 'activate', 'get me', 'i want', 'i need'];
+  private static readonly DEFAULT_ACTION_SIGNALS = ['buy', 'purchase', 'order', 'subscribe', 'activate', 'get me', 'i want', 'i need'];
+
+  /** Deterministic tie-breaker when lexical specificity is equal */
+  private static readonly INTENT_MATCH_PRIORITY: Readonly<Record<TelecomIntent, number>> = {
+    [TelecomIntent.CHECK_BALANCE]: 100,
+    [TelecomIntent.CHECK_USAGE]: 95,
+    [TelecomIntent.BROWSE_BUNDLES]: 90,
+    [TelecomIntent.GET_SUPPORT]: 85,
+    [TelecomIntent.ACCOUNT_SUMMARY]: 80,
+    [TelecomIntent.VIEW_BUNDLE]: 70,
+    [TelecomIntent.PURCHASE_BUNDLE]: 65,
+    [TelecomIntent.TOP_UP]: 60,
+    [TelecomIntent.CREATE_TICKET]: 55,
+  };
 
   private tier1KeywordMatch(prompt: string, userId: string): IntentResolution | null {
     const lower = prompt.toLowerCase();
-    const matches: TelecomIntent[] = [];
+    const matches: Array<{ intent: TelecomIntent; score: number; keywordCount: number }> = [];
 
-    const hasActionSignal = IntentRouterService.ACTION_SIGNALS.some(signal => lower.includes(signal));
+    const hasActionSignal = this.actionSignals.some(signal => lower.includes(signal));
 
-    for (const [intentKey, keywords] of Object.entries(INTENT_KEYWORDS)) {
+    for (const [intentKey, keywords] of Object.entries(this.intentKeywords)) {
       const intent = intentKey as TelecomIntent;
       // If the prompt has a purchase/action signal, skip BROWSE_BUNDLES —
       // "buy travel roaming bundle" should go to LLM for entity extraction, not list_bundles
       if (hasActionSignal && intent === TelecomIntent.BROWSE_BUNDLES) continue;
-      if (keywords.some(kw => lower.includes(kw))) {
-        matches.push(intent);
-      }
+
+      const matchedKeywords = keywords.filter((kw) => lower.includes(kw));
+      if (matchedKeywords.length === 0) continue;
+
+      // Prefer lexically specific matches (multi-word and longer phrases).
+      const score = Math.max(
+        ...matchedKeywords.map((keyword) => {
+          const words = keyword.trim().split(/\s+/).filter(Boolean).length;
+          return words * 100 + keyword.length;
+        }),
+      );
+
+      matches.push({ intent, score, keywordCount: matchedKeywords.length });
     }
 
-    // Only return when there's exactly one unambiguous match
-    if (matches.length !== 1) return null;
+    if (matches.length === 0) return null;
 
-    const intent = matches[0];
+    matches.sort((a, b) => {
+      const scoreDiff = b.score - a.score;
+      if (scoreDiff !== 0) return scoreDiff;
+
+      const keywordCountDiff = b.keywordCount - a.keywordCount;
+      if (keywordCountDiff !== 0) return keywordCountDiff;
+
+      return IntentRouterService.INTENT_MATCH_PRIORITY[b.intent] - IntentRouterService.INTENT_MATCH_PRIORITY[a.intent];
+    });
+
+    const intent = matches[0].intent;
     return {
       intent,
       toolName: INTENT_TOOL_MAP[intent],
