@@ -29,4 +29,4 @@ export const BLOCKED_PATTERNS: readonly RegExp[] = [
 ];
 
 // Re-export from tool-registry for backward compatibility
-export { ALLOWED_TOOLS, TOOL_ARG_SCHEMAS } from './tool-registry';
+export { ALLOWED_TOOLS, TOOL_ARG_SCHEMAS } from "./tool-registry";

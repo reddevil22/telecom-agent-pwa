@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import type { ScreenData } from '../../types/agent';
-import type { ScreenActor } from '../../types/screens';
-import styles from './SupportScreen.module.css';
+import { useState } from "react";
+import type { ScreenData } from "../../types/agent";
+import type { ScreenActor } from "../../types/screens";
+import styles from "./SupportScreen.module.css";
 
 const SUBJECT_MIN = 5;
 const SUBJECT_MAX = 100;
@@ -15,27 +15,31 @@ interface Props {
 
 export function SupportScreen({ data, actor }: Props) {
   const [showForm, setShowForm] = useState(false);
-  const [subject, setSubject] = useState('');
-  const [description, setDescription] = useState('');
+  const [subject, setSubject] = useState("");
+  const [description, setDescription] = useState("");
   const [subjectTouched, setSubjectTouched] = useState(false);
   const [descriptionTouched, setDescriptionTouched] = useState(false);
 
-  if (data.type !== 'support') return null;
+  if (data.type !== "support") return null;
   const { tickets, faqItems } = data;
 
   function getSubjectError(value: string): string | null {
     const trimmed = value.trim();
-    if (!trimmed) return subjectTouched ? 'Subject is required.' : null;
-    if (trimmed.length < SUBJECT_MIN) return `Subject must be at least ${SUBJECT_MIN} characters.`;
-    if (trimmed.length > SUBJECT_MAX) return `Subject must be at most ${SUBJECT_MAX} characters.`;
+    if (!trimmed) return subjectTouched ? "Subject is required." : null;
+    if (trimmed.length < SUBJECT_MIN)
+      return `Subject must be at least ${SUBJECT_MIN} characters.`;
+    if (trimmed.length > SUBJECT_MAX)
+      return `Subject must be at most ${SUBJECT_MAX} characters.`;
     return null;
   }
 
   function getDescriptionError(value: string): string | null {
     const trimmed = value.trim();
-    if (!trimmed) return descriptionTouched ? 'Description is required.' : null;
-    if (trimmed.length < DESCRIPTION_MIN) return `Description must be at least ${DESCRIPTION_MIN} characters.`;
-    if (trimmed.length > DESCRIPTION_MAX) return `Description must be at most ${DESCRIPTION_MAX} characters.`;
+    if (!trimmed) return descriptionTouched ? "Description is required." : null;
+    if (trimmed.length < DESCRIPTION_MIN)
+      return `Description must be at least ${DESCRIPTION_MIN} characters.`;
+    if (trimmed.length > DESCRIPTION_MAX)
+      return `Description must be at most ${DESCRIPTION_MAX} characters.`;
     return null;
   }
 
@@ -48,9 +52,12 @@ export function SupportScreen({ data, actor }: Props) {
     setDescriptionTouched(true);
     if (!isFormValid) return;
 
-    actor.send({ type: 'SUBMIT_PROMPT', prompt: `Create a support ticket: ${subject}. ${description}` });
-    setSubject('');
-    setDescription('');
+    actor.send({
+      type: "SUBMIT_PROMPT",
+      prompt: `Create a support ticket: ${subject}. ${description}`,
+    });
+    setSubject("");
+    setDescription("");
     setSubjectTouched(false);
     setDescriptionTouched(false);
     setShowForm(false);
@@ -58,8 +65,8 @@ export function SupportScreen({ data, actor }: Props) {
 
   function toggleForm() {
     if (showForm) {
-      setSubject('');
-      setDescription('');
+      setSubject("");
+      setDescription("");
       setSubjectTouched(false);
       setDescriptionTouched(false);
     }
@@ -76,10 +83,14 @@ export function SupportScreen({ data, actor }: Props) {
               <div key={t.id} className={styles.ticket}>
                 <div className={styles.ticketInfo}>
                   <div className={styles.ticketSubject}>{t.subject}</div>
-                  <div className={styles.ticketMeta}>{t.id} · {t.createdAt}</div>
+                  <div className={styles.ticketMeta}>
+                    {t.id} · {t.createdAt}
+                  </div>
                 </div>
-                <span className={`${styles.statusBadge} ${styles[`statusBadge--${t.status}`]}`}>
-                  {t.status.replace('_', ' ')}
+                <span
+                  className={`${styles.statusBadge} ${styles[`statusBadge--${t.status}`]}`}
+                >
+                  {t.status.replace("_", " ")}
                 </span>
               </div>
             ))}
@@ -91,7 +102,7 @@ export function SupportScreen({ data, actor }: Props) {
         <div className={styles.headingRow}>
           <h3 className={styles.heading}>Frequently Asked</h3>
           <button className={styles.newTicketBtn} onClick={toggleForm}>
-            {showForm ? 'Cancel' : '+ New Ticket'}
+            {showForm ? "Cancel" : "+ New Ticket"}
           </button>
         </div>
 
@@ -120,8 +131,14 @@ export function SupportScreen({ data, actor }: Props) {
               }}
               aria-invalid={!!descriptionError}
             />
-            {descriptionError && <p className={styles.errorText}>{descriptionError}</p>}
-            <button className={styles.formSubmit} onClick={handleSubmit} disabled={!isFormValid}>
+            {descriptionError && (
+              <p className={styles.errorText}>{descriptionError}</p>
+            )}
+            <button
+              className={styles.formSubmit}
+              onClick={handleSubmit}
+              disabled={!isFormValid}
+            >
               Submit Ticket
             </button>
           </div>

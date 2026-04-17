@@ -38,7 +38,7 @@
 }
 
 .brandIcon::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: var(--color-primary);
@@ -54,8 +54,14 @@
 }
 
 @keyframes ringPulse {
-  0% { transform: scale(1); opacity: 0.4; }
-  100% { transform: scale(1.5); opacity: 0; }
+  0% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
 }
 
 .brandIconInner {
@@ -212,7 +218,9 @@
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text-muted);
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .tab:hover {

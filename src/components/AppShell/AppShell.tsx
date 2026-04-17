@@ -1,22 +1,30 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSelector } from '@xstate/react';
-import type { ActorRefFrom } from 'xstate';
-import type { orchestratorMachine } from '../../machines/orchestratorMachine';
-import { ScreenRenderer } from '../ScreenRenderer/ScreenRenderer';
-import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary';
-import { PromptContainer } from '../PromptContainer/PromptContainer';
-import { ProcessingIndicator } from '../ProcessingIndicator/ProcessingIndicator';
-import { SkeletonScreen } from '../SkeletonScreen/SkeletonScreen';
-import { ChatBubble } from '../ChatBubble/ChatBubble';
-import { SessionList, type SessionSummary } from '../SessionList/SessionList';
-import { LlmErrorScreen } from '../LlmErrorScreen/LlmErrorScreen';
-import { QuickActionBar } from '../QuickActionBar/QuickActionBar';
-import { DegradedBanner } from '../DegradedBanner/DegradedBanner';
-import { llmStatusService, type LlmStatus } from '../../services/llmStatusService';
-import { selectHasReceivedFirstResponse, selectProcessingSteps, selectState, selectConversationHistory } from '../../hooks/useSelectors';
-import { historyService } from '../../services/historyService';
-import { userSessionService } from '../../services/userSessionService';
-import styles from './AppShell.module.css';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSelector } from "@xstate/react";
+import type { ActorRefFrom } from "xstate";
+import type { orchestratorMachine } from "../../machines/orchestratorMachine";
+import { ScreenRenderer } from "../ScreenRenderer/ScreenRenderer";
+import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
+import { PromptContainer } from "../PromptContainer/PromptContainer";
+import { ProcessingIndicator } from "../ProcessingIndicator/ProcessingIndicator";
+import { SkeletonScreen } from "../SkeletonScreen/SkeletonScreen";
+import { ChatBubble } from "../ChatBubble/ChatBubble";
+import { SessionList, type SessionSummary } from "../SessionList/SessionList";
+import { LlmErrorScreen } from "../LlmErrorScreen/LlmErrorScreen";
+import { QuickActionBar } from "../QuickActionBar/QuickActionBar";
+import { DegradedBanner } from "../DegradedBanner/DegradedBanner";
+import {
+  llmStatusService,
+  type LlmStatus,
+} from "../../services/llmStatusService";
+import {
+  selectHasReceivedFirstResponse,
+  selectProcessingSteps,
+  selectState,
+  selectConversationHistory,
+} from "../../hooks/useSelectors";
+import { historyService } from "../../services/historyService";
+import { userSessionService } from "../../services/userSessionService";
+import styles from "./AppShell.module.css";
 
 type Actor = ActorRefFrom<typeof orchestratorMachine>;
 
@@ -25,10 +33,14 @@ interface Props {
 }
 
 export function AppShell({ actor }: Props) {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    return (
+      (document.documentElement.getAttribute("data-theme") as
+        | "light"
+        | "dark") || "light"
+    );
   });
-  const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
+  const [activeTab, setActiveTab] = useState<"chat" | "history">("chat");
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [isDegraded, setIsDegraded] = useState(false);
@@ -38,7 +50,7 @@ export function AppShell({ actor }: Props) {
   // LLM status polling
   useEffect(() => {
     const unsub = llmStatusService.subscribe((status: LlmStatus) => {
-      setIsDegraded(status.mode === 'degraded');
+      setIsDegraded(status.mode === "degraded");
     });
     llmStatusService.startPolling();
     return () => {
@@ -47,18 +59,24 @@ export function AppShell({ actor }: Props) {
     };
   }, []);
 
-  const handleQuickAction = useCallback((prompt: string) => {
-    actor.send({ type: 'SUBMIT_PROMPT', prompt });
-  }, [actor]);
+  const handleQuickAction = useCallback(
+    (prompt: string) => {
+      actor.send({ type: "SUBMIT_PROMPT", prompt });
+    },
+    [actor],
+  );
 
   const state = useSelector(actor, selectState);
-  const hasReceivedFirstResponse = useSelector(actor, selectHasReceivedFirstResponse);
+  const hasReceivedFirstResponse = useSelector(
+    actor,
+    selectHasReceivedFirstResponse,
+  );
   const processingSteps = useSelector(actor, selectProcessingSteps);
   const conversationHistory = useSelector(actor, selectConversationHistory);
   const currentUserId = useSelector(actor, (s) => s.context.userId);
   const demoUsers = userSessionService.getDemoUsers();
-  const isProcessing = state === 'processing';
-  const isError = state === 'error';
+  const isProcessing = state === "processing";
+  const isError = state === "error";
   const hasMessages = conversationHistory.length > 0;
   const isInitial = !hasReceivedFirstResponse && !isProcessing && !hasMessages;
 
@@ -66,12 +84,15 @@ export function AppShell({ actor }: Props) {
 
   const loadSessions = useCallback(async () => {
     try {
-      const loadedSessions = await historyService.getSavedSessions(currentUserId);
+      const loadedSessions =
+        await historyService.getSavedSessions(currentUserId);
       setSessions(loadedSessions);
       setSessionError(null);
     } catch (error) {
-      console.error('Failed to load sessions:', error);
-      setSessionError(error instanceof Error ? error.message : 'Failed to load sessions');
+      console.error("Failed to load sessions:", error);
+      setSessionError(
+        error instanceof Error ? error.message : "Failed to load sessions",
+      );
     }
   }, [currentUserId]);
 
@@ -82,7 +103,7 @@ export function AppShell({ actor }: Props) {
       // Only scroll if user is already near the bottom (within 100px)
       const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
       if (nearBottom) {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       }
       // Only focus input if nothing in the content area has focus
       const activeEl = document.activeElement;
@@ -100,7 +121,7 @@ export function AppShell({ actor }: Props) {
   }, [loadSessions]);
 
   useEffect(() => {
-    if (activeTab === 'history') {
+    if (activeTab === "history") {
       queueMicrotask(() => {
         void loadSessions();
       });
@@ -109,11 +130,11 @@ export function AppShell({ actor }: Props) {
 
   const handleSelectSession = async (sessionId: string) => {
     try {
-      actor.send({ type: 'LOAD_SESSION', sessionId });
+      actor.send({ type: "LOAD_SESSION", sessionId });
       historyService.setCurrentSessionId(sessionId, currentUserId);
-      setActiveTab('chat');
+      setActiveTab("chat");
     } catch (error) {
-      console.error('Failed to load session:', error);
+      console.error("Failed to load session:", error);
     }
   };
 
@@ -122,29 +143,29 @@ export function AppShell({ actor }: Props) {
       await historyService.deleteSession(sessionId, currentUserId);
       setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
     } catch (error) {
-      console.error('Failed to delete session:', error);
+      console.error("Failed to delete session:", error);
     }
   };
 
   const handleUserChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextUserId = event.target.value;
     userSessionService.setSelectedUserId(nextUserId);
-    actor.send({ type: 'USER_CHANGED', userId: nextUserId });
-    setActiveTab('chat');
+    actor.send({ type: "USER_CHANGED", userId: nextUserId });
+    setActiveTab("chat");
   };
 
   function handleTabKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault();
-      setActiveTab((prev) => (prev === 'chat' ? 'history' : 'chat'));
+      setActiveTab((prev) => (prev === "chat" ? "history" : "chat"));
     }
   }
 
   function toggleTheme() {
-    const next = theme === 'light' ? 'dark' : 'light';
+    const next = theme === "light" ? "dark" : "light";
     setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
   }
 
   return (
@@ -177,9 +198,9 @@ export function AppShell({ actor }: Props) {
           <button
             className={styles.themeToggle}
             onClick={toggleTheme}
-            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
           >
-            {theme === 'light' ? '☾' : '☀'}
+            {theme === "light" ? "☾" : "☀"}
           </button>
         </div>
       </header>
@@ -191,29 +212,33 @@ export function AppShell({ actor }: Props) {
         {/* Main content */}
         <div className={styles.content}>
           {/* Tabs */}
-          <div className={styles.tabs} role="tablist" onKeyDown={handleTabKeyDown}>
+          <div
+            className={styles.tabs}
+            role="tablist"
+            onKeyDown={handleTabKeyDown}
+          >
             <button
-              className={`${styles.tab} ${activeTab === 'chat' ? styles.active : ''}`}
-              onClick={() => setActiveTab('chat')}
+              className={`${styles.tab} ${activeTab === "chat" ? styles.active : ""}`}
+              onClick={() => setActiveTab("chat")}
               data-testid="chat-tab"
               role="tab"
-              aria-selected={activeTab === 'chat'}
+              aria-selected={activeTab === "chat"}
             >
               Chat
             </button>
             <button
-              className={`${styles.tab} ${activeTab === 'history' ? styles.active : ''}`}
-              onClick={() => setActiveTab('history')}
+              className={`${styles.tab} ${activeTab === "history" ? styles.active : ""}`}
+              onClick={() => setActiveTab("history")}
               data-testid="history-tab"
               role="tab"
-              aria-selected={activeTab === 'history'}
+              aria-selected={activeTab === "history"}
             >
               History
             </button>
           </div>
 
           <div className={styles.contentAreaWrapper}>
-            {activeTab === 'history' ? (
+            {activeTab === "history" ? (
               <div className={styles.historyContent} data-testid="session-list">
                 {sessionError && (
                   <div className={styles.sessionError} role="alert">
@@ -228,21 +253,34 @@ export function AppShell({ actor }: Props) {
                 />
               </div>
             ) : (
-              <div ref={contentAreaRef} className={`${styles.contentArea} ${isInitial ? styles['contentArea--initial'] : ''}`}>
+              <div
+                ref={contentAreaRef}
+                className={`${styles.contentArea} ${isInitial ? styles["contentArea--initial"] : ""}`}
+              >
                 {isInitial && (
                   <div className={styles.initialContent}>
-                    <h2 className={styles.initialTitle}>How can I help you today?</h2>
+                    <h2 className={styles.initialTitle}>
+                      How can I help you today?
+                    </h2>
                     <p className={styles.initialSubtitle}>
-                      Check your balance, explore bundles, or get support — I'm here to help.
+                      Check your balance, explore bundles, or get support — I'm
+                      here to help.
                     </p>
                   </div>
                 )}
 
                 {/* Chat history */}
                 {hasMessages && (
-                  <div className={styles.chatHistory} data-testid="chat-history">
+                  <div
+                    className={styles.chatHistory}
+                    data-testid="chat-history"
+                  >
                     {conversationHistory.map((msg) => (
-                      <ChatBubble key={`${msg.role}-${msg.timestamp}`} message={msg} data-testid="chat-bubble" />
+                      <ChatBubble
+                        key={`${msg.role}-${msg.timestamp}`}
+                        message={msg}
+                        data-testid="chat-bubble"
+                      />
                     ))}
                   </div>
                 )}
@@ -255,11 +293,13 @@ export function AppShell({ actor }: Props) {
                 )}
 
                 {!isInitial && !isProcessing && isError && (
-                  <LlmErrorScreen onRetry={() => actor.send({ type: 'RESET' })} />
+                  <LlmErrorScreen
+                    onRetry={() => actor.send({ type: "RESET" })}
+                  />
                 )}
 
                 {!isInitial && !isProcessing && !isError && (
-                  <ErrorBoundary onReset={() => actor.send({ type: 'RESET' })}>
+                  <ErrorBoundary onReset={() => actor.send({ type: "RESET" })}>
                     <ScreenRenderer actor={actor} />
                   </ErrorBoundary>
                 )}
@@ -268,10 +308,12 @@ export function AppShell({ actor }: Props) {
           </div>
 
           {/* Prompt area - only show in chat tab */}
-          {activeTab === 'chat' && (
+          {activeTab === "chat" && (
             <div className={styles.promptArea}>
               <QuickActionBar onAction={handleQuickAction} />
-              {!isDegraded && <PromptContainer actor={actor} inputRef={inputRef} />}
+              {!isDegraded && (
+                <PromptContainer actor={actor} inputRef={inputRef} />
+              )}
             </div>
           )}
         </div>

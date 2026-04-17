@@ -1,4 +1,7 @@
-import type { MetricsPort, MetricsSnapshot } from '../../domain/ports/metrics.port';
+import type {
+  MetricsPort,
+  MetricsSnapshot,
+} from "../../domain/ports/metrics.port";
 
 export class SimpleMetricsAdapter implements MetricsPort {
   private readonly snapshot: MetricsSnapshot = {
@@ -24,7 +27,11 @@ export class SimpleMetricsAdapter implements MetricsPort {
     updatedAt: Date.now(),
   };
 
-  recordIntentResolution(tier: 1 | 2 | 3, _intent: string, latencyMs: number): void {
+  recordIntentResolution(
+    tier: 1 | 2 | 3,
+    _intent: string,
+    latencyMs: number,
+  ): void {
     if (tier === 1) this.snapshot.counters.intentResolutionByTier.tier1 += 1;
     if (tier === 2) this.snapshot.counters.intentResolutionByTier.tier2 += 1;
     if (tier === 3) this.snapshot.counters.intentResolutionByTier.tier3 += 1;
@@ -39,7 +46,7 @@ export class SimpleMetricsAdapter implements MetricsPort {
     this.snapshot.updatedAt = Date.now();
   }
 
-  recordCacheHit(cacheType: 'intent' | 'screen', hit: boolean): void {
+  recordCacheHit(cacheType: "intent" | "screen", hit: boolean): void {
     if (hit) {
       this.snapshot.counters.cacheHits[cacheType] += 1;
     } else {
@@ -54,7 +61,11 @@ export class SimpleMetricsAdapter implements MetricsPort {
       this.snapshot.counters.toolFailures += 1;
     }
 
-    const stats = this.snapshot.toolStats[toolName] ?? { success: 0, failure: 0, latencyMsTotal: 0 };
+    const stats = this.snapshot.toolStats[toolName] ?? {
+      success: 0,
+      failure: 0,
+      latencyMsTotal: 0,
+    };
     if (success) {
       stats.success += 1;
     } else {

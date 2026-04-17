@@ -1,12 +1,14 @@
-import type { OnModuleDestroy } from '@nestjs/common';
-import { SECURITY_LIMITS } from '../../domain/constants/security-constants';
-import type { RateLimiterPort } from '../../domain/ports/rate-limiter.port';
+import type { OnModuleDestroy } from "@nestjs/common";
+import { SECURITY_LIMITS } from "../../domain/constants/security-constants";
+import type { RateLimiterPort } from "../../domain/ports/rate-limiter.port";
 
 interface RequestRecord {
   timestamps: number[];
 }
 
-export class InMemoryRateLimiterAdapter implements RateLimiterPort, OnModuleDestroy {
+export class InMemoryRateLimiterAdapter
+  implements RateLimiterPort, OnModuleDestroy
+{
   private readonly requests = new Map<string, RequestRecord>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 

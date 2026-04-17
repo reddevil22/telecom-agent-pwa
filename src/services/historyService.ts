@@ -5,7 +5,7 @@ export interface SessionSummary {
 }
 
 export interface ConversationMessage {
-  role: 'user' | 'agent';
+  role: "user" | "agent";
   text: string;
   timestamp: number;
 }
@@ -24,13 +24,22 @@ export interface ConversationDocument {
 
 export const historyService = {
   async getSavedSessions(userId: string): Promise<SessionSummary[]> {
-    const res = await fetch(`/api/history/sessions?userId=${encodeURIComponent(userId)}`, {
-      headers: { 'x-user-id': userId },
-    });
+    const res = await fetch(
+      `/api/history/sessions?userId=${encodeURIComponent(userId)}`,
+      {
+        headers: { "x-user-id": userId },
+      },
+    );
     if (!res.ok) {
-      throw new Error(`Failed to load sessions: ${res.status} ${res.statusText}`);
+      throw new Error(
+        `Failed to load sessions: ${res.status} ${res.statusText}`,
+      );
     }
-    const sessions: Array<{ sessionId: string; messageCount: number; updatedAt: string }> = await res.json();
+    const sessions: Array<{
+      sessionId: string;
+      messageCount: number;
+      updatedAt: string;
+    }> = await res.json();
     return sessions.map((s) => ({
       sessionId: s.sessionId,
       messageCount: s.messageCount,
@@ -38,21 +47,30 @@ export const historyService = {
     }));
   },
 
-  async loadSession(sessionId: string, userId: string): Promise<ConversationMessage[]> {
-    const res = await fetch(`/api/history/session/${encodeURIComponent(sessionId)}`, {
-      headers: { 'x-user-id': userId },
-    });
-    if (!res.ok) throw new Error('Session not found');
+  async loadSession(
+    sessionId: string,
+    userId: string,
+  ): Promise<ConversationMessage[]> {
+    const res = await fetch(
+      `/api/history/session/${encodeURIComponent(sessionId)}`,
+      {
+        headers: { "x-user-id": userId },
+      },
+    );
+    if (!res.ok) throw new Error("Session not found");
     const conv: ConversationDocument = await res.json();
     return conv.messages;
   },
 
   async deleteSession(sessionId: string, userId: string): Promise<void> {
-    const res = await fetch(`/api/history/session/${encodeURIComponent(sessionId)}`, {
-      method: 'DELETE',
-      headers: { 'x-user-id': userId },
-    });
-    if (!res.ok) throw new Error('Failed to delete session');
+    const res = await fetch(
+      `/api/history/session/${encodeURIComponent(sessionId)}`,
+      {
+        method: "DELETE",
+        headers: { "x-user-id": userId },
+      },
+    );
+    if (!res.ok) throw new Error("Failed to delete session");
   },
 
   getCurrentSessionId(userId: string): string | null {

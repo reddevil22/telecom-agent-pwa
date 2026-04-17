@@ -1,8 +1,17 @@
-import { Injectable } from '@nestjs/common';
-import type { Database } from 'better-sqlite3';
-import { SqliteConnectionService } from '../data/sqlite-connection.service';
-import type { Balance, Bundle, UsageEntry, SupportTicket, AccountProfile, ActiveSubscription, TransactionEntry, OpenTicket } from '../../domain/types/domain';
-import { randomUUID } from 'crypto';
+import { Injectable } from "@nestjs/common";
+import type { Database } from "better-sqlite3";
+import { SqliteConnectionService } from "../data/sqlite-connection.service";
+import type {
+  Balance,
+  Bundle,
+  UsageEntry,
+  SupportTicket,
+  AccountProfile,
+  ActiveSubscription,
+  TransactionEntry,
+  OpenTicket,
+} from "../../domain/types/domain";
+import { randomUUID } from "crypto";
 
 export interface TelcoAccount {
   user_id: string;
@@ -30,12 +39,10 @@ export class MockTelcoService {
   private readonly db: Database;
   private readonly simulationIntervalMs: number;
 
-  constructor(
-    connection: SqliteConnectionService,
-  ) {
+  constructor(connection: SqliteConnectionService) {
     this.db = connection.getDatabase();
     this.simulationIntervalMs = parseInt(
-      process.env.TELCO_SIMULATION_INTERVAL_MS ?? '60000',
+      process.env.TELCO_SIMULATION_INTERVAL_MS ?? "60000",
       10,
     );
     this.ensureDemoUsers();
@@ -45,7 +52,7 @@ export class MockTelcoService {
 
   getAccount(userId: string): TelcoAccount | null {
     return this.db
-      .prepare('SELECT * FROM telco_accounts WHERE user_id = ?')
+      .prepare("SELECT * FROM telco_accounts WHERE user_id = ?")
       .get(userId) as TelcoAccount | null;
   }
 
@@ -58,7 +65,9 @@ export class MockTelcoService {
     const account = this.requireAccount(userId);
     const now = new Date().toISOString();
     this.db
-      .prepare('UPDATE telco_accounts SET balance = balance + ?, last_topup_at = ?, updated_at = ? WHERE user_id = ?')
+      .prepare(
+        "UPDATE telco_accounts SET balance = balance + ?, last_topup_at = ?, updated_at = ? WHERE user_id = ?",
+      )
       .run(amount, now, now, userId);
     return this.getBalance(userId);
   }
@@ -66,11 +75,13 @@ export class MockTelcoService {
   deductBalance(userId: string, amount: number): Balance {
     const account = this.requireAccount(userId);
     if (account.balance < amount) {
-      throw new Error('Insufficient balance');
+      throw new Error("Insufficient balance");
     }
     const now = new Date().toISOString();
     this.db
-      .prepare('UPDATE telco_accounts SET balance = balance - ?, updated_at = ? WHERE user_id = ?')
+      .prepare(
+        "UPDATE telco_accounts SET balance = balance - ?, updated_at = ? WHERE user_id = ?",
+      )
       .run(amount, now, userId);
     return this.getBalance(userId);
   }
@@ -79,14 +90,14 @@ export class MockTelcoService {
 
   getBundleCatalog(): Bundle[] {
     const rows = this.db
-      .prepare('SELECT * FROM telco_bundles_catalog ORDER BY price ASC')
+      .prepare("SELECT * FROM telco_bundles_catalog ORDER BY price ASC")
       .all() as Array<Record<string, unknown>>;
     return rows.map(this.catalogRowToBundle);
   }
 
   getBundleById(bundleId: string): Bundle | undefined {
     const row = this.db
-      .prepare('SELECT * FROM telco_bundles_catalog WHERE id = ?')
+      .prepare("SELECT * FROM telco_bundles_catalog WHERE id = ?")
       .get(bundleId) as Record<string, unknown> | undefined;
     return row ? this.catalogRowToBundle(row) : undefined;
   }
@@ -97,13 +108,13 @@ export class MockTelcoService {
     this.simulateTick(userId);
 
     const catalogRow = this.db
-      .prepare('SELECT * FROM telco_bundles_catalog WHERE id = ?')
+      .prepare("SELECT * FROM telco_bundles_catalog WHERE id = ?")
       .get(bundleId) as Record<string, unknown> | undefined;
 
     if (!catalogRow) {
       return {
         success: false,
-        message: 'Bundle not found',
+        message: "Bundle not found",
         balance: this.getBalance(userId),
         bundle: null,
       };
@@ -115,7 +126,7 @@ export class MockTelcoService {
     if (account.balance < price) {
       return {
         success: false,
-        message: 'Insufficient balance',
+        message: "Insufficient balance",
         balance: this.accountToBalance(account),
         bundle: this.catalogRowToBundle(catalogRow),
       };
@@ -129,17 +140,21 @@ export class MockTelcoService {
     const dataTotalMb = (catalogRow.data_gb as number) * 1024;
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO telco_subscriptions (id, user_id, bundle_id, status, data_total_mb, data_used_mb, minutes_total, minutes_used, sms_total, sms_used, activated_at, expires_at)
         VALUES (?, ?, ?, 'active', ?, 0, ?, 0, ?, 0, ?, ?)
-      `)
+      `,
+      )
       .run(
-        subId, userId, bundleId,
+        subId,
+        userId,
+        bundleId,
         dataTotalMb,
         catalogRow.minutes as number,
         catalogRow.sms as number,
-        now.toISOString().split('T')[0],
-        expiresAt.toISOString().split('T')[0],
+        now.toISOString().split("T")[0],
+        expiresAt.toISOString().split("T")[0],
       );
 
     // Deduct balance
@@ -147,7 +162,7 @@ export class MockTelcoService {
 
     return {
       success: true,
-      message: 'Bundle purchased successfully',
+      message: "Bundle purchased successfully",
       balance: updatedBalance,
       bundle: this.catalogRowToBundle(catalogRow),
     };
@@ -161,7 +176,8 @@ export class MockTelcoService {
 
     // Aggregate from active subscriptions
     const rows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           SUM(data_total_mb) as data_total_mb,
           SUM(data_used_mb) as data_used_mb,
@@ -171,47 +187,51 @@ export class MockTelcoService {
           SUM(sms_used) as sms_used
         FROM telco_subscriptions
         WHERE user_id = ? AND status = 'active' AND expires_at > datetime('now')
-      `)
+      `,
+      )
       .get(userId) as {
-        data_total_mb: number | null;
-        data_used_mb: number | null;
-        minutes_total: number | null;
-        minutes_used: number | null;
-        sms_total: number | null;
-        sms_used: number | null;
-      };
+      data_total_mb: number | null;
+      data_used_mb: number | null;
+      minutes_total: number | null;
+      minutes_used: number | null;
+      sms_total: number | null;
+      sms_used: number | null;
+    };
 
     const now = new Date();
-    const period = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    const period = now.toLocaleString("en-US", {
+      month: "long",
+      year: "numeric",
+    });
 
     const entries: UsageEntry[] = [];
 
     if (rows.data_total_mb !== null && rows.data_total_mb > 0) {
       entries.push({
-        type: 'data',
-        used: Math.round((rows.data_used_mb ?? 0) / 1024 * 10) / 10, // MB → GB, 1 decimal
-        total: Math.round(rows.data_total_mb / 1024 * 10) / 10,
-        unit: 'GB',
+        type: "data",
+        used: Math.round(((rows.data_used_mb ?? 0) / 1024) * 10) / 10, // MB → GB, 1 decimal
+        total: Math.round((rows.data_total_mb / 1024) * 10) / 10,
+        unit: "GB",
         period,
       });
     }
 
     if (rows.minutes_total !== null && rows.minutes_total > 0) {
       entries.push({
-        type: 'voice',
+        type: "voice",
         used: rows.minutes_used ?? 0,
         total: rows.minutes_total === -1 ? 9999 : rows.minutes_total, // -1 = unlimited, display as large number
-        unit: 'min',
+        unit: "min",
         period,
       });
     }
 
     if (rows.sms_total !== null && rows.sms_total > 0) {
       entries.push({
-        type: 'sms',
+        type: "sms",
         used: rows.sms_used ?? 0,
         total: rows.sms_total === -1 ? 9999 : rows.sms_total,
-        unit: 'SMS',
+        unit: "SMS",
         period,
       });
     }
@@ -245,16 +265,18 @@ export class MockTelcoService {
 
     // Active subscriptions with bundle details
     const subRows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT s.*, c.name as bundle_name
         FROM telco_subscriptions s
         JOIN telco_bundles_catalog c ON c.id = s.bundle_id
         WHERE s.user_id = ? AND s.status = 'active' AND s.expires_at > datetime('now')
         ORDER BY s.expires_at ASC
-      `)
+      `,
+      )
       .all(userId) as Array<Record<string, unknown>>;
 
-    const activeSubscriptions: ActiveSubscription[] = subRows.map(row => ({
+    const activeSubscriptions: ActiveSubscription[] = subRows.map((row) => ({
       subscriptionId: row.id as string,
       bundleId: row.bundle_id as string,
       bundleName: row.bundle_name as string,
@@ -274,41 +296,45 @@ export class MockTelcoService {
 
     // Recent subscriptions (purchases)
     const purchaseRows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT s.*, c.name as bundle_name, c.price, c.currency as bundle_currency
         FROM telco_subscriptions s
         JOIN telco_bundles_catalog c ON c.id = s.bundle_id
         WHERE s.user_id = ?
         ORDER BY s.created_at DESC
         LIMIT 5
-      `)
+      `,
+      )
       .all(userId) as Array<Record<string, unknown>>;
 
     for (const row of purchaseRows) {
       recentTransactions.push({
         id: row.id as string,
-        type: 'purchase',
+        type: "purchase",
         description: `Purchased ${row.bundle_name}`,
         amount: row.price as number,
-        currency: (row.bundle_currency as string) ?? 'USD',
+        currency: (row.bundle_currency as string) ?? "USD",
         timestamp: row.created_at as string,
       });
     }
 
     // Recent tickets
     const ticketRows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT * FROM telco_tickets
         WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT 3
-      `)
+      `,
+      )
       .all(userId) as Array<Record<string, unknown>>;
 
     for (const row of ticketRows) {
       recentTransactions.push({
         id: row.id as string,
-        type: 'ticket',
+        type: "ticket",
         description: `Ticket created: ${(row.subject as string).slice(0, 40)}`,
         timestamp: row.created_at as string,
       });
@@ -317,9 +343,9 @@ export class MockTelcoService {
     // Top-up from account history
     if (account.last_topup_at) {
       recentTransactions.push({
-        id: 'topup-last',
-        type: 'topup',
-        description: 'Account top-up',
+        id: "topup-last",
+        type: "topup",
+        description: "Account top-up",
         amount: 10, // from seed data
         currency: account.currency,
         timestamp: account.last_topup_at,
@@ -327,27 +353,42 @@ export class MockTelcoService {
     }
 
     // Sort all transactions by timestamp descending, take top 5
-    recentTransactions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    recentTransactions.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
     const trimmedTransactions = recentTransactions.slice(0, 5);
 
     // Open tickets (non-resolved)
     const openTicketRows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT id, status, subject, updated_at
         FROM telco_tickets
         WHERE user_id = ? AND status != 'resolved'
         ORDER BY updated_at DESC
-      `)
-      .all(userId) as Array<{ id: string; status: string; subject: string; updated_at: string }>;
+      `,
+      )
+      .all(userId) as Array<{
+      id: string;
+      status: string;
+      subject: string;
+      updated_at: string;
+    }>;
 
-    const openTickets: OpenTicket[] = openTicketRows.map(row => ({
+    const openTickets: OpenTicket[] = openTicketRows.map((row) => ({
       id: row.id,
       status: row.status,
       subject: row.subject,
       updatedAt: row.updated_at,
     }));
 
-    return { profile, activeSubscriptions, recentTransactions: trimmedTransactions, openTickets };
+    return {
+      profile,
+      activeSubscriptions,
+      recentTransactions: trimmedTransactions,
+      openTickets,
+    };
   }
 
   // ── Support ──
@@ -355,35 +396,47 @@ export class MockTelcoService {
   getTickets(userId: string): SupportTicket[] {
     this.simulateTick(userId);
     return this.db
-      .prepare('SELECT * FROM telco_tickets WHERE user_id = ? ORDER BY created_at DESC')
+      .prepare(
+        "SELECT * FROM telco_tickets WHERE user_id = ? ORDER BY created_at DESC",
+      )
       .all(userId) as SupportTicket[];
   }
 
-  createTicket(userId: string, subject: string, description: string): SupportTicket {
+  createTicket(
+    userId: string,
+    subject: string,
+    description: string,
+  ): SupportTicket {
     const id = `TK-${Date.now().toString(36).toUpperCase()}`;
     const now = new Date().toISOString();
     this.db
-      .prepare('INSERT INTO telco_tickets (id, user_id, status, subject, description, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, userId, 'open', subject, description, 'medium', now, now);
+      .prepare(
+        "INSERT INTO telco_tickets (id, user_id, status, subject, description, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(id, userId, "open", subject, description, "medium", now, now);
     return {
       id,
-      status: 'open',
+      status: "open",
       subject,
       description,
-      createdAt: now.split('T')[0],
+      createdAt: now.split("T")[0],
     };
   }
 
   getFaq(): Array<{ question: string; answer: string }> {
     return this.db
-      .prepare('SELECT question, answer FROM telco_faq')
+      .prepare("SELECT question, answer FROM telco_faq")
       .all() as Array<{ question: string; answer: string }>;
   }
 
   private ensureDemoUsers(): void {
     const now = new Date();
-    const cycleStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const cycleEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    const cycleStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      .toISOString()
+      .split("T")[0];
+    const cycleEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      .toISOString()
+      .split("T")[0];
 
     const insertAccount = this.db.prepare(`
       INSERT OR IGNORE INTO telco_accounts (
@@ -393,27 +446,27 @@ export class MockTelcoService {
 
     const demoAccounts = [
       {
-        userId: 'user-1',
-        msisdn: '+12025551234',
-        name: 'Alex Morgan',
+        userId: "user-1",
+        msisdn: "+12025551234",
+        name: "Alex Morgan",
         balance: 50,
-        plan: 'Prepaid Basic',
+        plan: "Prepaid Basic",
         lastTopUp: new Date(now.getTime() - 3 * 86400000).toISOString(),
       },
       {
-        userId: 'user-2',
-        msisdn: '+12025555678',
-        name: 'Jamie Chen',
+        userId: "user-2",
+        msisdn: "+12025555678",
+        name: "Jamie Chen",
         balance: 18.75,
-        plan: 'Value Plus',
+        plan: "Value Plus",
         lastTopUp: new Date(now.getTime() - 6 * 86400000).toISOString(),
       },
       {
-        userId: 'user-3',
-        msisdn: '+12025559876',
-        name: 'Sam Patel',
+        userId: "user-3",
+        msisdn: "+12025559876",
+        name: "Sam Patel",
         balance: 92.4,
-        plan: 'Unlimited Pro',
+        plan: "Unlimited Pro",
         lastTopUp: new Date(now.getTime() - 1 * 86400000).toISOString(),
       },
     ];
@@ -424,7 +477,7 @@ export class MockTelcoService {
         account.msisdn,
         account.name,
         account.balance,
-        'USD',
+        "USD",
         account.plan,
         cycleStart,
         cycleEnd,
@@ -451,8 +504,8 @@ export class MockTelcoService {
     const day = 86400000;
     const demoSubs = [
       {
-        userId: 'user-2',
-        bundleId: 'b2',
+        userId: "user-2",
+        bundleId: "b2",
         dataTotalMb: 10 * 1024,
         dataUsedMb: 3.2 * 1024,
         minutesTotal: 500,
@@ -462,8 +515,8 @@ export class MockTelcoService {
         activatedAt: new Date(now.getTime() - 11 * day),
       },
       {
-        userId: 'user-3',
-        bundleId: 'b3',
+        userId: "user-3",
+        bundleId: "b3",
         dataTotalMb: 50 * 1024,
         dataUsedMb: 19.4 * 1024,
         minutesTotal: -1,
@@ -478,8 +531,10 @@ export class MockTelcoService {
       const count = (getSubCount.get(sub.userId) as { c: number }).c;
       if (count > 0) continue;
 
-      const activatedAt = sub.activatedAt.toISOString().split('T')[0];
-      const expiresAt = new Date(sub.activatedAt.getTime() + 30 * day).toISOString().split('T')[0];
+      const activatedAt = sub.activatedAt.toISOString().split("T")[0];
+      const expiresAt = new Date(sub.activatedAt.getTime() + 30 * day)
+        .toISOString()
+        .split("T")[0];
 
       insertSub.run(
         `sub-${sub.userId}`,
@@ -498,7 +553,9 @@ export class MockTelcoService {
   }
 
   private ensureDemoTickets(now: Date): void {
-    const getTicketCount = this.db.prepare('SELECT COUNT(*) as c FROM telco_tickets WHERE user_id = ?');
+    const getTicketCount = this.db.prepare(
+      "SELECT COUNT(*) as c FROM telco_tickets WHERE user_id = ?",
+    );
     const insertTicket = this.db.prepare(`
       INSERT INTO telco_tickets (id, user_id, status, subject, description, priority, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -506,21 +563,23 @@ export class MockTelcoService {
 
     const demoTickets = [
       {
-        id: 'TK-2001',
-        userId: 'user-2',
-        status: 'open',
-        subject: 'Unable to redeem weekend promo code',
-        description: 'Promo code validates in app but fails at checkout for weekend bundle.',
-        priority: 'medium',
+        id: "TK-2001",
+        userId: "user-2",
+        status: "open",
+        subject: "Unable to redeem weekend promo code",
+        description:
+          "Promo code validates in app but fails at checkout for weekend bundle.",
+        priority: "medium",
         createdAt: new Date(now.getTime() - 2 * 86400000).toISOString(),
       },
       {
-        id: 'TK-3001',
-        userId: 'user-3',
-        status: 'in_progress',
-        subject: 'Roaming calls dropping while traveling',
-        description: 'Calls in roaming region disconnect after around 30 seconds.',
-        priority: 'high',
+        id: "TK-3001",
+        userId: "user-3",
+        status: "in_progress",
+        subject: "Roaming calls dropping while traveling",
+        description:
+          "Calls in roaming region disconnect after around 30 seconds.",
+        priority: "high",
         createdAt: new Date(now.getTime() - 4 * 86400000).toISOString(),
       },
     ];
@@ -555,8 +614,18 @@ export class MockTelcoService {
 
     // 1. Add random usage to active subscriptions
     const subs = this.db
-      .prepare("SELECT * FROM telco_subscriptions WHERE user_id = ? AND status = 'active' AND expires_at > datetime('now')")
-      .all(userId) as Array<{ id: string; data_used_mb: number; minutes_used: number; sms_used: number; data_total_mb: number; minutes_total: number; sms_total: number }>;
+      .prepare(
+        "SELECT * FROM telco_subscriptions WHERE user_id = ? AND status = 'active' AND expires_at > datetime('now')",
+      )
+      .all(userId) as Array<{
+      id: string;
+      data_used_mb: number;
+      minutes_used: number;
+      sms_used: number;
+      data_total_mb: number;
+      minutes_total: number;
+      sms_total: number;
+    }>;
 
     for (const sub of subs) {
       // Data: 50–300 MB
@@ -568,21 +637,27 @@ export class MockTelcoService {
 
       if (sub.data_total_mb > 0 && sub.data_total_mb !== -1) {
         this.db
-          .prepare('UPDATE telco_subscriptions SET data_used_mb = data_used_mb + ? WHERE id = ?')
+          .prepare(
+            "UPDATE telco_subscriptions SET data_used_mb = data_used_mb + ? WHERE id = ?",
+          )
           .run(dataAmount, sub.id);
-        this.insertUsageRecord(userId, sub.id, 'data', dataAmount);
+        this.insertUsageRecord(userId, sub.id, "data", dataAmount);
       }
       if (sub.minutes_total > 0 && sub.minutes_total !== -1) {
         this.db
-          .prepare('UPDATE telco_subscriptions SET minutes_used = minutes_used + ? WHERE id = ?')
+          .prepare(
+            "UPDATE telco_subscriptions SET minutes_used = minutes_used + ? WHERE id = ?",
+          )
           .run(voiceAmount, sub.id);
-        this.insertUsageRecord(userId, sub.id, 'voice', voiceAmount);
+        this.insertUsageRecord(userId, sub.id, "voice", voiceAmount);
       }
       if (sub.sms_total > 0 && sub.sms_total !== -1) {
         this.db
-          .prepare('UPDATE telco_subscriptions SET sms_used = sms_used + ? WHERE id = ?')
+          .prepare(
+            "UPDATE telco_subscriptions SET sms_used = sms_used + ? WHERE id = ?",
+          )
           .run(smsAmount, sub.id);
-        this.insertUsageRecord(userId, sub.id, 'sms', smsAmount);
+        this.insertUsageRecord(userId, sub.id, "sms", smsAmount);
       }
     }
 
@@ -592,19 +667,38 @@ export class MockTelcoService {
     // 3. Update last_simulated_at
     const nowISO = new Date(now).toISOString();
     this.db
-      .prepare('UPDATE telco_accounts SET last_simulated_at = ?, updated_at = ? WHERE user_id = ?')
+      .prepare(
+        "UPDATE telco_accounts SET last_simulated_at = ?, updated_at = ? WHERE user_id = ?",
+      )
       .run(nowISO, nowISO, userId);
   }
 
-  private insertUsageRecord(userId: string, subscriptionId: string, type: 'data' | 'voice' | 'sms', amount: number): void {
+  private insertUsageRecord(
+    userId: string,
+    subscriptionId: string,
+    type: "data" | "voice" | "sms",
+    amount: number,
+  ): void {
     this.db
-      .prepare('INSERT INTO telco_usage_records (id, user_id, subscription_id, type, amount, direction, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(`cdr-${randomUUID().slice(0, 8)}`, userId, subscriptionId, type, amount, 'outbound', new Date().toISOString());
+      .prepare(
+        "INSERT INTO telco_usage_records (id, user_id, subscription_id, type, amount, direction, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        `cdr-${randomUUID().slice(0, 8)}`,
+        userId,
+        subscriptionId,
+        type,
+        amount,
+        "outbound",
+        new Date().toISOString(),
+      );
   }
 
   private expireBundles(): void {
     this.db
-      .prepare("UPDATE telco_subscriptions SET status = 'expired' WHERE status = 'active' AND expires_at <= datetime('now')")
+      .prepare(
+        "UPDATE telco_subscriptions SET status = 'expired' WHERE status = 'active' AND expires_at <= datetime('now')",
+      )
       .run();
   }
 
@@ -615,21 +709,30 @@ export class MockTelcoService {
 
     // open → in_progress after 2 min
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE telco_tickets
         SET status = 'in_progress', updated_at = ?
         WHERE user_id = ? AND status = 'open' AND (unixepoch(created_at) * 1000) < ?
-      `)
+      `,
+      )
       .run(new Date(now).toISOString(), userId, now - TWO_MINUTES);
 
     // in_progress → resolved after 5 min
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE telco_tickets
         SET status = 'resolved', updated_at = ?, resolved_at = ?
         WHERE user_id = ? AND status = 'in_progress' AND (unixepoch(updated_at) * 1000) < ?
-      `)
-      .run(new Date(now).toISOString(), new Date(now).toISOString(), userId, now - FIVE_MINUTES);
+      `,
+      )
+      .run(
+        new Date(now).toISOString(),
+        new Date(now).toISOString(),
+        userId,
+        now - FIVE_MINUTES,
+      );
   }
 
   // ── Helpers ──
@@ -644,7 +747,7 @@ export class MockTelcoService {
     return {
       current: Math.round(account.balance * 100) / 100,
       currency: account.currency,
-      lastTopUp: account.last_topup_at ?? 'N/A',
+      lastTopUp: account.last_topup_at ?? "N/A",
       nextBillingDate: account.billing_cycle_end,
     };
   }
@@ -655,7 +758,7 @@ export class MockTelcoService {
       name: row.name as string,
       description: row.description as string,
       price: row.price as number,
-      currency: (row.currency as string) ?? 'USD',
+      currency: (row.currency as string) ?? "USD",
       dataGB: row.data_gb as number,
       minutes: row.minutes as number,
       sms: row.sms as number,

@@ -1,9 +1,9 @@
-import type { PinoLogger } from 'nestjs-pino';
-import type { AgentRequest } from '../../domain/types/agent';
-import type { LlmPort } from '../../domain/ports/llm.port';
-import { SECURITY_LIMITS } from '../../domain/constants/security-constants';
+import type { PinoLogger } from "nestjs-pino";
+import type { AgentRequest } from "../../domain/types/agent";
+import type { LlmPort } from "../../domain/ports/llm.port";
+import { SECURITY_LIMITS } from "../../domain/constants/security-constants";
 
-type ContextMessageRole = 'system' | 'user' | 'assistant';
+type ContextMessageRole = "system" | "user" | "assistant";
 
 export interface ContextMessage {
   role: ContextMessageRole;
@@ -27,28 +27,35 @@ export class ContextManagerService {
   constructor(
     private readonly llm: LlmPort,
     private readonly modelName: string,
-    private readonly logger: Pick<PinoLogger, 'warn'> | null,
+    private readonly logger: Pick<PinoLogger, "warn"> | null,
   ) {}
 
-  async buildMessages(request: AgentRequest, systemPrompt: string): Promise<ContextMessage[]> {
-    const cappedHistory = request.conversationHistory.slice(-SECURITY_LIMITS.SUPERVISOR_HISTORY_CAP);
+  async buildMessages(
+    request: AgentRequest,
+    systemPrompt: string,
+  ): Promise<ContextMessage[]> {
+    const cappedHistory = request.conversationHistory.slice(
+      -SECURITY_LIMITS.SUPERVISOR_HISTORY_CAP,
+    );
     const historyMessages: ContextMessage[] = cappedHistory.map((msg) => ({
-      role: msg.role === 'agent' ? 'assistant' : 'user',
+      role: msg.role === "agent" ? "assistant" : "user",
       content: msg.text,
     }));
 
     const userPromptMessage: ContextMessage = {
-      role: 'user',
+      role: "user",
       content: `<user_context>\nuserId: ${request.userId}\n</user_context>\n${request.prompt}`,
     };
 
     const rawMessages: ContextMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: "system", content: systemPrompt },
       ...historyMessages,
       userPromptMessage,
     ];
 
-    const thresholdChars = Math.floor(SECURITY_LIMITS.TOTAL_CHARS_BUDGET * SUMMARY_THRESHOLD_RATIO);
+    const thresholdChars = Math.floor(
+      SECURITY_LIMITS.TOTAL_CHARS_BUDGET * SUMMARY_THRESHOLD_RATIO,
+    );
     const overThreshold = this.totalChars(rawMessages) > thresholdChars;
     const sessionKey = this.summaryKey(request.userId, request.sessionId);
     const cached = this.summaryCache.get(sessionKey);
@@ -86,16 +93,19 @@ export class ContextManagerService {
         crossedThreshold: true,
       });
 
-      const recentMessages = cappedHistory.slice(-SUMMARY_RECENT_MESSAGES).map((msg) => ({
-        role: msg.role === 'agent' ? 'assistant' : 'user',
-        content: msg.text,
-      } satisfies ContextMessage));
+      const recentMessages = cappedHistory.slice(-SUMMARY_RECENT_MESSAGES).map(
+        (msg) =>
+          ({
+            role: msg.role === "agent" ? "assistant" : "user",
+            content: msg.text,
+          }) satisfies ContextMessage,
+      );
 
       return this.enforceBudget(
         [
-          { role: 'system', content: systemPrompt },
+          { role: "system", content: systemPrompt },
           {
-            role: 'system',
+            role: "system",
             content: `Conversation summary:\n${summaryText}`,
           },
           ...recentMessages,
@@ -108,26 +118,28 @@ export class ContextManagerService {
     return this.enforceBudget(rawMessages, false);
   }
 
-  private async summarizeHistory(history: AgentRequest['conversationHistory']): Promise<string | null> {
+  private async summarizeHistory(
+    history: AgentRequest["conversationHistory"],
+  ): Promise<string | null> {
     const transcript = history
       .map((msg) => `${msg.role.toUpperCase()}: ${msg.text}`)
-      .join('\n');
+      .join("\n");
 
     try {
       const response = await this.llm.chatCompletion({
         model: this.modelName,
         messages: [
           {
-            role: 'system',
+            role: "system",
             content:
-              'Summarize the telecom support conversation in 4-6 concise bullet points. Capture user intent, account state, actions already completed, and unresolved issues. Do not invent facts.',
+              "Summarize the telecom support conversation in 4-6 concise bullet points. Capture user intent, account state, actions already completed, and unresolved issues. Do not invent facts.",
           },
           {
-            role: 'user',
+            role: "user",
             content: `Conversation transcript:\n${transcript}`,
           },
         ],
-        tool_choice: 'none',
+        tool_choice: "none",
         temperature: 0.1,
         max_tokens: SUMMARY_MAX_TOKENS,
       });
@@ -138,15 +150,19 @@ export class ContextManagerService {
     } catch (error) {
       this.logger?.warn(
         {
-          err: error instanceof Error ? { message: error.message } : String(error),
+          err:
+            error instanceof Error ? { message: error.message } : String(error),
         },
-        'Conversation summarization failed; falling back to raw history',
+        "Conversation summarization failed; falling back to raw history",
       );
       return null;
     }
   }
 
-  private enforceBudget(messages: ContextMessage[], hasSummary: boolean): ContextMessage[] {
+  private enforceBudget(
+    messages: ContextMessage[],
+    hasSummary: boolean,
+  ): ContextMessage[] {
     const trimmed = [...messages];
     let total = this.totalChars(trimmed);
 
@@ -181,7 +197,9 @@ export class ContextManagerService {
 
   private trimSummaryCache(): void {
     while (this.summaryCache.size >= SUMMARY_CACHE_MAX_SESSIONS) {
-      const oldestKey = this.summaryCache.keys().next().value as string | undefined;
+      const oldestKey = this.summaryCache.keys().next().value as
+        | string
+        | undefined;
       if (!oldestKey) break;
       this.summaryCache.delete(oldestKey);
     }

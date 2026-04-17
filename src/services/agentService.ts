@@ -1,11 +1,17 @@
-import type { AgentRequest, AgentResponse, ProcessingStep } from '../types/agent';
+import type {
+  AgentRequest,
+  AgentResponse,
+  ProcessingStep,
+} from "../types/agent";
 
-export async function invokeAgentService(request: AgentRequest): Promise<AgentResponse> {
-  const res = await fetch('/api/agent/chat', {
-    method: 'POST',
+export async function invokeAgentService(
+  request: AgentRequest,
+): Promise<AgentResponse> {
+  const res = await fetch("/api/agent/chat", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'x-user-id': request.userId,
+      "Content-Type": "application/json",
+      "x-user-id": request.userId,
     },
     body: JSON.stringify(request),
   });
@@ -23,11 +29,11 @@ export async function invokeAgentStream(
   request: AgentRequest,
   onStep: StepCallback,
 ): Promise<AgentResponse> {
-  const res = await fetch('/api/agent/chat/stream', {
-    method: 'POST',
+  const res = await fetch("/api/agent/chat/stream", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'x-user-id': request.userId,
+      "Content-Type": "application/json",
+      "x-user-id": request.userId,
     },
     body: JSON.stringify(request),
   });
@@ -37,10 +43,10 @@ export async function invokeAgentStream(
   }
 
   const reader = res.body?.getReader();
-  if (!reader) throw new Error('No readable stream');
+  if (!reader) throw new Error("No readable stream");
 
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
   let finalResult: AgentResponse | null = null;
   const steps: ProcessingStep[] = [];
 
@@ -49,47 +55,47 @@ export async function invokeAgentStream(
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
 
-    let eventType = '';
+    let eventType = "";
     for (const line of lines) {
-      if (line.startsWith('event: ')) {
+      if (line.startsWith("event: ")) {
         eventType = line.slice(7).trim();
-      } else if (line.startsWith('data: ')) {
+      } else if (line.startsWith("data: ")) {
         const data = line.slice(6);
         try {
           const parsed = JSON.parse(data);
 
-          if (eventType === 'step') {
+          if (eventType === "step") {
             // Update existing step or add new one
-            const existing = steps.findIndex(s => s.label === parsed.label);
+            const existing = steps.findIndex((s) => s.label === parsed.label);
             if (existing >= 0) {
               steps[existing] = { label: parsed.label, status: parsed.status };
             } else {
               steps.push({ label: parsed.label, status: parsed.status });
             }
             onStep([...steps]);
-          } else if (eventType === 'result') {
+          } else if (eventType === "result") {
             finalResult = parsed as AgentResponse;
-          } else if (eventType === 'error') {
-            throw new Error(parsed.message ?? 'Streaming error');
+          } else if (eventType === "error") {
+            throw new Error(parsed.message ?? "Streaming error");
           }
         } catch (e) {
           if (e instanceof SyntaxError) {
             // JSON parse failed — likely incomplete SSE data
-            console.warn('Failed to parse SSE data, skipping:', data);
+            console.warn("Failed to parse SSE data, skipping:", data);
           } else {
             throw e;
           }
         }
-        eventType = '';
+        eventType = "";
       }
     }
   }
 
   if (!finalResult) {
-    throw new Error('Stream ended without result');
+    throw new Error("Stream ended without result");
   }
 
   return finalResult;

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import type { ScreenData } from '../../types/agent';
-import type { ScreenActor } from '../../types/screens';
-import styles from './BalanceScreen.module.css';
+import { useEffect, useState } from "react";
+import type { ScreenData } from "../../types/agent";
+import type { ScreenActor } from "../../types/screens";
+import styles from "./BalanceScreen.module.css";
 
 const MIN_TOP_UP = 1;
 const MAX_TOP_UP = 500;
@@ -12,19 +12,19 @@ interface Props {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
   });
 }
 
 export function BalanceScreen({ data, actor }: Props) {
   const [showTopUp, setShowTopUp] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [debouncedAmount, setDebouncedAmount] = useState('');
+  const [amount, setAmount] = useState("");
+  const [debouncedAmount, setDebouncedAmount] = useState("");
   const [touched, setTouched] = useState(false);
 
-  if (data.type !== 'balance') return null;
+  if (data.type !== "balance") return null;
   const { balance } = data;
 
   useEffect(() => {
@@ -37,12 +37,12 @@ export function BalanceScreen({ data, actor }: Props) {
   function getAmountError(value: string): string | null {
     const trimmed = value.trim();
     if (!trimmed) {
-      return touched ? 'Enter an amount between $1 and $500.' : null;
+      return touched ? "Enter an amount between $1 and $500." : null;
     }
 
     const parsed = Number.parseFloat(trimmed);
     if (Number.isNaN(parsed)) {
-      return 'Amount must be a number.';
+      return "Amount must be a number.";
     }
 
     if (parsed < MIN_TOP_UP || parsed > MAX_TOP_UP) {
@@ -61,9 +61,9 @@ export function BalanceScreen({ data, actor }: Props) {
     const val = parseFloat(debouncedAmount);
     if (isNaN(val)) return;
 
-    actor.send({ type: 'SUBMIT_PROMPT', prompt: `Top up ${val} dollars` });
-    setAmount('');
-    setDebouncedAmount('');
+    actor.send({ type: "SUBMIT_PROMPT", prompt: `Top up ${val} dollars` });
+    setAmount("");
+    setDebouncedAmount("");
     setTouched(false);
     setShowTopUp(false);
   }
@@ -71,8 +71,12 @@ export function BalanceScreen({ data, actor }: Props) {
   return (
     <div className={styles.balanceContainer}>
       <div className={styles.balanceRow}>
-        <span className={styles.balanceAmount}>${balance.current.toFixed(2)}</span>
-        <span className={styles.balanceNote}>auto-renews {formatDate(balance.nextBillingDate)}</span>
+        <span className={styles.balanceAmount}>
+          ${balance.current.toFixed(2)}
+        </span>
+        <span className={styles.balanceNote}>
+          auto-renews {formatDate(balance.nextBillingDate)}
+        </span>
       </div>
 
       {showTopUp ? (
@@ -90,11 +94,27 @@ export function BalanceScreen({ data, actor }: Props) {
                 setTouched(true);
                 setAmount(e.target.value);
               }}
-              onKeyDown={(e) => e.key === 'Enter' && handleTopUp()}
+              onKeyDown={(e) => e.key === "Enter" && handleTopUp()}
               aria-invalid={!!amountError}
             />
-            <button className={styles.topUpBtn} onClick={handleTopUp} disabled={!isAmountValid}>Add</button>
-            <button className={styles.cancelBtn} onClick={() => { setShowTopUp(false); setAmount(''); setDebouncedAmount(''); setTouched(false); }}>Cancel</button>
+            <button
+              className={styles.topUpBtn}
+              onClick={handleTopUp}
+              disabled={!isAmountValid}
+            >
+              Add
+            </button>
+            <button
+              className={styles.cancelBtn}
+              onClick={() => {
+                setShowTopUp(false);
+                setAmount("");
+                setDebouncedAmount("");
+                setTouched(false);
+              }}
+            >
+              Cancel
+            </button>
           </div>
           {amountError && <p className={styles.errorText}>{amountError}</p>}
         </>

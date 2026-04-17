@@ -1,4 +1,4 @@
-import type { AgentResponse, ScreenType } from '../types/agent';
+import type { AgentResponse, ScreenType } from "../types/agent";
 
 export interface ScreenCachePort {
   get(userId: string, screenType: ScreenType): AgentResponse | null;

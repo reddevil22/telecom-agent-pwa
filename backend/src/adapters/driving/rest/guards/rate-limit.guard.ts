@@ -1,6 +1,13 @@
-import { CanActivate, ExecutionContext, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { RateLimiterPort } from '../../../../domain/ports/rate-limiter.port';
-import { RATE_LIMITER_PORT } from '../../../../domain/tokens';
+import {
+  CanActivate,
+  ExecutionContext,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+} from "@nestjs/common";
+import type { RateLimiterPort } from "../../../../domain/ports/rate-limiter.port";
+import { RATE_LIMITER_PORT } from "../../../../domain/tokens";
 
 @Injectable()
 export class RateLimitGuard implements CanActivate {
@@ -23,16 +30,16 @@ export class RateLimitGuard implements CanActivate {
 
     const allowed = await this.rateLimiter.isAllowed(key, Date.now());
     if (!allowed) {
-      throw new HttpException('Too many requests', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     return true;
   }
 
-  private resolveKey(request: {
-    userId?: string;
-    ip?: string;
-  }): string | null {
+  private resolveKey(request: { userId?: string; ip?: string }): string | null {
     // Authenticated requests: rate limit by authenticated user
     if (request.userId) {
       return `user:${request.userId}`;
@@ -40,5 +47,4 @@ export class RateLimitGuard implements CanActivate {
     // GET/other requests: rate limit by source IP only
     return request.ip ? `ip:${request.ip}` : null;
   }
-
 }

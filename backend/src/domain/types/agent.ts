@@ -1,5 +1,15 @@
-import type { Balance, Bundle, UsageEntry, SupportTicket, ConversationMessage, AccountProfile, ActiveSubscription, TransactionEntry, OpenTicket } from './domain';
-import type { AgentErrorCode } from './errors';
+import type {
+  Balance,
+  Bundle,
+  UsageEntry,
+  SupportTicket,
+  ConversationMessage,
+  AccountProfile,
+  ActiveSubscription,
+  TransactionEntry,
+  OpenTicket,
+} from "./domain";
+import type { AgentErrorCode } from "./errors";
 
 export interface AgentRequest {
   prompt: string;
@@ -9,46 +19,54 @@ export interface AgentRequest {
   timestamp: number;
 }
 
-export type ScreenType = 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'account' | 'unknown';
+export type ScreenType =
+  | "balance"
+  | "bundles"
+  | "bundleDetail"
+  | "usage"
+  | "support"
+  | "confirmation"
+  | "account"
+  | "unknown";
 
 export interface BalanceScreenData {
-  type: 'balance';
+  type: "balance";
   balance: Balance;
 }
 
 export interface BundlesScreenData {
-  type: 'bundles';
+  type: "bundles";
   bundles: Bundle[];
 }
 
 export interface BundleDetailScreenData {
-  type: 'bundleDetail';
+  type: "bundleDetail";
   bundle: Bundle;
   currentBalance: Balance;
 }
 
 export interface UsageScreenData {
-  type: 'usage';
+  type: "usage";
   usage: UsageEntry[];
 }
 
 export interface SupportScreenData {
-  type: 'support';
+  type: "support";
   tickets: SupportTicket[];
   faqItems: { question: string; answer: string }[];
 }
 
 export interface ConfirmationScreenData {
-  type: 'confirmation';
+  type: "confirmation";
   title: string;
-  status: 'success' | 'error';
+  status: "success" | "error";
   message: string;
   details: Record<string, string | number>;
   updatedBalance?: Balance;
 }
 
 export interface AccountScreenData {
-  type: 'account';
+  type: "account";
   profile: AccountProfile;
   activeSubscriptions: ActiveSubscription[];
   recentTransactions: TransactionEntry[];
@@ -56,7 +74,7 @@ export interface AccountScreenData {
 }
 
 export interface UnknownScreenData {
-  type: 'unknown';
+  type: "unknown";
 }
 
 export type ScreenData =
@@ -71,7 +89,7 @@ export type ScreenData =
 
 export interface ProcessingStep {
   label: string;
-  status: 'pending' | 'active' | 'done';
+  status: "pending" | "active" | "done";
 }
 
 export interface ToolResult {

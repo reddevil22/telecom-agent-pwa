@@ -1,4 +1,10 @@
-import type { Balance, Bundle, UsageEntry, SupportTicket, ConversationMessage } from './index';
+import type {
+  Balance,
+  Bundle,
+  UsageEntry,
+  SupportTicket,
+  ConversationMessage,
+} from "./index";
 
 // ── Agent protocol (frontend ↔ backend contract) ──
 // When NestJS backend is built: POST /api/agent/chat accepts AgentRequest, returns AgentResponse.
@@ -12,58 +18,66 @@ export interface AgentRequest {
 }
 
 export type AgentErrorCode =
-  | 'ERR_RATE_LIMITED'
-  | 'ERR_LLM_TIMEOUT'
-  | 'ERR_LLM_UNAVAILABLE'
-  | 'ERR_TOOL_TEMPORARILY_UNAVAILABLE'
-  | 'ERR_TOOL_FAILED'
-  | 'ERR_INSUFFICIENT_BALANCE'
-  | 'ERR_INVALID_BUNDLE'
-  | 'ERR_PROMPT_BLOCKED'
-  | 'ERR_MAX_ITERATIONS';
+  | "ERR_RATE_LIMITED"
+  | "ERR_LLM_TIMEOUT"
+  | "ERR_LLM_UNAVAILABLE"
+  | "ERR_TOOL_TEMPORARILY_UNAVAILABLE"
+  | "ERR_TOOL_FAILED"
+  | "ERR_INSUFFICIENT_BALANCE"
+  | "ERR_INVALID_BUNDLE"
+  | "ERR_PROMPT_BLOCKED"
+  | "ERR_MAX_ITERATIONS";
 
-export type ScreenType = 'balance' | 'bundles' | 'bundleDetail' | 'usage' | 'support' | 'confirmation' | 'account' | 'unknown';
+export type ScreenType =
+  | "balance"
+  | "bundles"
+  | "bundleDetail"
+  | "usage"
+  | "support"
+  | "confirmation"
+  | "account"
+  | "unknown";
 
 // ── Screen data (discriminated union) ──
 
 export interface BalanceScreenData {
-  type: 'balance';
+  type: "balance";
   balance: Balance;
 }
 
 export interface BundlesScreenData {
-  type: 'bundles';
+  type: "bundles";
   bundles: Bundle[];
 }
 
 export interface BundleDetailScreenData {
-  type: 'bundleDetail';
+  type: "bundleDetail";
   bundle: Bundle;
   currentBalance: Balance;
 }
 
 export interface UsageScreenData {
-  type: 'usage';
+  type: "usage";
   usage: UsageEntry[];
 }
 
 export interface SupportScreenData {
-  type: 'support';
+  type: "support";
   tickets: SupportTicket[];
   faqItems: { question: string; answer: string }[];
 }
 
 export interface ConfirmationScreenData {
-  type: 'confirmation';
+  type: "confirmation";
   title: string;
-  status: 'success' | 'error';
+  status: "success" | "error";
   message: string;
   details: Record<string, string | number>;
   updatedBalance?: Balance;
 }
 
 export interface AccountScreenData {
-  type: 'account';
+  type: "account";
   profile: {
     name: string;
     msisdn: string;
@@ -103,7 +117,7 @@ export interface AccountScreenData {
 }
 
 export interface UnknownScreenData {
-  type: 'unknown';
+  type: "unknown";
 }
 
 export type ScreenData =
@@ -118,7 +132,7 @@ export type ScreenData =
 
 export interface ProcessingStep {
   label: string;
-  status: 'pending' | 'active' | 'done' | 'error';
+  status: "pending" | "active" | "done" | "error";
 }
 
 export interface ToolResult {
@@ -137,4 +151,3 @@ export interface AgentResponse {
   errorCode?: AgentErrorCode;
   supplementaryResults?: ToolResult[];
 }
-
