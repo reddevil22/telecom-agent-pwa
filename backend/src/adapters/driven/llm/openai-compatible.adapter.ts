@@ -4,11 +4,13 @@ import type { PinoLogger } from 'nestjs-pino';
 export class OpenAiCompatibleLlmAdapter implements LlmPort {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly timeoutMs: number;
   private readonly logger: PinoLogger | null;
 
-  constructor(baseUrl: string, apiKey: string, logger?: PinoLogger) {
+  constructor(baseUrl: string, apiKey: string, logger?: PinoLogger, timeoutMs = 30_000) {
     this.baseUrl = baseUrl;
     this.apiKey = apiKey;
+    this.timeoutMs = Number.isFinite(timeoutMs) ? Math.max(1, timeoutMs) : 30_000;
     this.logger = logger ?? null;
     this.logger?.setContext(OpenAiCompatibleLlmAdapter.name);
   }
@@ -17,6 +19,7 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
     model: string;
     messages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>;
     tools?: import('../../../domain/ports/llm.port').LlmToolDefinition[];
+    tool_choice?: string;
     temperature?: number;
     max_tokens?: number;
   }): Promise<LlmChatResponse> {
@@ -27,11 +30,24 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
     }
 
     const startTime = Date.now();
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(params),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(params),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+        this.logger?.error({ duration, timeoutMs: this.timeoutMs }, 'LLM request timed out');
+        throw new Error(`LLM request timed out after ${this.timeoutMs}ms`);
+      }
+
+      this.logger?.error({ duration, err: error instanceof Error ? error.message : String(error) }, 'LLM network request failed');
+      throw new Error(`LLM network request failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     if (!response.ok) {
       const body = await response.text();

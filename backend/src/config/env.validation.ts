@@ -5,6 +5,7 @@ export const envValidationSchema = {
   LLM_MODEL_NAME: { type: 'string', default: 'meta-llama/Llama-3-70b' },
   LLM_TEMPERATURE: { type: 'number', default: 0.1 },
   LLM_MAX_TOKENS: { type: 'number', default: 1024 },
+  LLM_TIMEOUT_MS: { type: 'number', default: 30000 },
   INTENT_CACHE_THRESHOLD: { type: 'number', default: 0.6 },
   INTENT_KEYWORDS_PATH: { type: 'string', default: 'data/intent-keywords.json' },
   DASHSCOPE_BASE_URL: { type: 'string', default: 'https://coding-intl.dashscope.aliyuncs.com/v1' },

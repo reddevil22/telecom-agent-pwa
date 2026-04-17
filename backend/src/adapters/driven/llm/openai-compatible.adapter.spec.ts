@@ -153,6 +153,19 @@ describe('OpenAiCompatibleLlmAdapter', () => {
     ).rejects.toThrow('LLM request failed: 500');
   });
 
+  it('throws descriptive timeout error when request exceeds timeout', async () => {
+    const timeoutError = new Error('Operation timed out');
+    timeoutError.name = 'TimeoutError';
+    mockFetch.mockRejectedValueOnce(timeoutError);
+
+    await expect(
+      adapter.chatCompletion({
+        model: 'test',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    ).rejects.toThrow('LLM request timed out');
+  });
+
   it('sends all parameters in request body', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

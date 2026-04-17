@@ -13,12 +13,13 @@ import { SimpleQuerySubAgent, DualQuerySubAgent, ActionSubAgent } from './applic
 import { PurchaseBundleSubAgent } from './application/sub-agents/purchase-bundle-sub-agent.service';
 import { CreateTicketSubAgent } from './application/sub-agents/create-ticket-sub-agent.service';
 import { ViewBundleDetailsSubAgent } from './application/sub-agents/view-bundle-details-sub-agent.service';
-import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT } from './domain/tokens';
+import { LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, INTENT_CACHE_PORT } from './domain/tokens';
 import type { LlmPort } from './domain/ports/llm.port';
 import type { BalanceBffPort, BundlesBffPort, UsageBffPort, SupportBffPort } from './domain/ports/bff-ports';
 import type { ConversationStoragePort } from './domain/ports/conversation-storage.port';
 import type { SubAgentPort } from './domain/ports/sub-agent.port';
 import type { ScreenCachePort } from './domain/ports/screen-cache.port';
+import type { IntentCachePort } from './domain/ports/intent-cache.port';
 import { ScreenCacheModule } from './infrastructure/cache/screen-cache.module';
 import { MockTelcoModule } from './infrastructure/telco/mock-telco.module';
 import { MockTelcoService } from './infrastructure/telco/mock-telco.service';
@@ -27,10 +28,41 @@ import { IntentCacheService } from './application/supervisor/intent-cache.servic
 import { CircuitBreakerService } from './domain/services/circuit-breaker.service';
 import { loadIntentRoutingConfig } from './config/intent-routing.config';
 
+type IntentRoutingConfig = ReturnType<typeof loadIntentRoutingConfig>;
+const INTENT_ROUTING_CONFIG = Symbol('INTENT_ROUTING_CONFIG');
+
 @Module({
   imports: [LlmModule, BalanceBffModule, BundlesBffModule, UsageBffModule, SupportBffModule, SqliteDataModule, ScreenCacheModule, MockTelcoModule],
   controllers: [AgentController, HealthController],
   providers: [
+    {
+      provide: INTENT_ROUTING_CONFIG,
+      useFactory: (config: ConfigService, logger: PinoLogger): IntentRoutingConfig => {
+        return loadIntentRoutingConfig(config, logger);
+      },
+      inject: [ConfigService, PinoLogger],
+    },
+    {
+      provide: INTENT_CACHE_PORT,
+      useFactory: (config: ConfigService): IntentCachePort => {
+        return new IntentCacheService(config.get<number>('INTENT_CACHE_THRESHOLD'));
+      },
+      inject: [ConfigService],
+    },
+    {
+      provide: IntentRouterService,
+      useFactory: (
+        intentCache: IntentCachePort,
+        intentRoutingConfig: IntentRoutingConfig,
+      ): IntentRouterService => {
+        return new IntentRouterService(
+          intentCache,
+          intentRoutingConfig.keywords,
+          intentRoutingConfig.actionSignals,
+        );
+      },
+      inject: [INTENT_CACHE_PORT, INTENT_ROUTING_CONFIG],
+    },
     {
       provide: SupervisorService,
       useFactory: (
@@ -43,20 +75,14 @@ import { loadIntentRoutingConfig } from './config/intent-routing.config';
         cache: ScreenCachePort,
         config: ConfigService,
         logger: PinoLogger,
+        intentRouter: IntentRouterService,
+        intentRoutingConfig: IntentRoutingConfig,
         telcoService: MockTelcoService,
       ) => {
         const provider = config.get<string>('LLM_PROVIDER') ?? 'local';
         const modelName = provider === 'dashscope'
           ? config.get<string>('DASHSCOPE_MODEL_NAME')!
           : config.get<string>('LLM_MODEL_NAME')!;
-
-        const intentRoutingConfig = loadIntentRoutingConfig(config, logger);
-        const intentCache = new IntentCacheService(config.get<number>('INTENT_CACHE_THRESHOLD'));
-        const intentRouter = new IntentRouterService(
-          intentCache,
-          intentRoutingConfig.keywords,
-          intentRoutingConfig.actionSignals,
-        );
         const circuitBreaker = new CircuitBreakerService();
 
         const supervisor = new SupervisorService(
@@ -156,7 +182,7 @@ import { loadIntentRoutingConfig } from './config/intent-routing.config';
 
         return supervisor;
       },
-      inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, ConfigService, PinoLogger, MockTelcoService],
+      inject: [LLM_PORT, BALANCE_BFF_PORT, BUNDLES_BFF_PORT, USAGE_BFF_PORT, SUPPORT_BFF_PORT, CONVERSATION_STORAGE_PORT, SCREEN_CACHE_PORT, ConfigService, PinoLogger, IntentRouterService, INTENT_ROUTING_CONFIG, MockTelcoService],
     },
   ],
 })

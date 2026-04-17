@@ -40,11 +40,8 @@ export class HistoryController {
   @Get('session/:sessionId')
   getSession(@Req() req: AuthedRequest, @Param('sessionId') sessionId: string) {
     const authUserId = this.getAuthenticatedUserId(req);
-    const conversation = this.storage.getConversation(sessionId);
+    const conversation = this.storage.getConversation(sessionId, authUserId);
     if (!conversation) {
-      throw new NotFoundException('Session not found');
-    }
-    if (conversation.userId !== authUserId) {
       throw new NotFoundException('Session not found');
     }
     return conversation;
@@ -53,11 +50,8 @@ export class HistoryController {
   @Delete('session/:sessionId')
   deleteSession(@Req() req: AuthedRequest, @Param('sessionId') sessionId: string) {
     const authUserId = this.getAuthenticatedUserId(req);
-    const conversation = this.storage.getConversation(sessionId);
+    const conversation = this.storage.getConversation(sessionId, authUserId);
     if (!conversation) {
-      throw new NotFoundException('Session not found');
-    }
-    if (conversation.userId !== authUserId) {
       throw new NotFoundException('Session not found');
     }
     this.storage.softDeleteConversation(conversation.id);

@@ -36,7 +36,7 @@ export interface ConversationDocument {
 export interface ConversationStoragePort {
   // Core CRUD operations
   createConversation(sessionId: string, userId: string): string;
-  getConversation(sessionId: string): ConversationDocument | undefined;
+  getConversation(sessionId: string, userId: string): ConversationDocument | undefined;
   getConversationsByUser(userId: string, limit?: number): Array<{
     sessionId: string;
     messageCount: number;

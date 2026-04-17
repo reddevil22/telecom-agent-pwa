@@ -26,7 +26,7 @@ export class SqliteConversationDataMapper implements ConversationStoragePort {
       `),
       getConversationBySession: this.db.prepare(`
         SELECT * FROM conversations 
-        WHERE session_id = ? AND deleted_at IS NULL
+        WHERE session_id = ? AND user_id = ? AND deleted_at IS NULL
       `),
       getConversationsByUser: this.db.prepare(`
         SELECT c.*, COUNT(m.id) as message_count
@@ -63,8 +63,8 @@ export class SqliteConversationDataMapper implements ConversationStoragePort {
     return id;
   }
 
-  getConversation(sessionId: string) {
-    const row = this.statements.getConversationBySession.get(sessionId) as 
+  getConversation(sessionId: string, userId: string) {
+    const row = this.statements.getConversationBySession.get(sessionId, userId) as 
       { id: string; session_id: string; user_id: string; created_at: string; updated_at: string } | undefined;
     
     if (!row) return undefined;

@@ -1,5 +1,5 @@
 import type { LlmPort, LlmChatResponse } from '../../domain/ports/llm.port';
-import type { AgentRequest, AgentResponse, ScreenType, ToolResult } from '../../domain/types/agent';
+import type { AgentRequest, AgentResponse, ScreenType } from '../../domain/types/agent';
 import { REPLY_MAP, SUGGESTION_MAP, TOOL_TO_SCREEN } from '../../domain/constants/agent-constants';
 import { ALLOWED_TOOLS, TOOL_ARG_SCHEMAS, SECURITY_LIMITS } from '../../domain/constants/security-constants';
 import { SYSTEM_PROMPT } from './system-prompt';
@@ -9,10 +9,16 @@ import type { PinoLogger } from 'nestjs-pino';
 import type { ConversationStoragePort } from '../../domain/ports/conversation-storage.port';
 import type { SubAgentPort } from '../../domain/ports/sub-agent.port';
 import type { ScreenCachePort } from '../../domain/ports/screen-cache.port';
-import type { IntentRouterPort } from '../../domain/ports/intent-router.port';
 import type { IntentRouterService } from '../../domain/services/intent-router.service';
 import type { CircuitBreakerService } from '../../domain/services/circuit-breaker.service';
 import { INTENT_TOOL_MAP, TelecomIntent, TIER1_INTENTS, INTENT_KEYWORDS, type IntentKeywordMap } from '../../domain/types/intent';
+
+class LlmCallError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LlmCallError';
+  }
+}
 
 /** Internal message type supporting tool-call and tool-result roles for the ReAct loop */
 interface LoopMessage {
@@ -24,7 +30,6 @@ interface LoopMessage {
 
 interface IterationContext {
   messages: LoopMessage[];
-  collectedResults: ToolResult[];
   primaryResult: { screenType: ScreenType; screenData: AgentResponse['screenData']; processingSteps: AgentResponse['processingSteps'] } | null;
   conversationId: string;
 }
@@ -133,7 +138,6 @@ export class SupervisorService {
       const conversationId = this.initializeConversation(request);
       const context: IterationContext = {
         messages: this.buildInitialMessages(request),
-        collectedResults: [],
         primaryResult: null,
         conversationId,
       };
@@ -159,7 +163,7 @@ export class SupervisorService {
       yield maxIterationsResponse;
     } catch (error) {
       yield { label: 'Error', status: 'error' };
-      const errorResponse = this.handleError(error);
+      const errorResponse = this.handleError(error, error instanceof LlmCallError);
       yield errorResponse;
     }
   }
@@ -184,15 +188,26 @@ export class SupervisorService {
 
     yield { label: getStepLabel(resolution.toolName), status: 'active' };
 
-    const { screenData, processingSteps } = await subAgent.handle(request.userId, resolution.args);
+    let screenData: AgentResponse['screenData'];
+    let processingSteps: AgentResponse['processingSteps'];
+    try {
+      const result = await subAgent.handle(request.userId, resolution.args);
+      screenData = result.screenData;
+      processingSteps = result.processingSteps;
+    } catch (error) {
+      this.logger?.error({
+        toolName: resolution.toolName,
+        err: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+      }, 'Intent-routed sub-agent execution failed');
+      yield { label: getStepLabel(resolution.toolName), status: 'error' };
+      yield this.buildUnknownResponse('Service temporarily unavailable. Please try again.');
+      return;
+    }
 
     yield { label: getStepLabel(resolution.toolName), status: 'done' };
 
     const screenType = TOOL_TO_SCREEN[resolution.toolName] as ScreenType;
-    const response = this.buildResponse(
-      { screenType, screenData, processingSteps },
-      [],
-    );
+    const response = this.buildResponse({ screenType, screenData, processingSteps });
 
     // Store in screen cache for future hits
     this.tryCacheStore(request, response);
@@ -254,7 +269,7 @@ export class SupervisorService {
   }
 
   private initializeConversation(request: AgentRequest): string {
-    const conversation = this.storage.getConversation(request.sessionId);
+    const conversation = this.storage.getConversation(request.sessionId, request.userId);
 
     if (!conversation) {
       const conversationId = this.storage.createConversation(request.sessionId, request.userId);
@@ -298,18 +313,22 @@ export class SupervisorService {
   }
 
   private async callLlm(messages: LoopMessage[]): Promise<LlmChatResponse> {
-    return this.llm.chatCompletion({
-      model: this.modelName,
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content,
-        ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-      })),
-      tools: TOOL_DEFINITIONS,
-      tool_choice: 'auto',
-      temperature: this.temperature,
-      max_tokens: this.maxTokens,
-    });
+    try {
+      return await this.llm.chatCompletion({
+        model: this.modelName,
+        messages: messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+        })),
+        tools: TOOL_DEFINITIONS,
+        tool_choice: 'auto',
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+      });
+    } catch {
+      throw new LlmCallError('LLM call failed');
+    }
   }
 
   private checkForInstructionLeak(
@@ -332,10 +351,9 @@ export class SupervisorService {
       this.logger?.info({
         screenType: context.primaryResult.screenType,
         iterations: iteration + 1,
-        supplementaryCount: context.collectedResults.length,
         duration: Date.now() - iterStart,
       }, 'Supervisor completed with primary result');
-      return this.buildResponse(context.primaryResult, context.collectedResults);
+      return this.buildResponse(context.primaryResult);
     }
 
     if (llmResponse.message.content) {
@@ -374,8 +392,30 @@ export class SupervisorService {
       return null;
     }
 
-    const toolResult = await this.executeSubAgent(request, subAgent, toolCall, screenType);
-    this.updatePrimaryResult(context, toolResult, iteration, iterStart);
+    let toolResult: ToolExecutionResult;
+    try {
+      toolResult = await this.executeSubAgent(request, subAgent, toolCall, screenType);
+    } catch (error) {
+      this.logger?.error({
+        toolName: toolCall.function.name,
+        iteration,
+        err: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+      }, 'Sub-agent execution failed');
+      return this.buildUnknownResponse('Service temporarily unavailable. Please try again.');
+    }
+
+    context.primaryResult = {
+      screenType: toolResult.screenType,
+      screenData: toolResult.screenData,
+      processingSteps: toolResult.processingSteps,
+    };
+
+    this.logger?.info({
+      iteration,
+      toolName: toolResult.toolName,
+      screenType: toolResult.screenType,
+      duration: Date.now() - iterStart,
+    }, 'Tool executed');
 
     // Every screen-producing tool call is terminal — return immediately.
     // Only one screen is shown at a time. The LLM should not chain calls.
@@ -385,10 +425,9 @@ export class SupervisorService {
         toolName: toolResult.toolName,
         iterations: iteration + 1,
       }, 'Supervisor completed — returning single screen');
-      return this.buildResponse(context.primaryResult, []);
+      return this.buildResponse(context.primaryResult);
     }
 
-    this.feedResultBackToLlm(context.messages, toolCall, toolResult);
     return null;
   }
 
@@ -468,79 +507,20 @@ export class SupervisorService {
     };
   }
 
-  private updatePrimaryResult(
-    context: IterationContext,
-    toolResult: ToolExecutionResult,
-    iteration: number,
-    iterStart: number,
-  ): void {
-    if (!context.primaryResult) {
-      context.primaryResult = {
-        screenType: toolResult.screenType,
-        screenData: toolResult.screenData,
-        processingSteps: toolResult.processingSteps,
-      };
-    } else if (toolResult.screenType === 'confirmation' && context.primaryResult.screenType !== 'confirmation') {
-      // Move current primary to supplementary and make confirmation the new primary
-      context.collectedResults.push({
-        toolName: 'previous',
-        screenType: context.primaryResult.screenType,
-        screenData: context.primaryResult.screenData,
-      });
-      context.primaryResult = {
-        screenType: toolResult.screenType,
-        screenData: toolResult.screenData,
-        processingSteps: toolResult.processingSteps,
-      };
-    } else {
-      context.collectedResults.push({
-        toolName: toolResult.toolName,
-        screenType: toolResult.screenType,
-        screenData: toolResult.screenData,
-      });
-    }
-
-    this.logger?.info({
-      iteration,
-      toolName: toolResult.toolName,
-      screenType: toolResult.screenType,
-      duration: Date.now() - iterStart,
-    }, 'Tool executed');
-  }
-
-  private feedResultBackToLlm(
-    messages: LoopMessage[],
-    toolCall: { id: string; type: 'function'; function: { name: string; arguments: string } },
-    toolResult: ToolExecutionResult,
-  ): void {
-    const summary = this.summarizeForLlm(toolResult);
-    messages.push({
-      role: 'assistant',
-      content: '',
-      tool_calls: [toolCall],
-    });
-    messages.push({
-      role: 'tool',
-      content: JSON.stringify(summary),
-      tool_call_id: toolCall.id,
-    });
-  }
-
   private handleMaxIterationsReached(context: IterationContext): AgentResponse {
     if (context.primaryResult) {
-      this.logger?.warn({
-        screenType: context.primaryResult.screenType,
-        supplementaryCount: context.collectedResults.length,
-      }, 'Supervisor hit max iterations');
-      return this.buildResponse(context.primaryResult, context.collectedResults);
+      this.logger?.warn({ screenType: context.primaryResult.screenType }, 'Supervisor hit max iterations');
+      return this.buildResponse(context.primaryResult);
     }
 
     this.logger?.warn('Supervisor hit max iterations with no valid results');
     return this.buildUnknownResponse();
   }
 
-  private handleError(error: unknown): AgentResponse {
-    this.circuitBreaker?.recordFailure();
+  private handleError(error: unknown, shouldRecordFailure = false): AgentResponse {
+    if (shouldRecordFailure) {
+      this.circuitBreaker?.recordFailure();
+    }
     this.logger?.error({
       err: error instanceof Error ? { message: error.message, stack: error.stack } : error,
     }, 'Supervisor error processing request');
@@ -588,7 +568,6 @@ export class SupervisorService {
 
   private buildResponse(
     primary: { screenType: ScreenType; screenData: AgentResponse['screenData']; processingSteps: AgentResponse['processingSteps'] },
-    supplementary: ToolResult[],
   ): AgentResponse {
     return {
       screenType: primary.screenType,
@@ -597,28 +576,7 @@ export class SupervisorService {
       suggestions: SUGGESTION_MAP[primary.screenType],
       confidence: 0.95,
       processingSteps: primary.processingSteps,
-      ...(supplementary.length > 0 ? { supplementaryResults: supplementary } : {}),
     };
-  }
-
-  private summarizeForLlm(result: ToolExecutionResult): Record<string, unknown> {
-    const data = result.screenData;
-    switch (data.type) {
-      case 'balance':
-        return { tool: result.toolName, result: 'balance_retrieved', balance: data.balance ?? null };
-      case 'bundles':
-        return { tool: result.toolName, result: 'bundles_listed', count: data.bundles?.length ?? 0 };
-      case 'bundleDetail':
-        return { tool: result.toolName, result: 'bundle_details_retrieved', bundle: data.bundle?.name ?? 'unknown' };
-      case 'usage':
-        return { tool: result.toolName, result: 'usage_retrieved', entries: data.usage?.length ?? 0 };
-      case 'support':
-        return { tool: result.toolName, result: 'support_data_retrieved', tickets: data.tickets?.length ?? 0, faqCount: data.faqItems?.length ?? 0 };
-      case 'confirmation':
-        return { tool: result.toolName, result: data.status, title: data.title, message: data.message };
-      default:
-        return { tool: result.toolName, result: 'unknown' };
-    }
   }
 
   private buildInitialMessages(request: AgentRequest): LoopMessage[] {

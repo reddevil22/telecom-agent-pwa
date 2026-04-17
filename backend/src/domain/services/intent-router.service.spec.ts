@@ -1,6 +1,6 @@
 import { IntentRouterService } from './intent-router.service';
 import { TelecomIntent, TIER1_INTENTS, INTENT_TOOL_MAP } from '../types/intent';
-import type { IntentCacheService } from '../../application/supervisor/intent-cache.service';
+import type { IntentCachePort } from '../ports/intent-cache.port';
 
 describe('IntentRouterService', () => {
   let router: IntentRouterService;
@@ -11,7 +11,7 @@ describe('IntentRouterService', () => {
       findBestMatch: jest.fn().mockReturnValue(null),
       store: jest.fn(),
     };
-    router = new IntentRouterService(mockCache as unknown as IntentCacheService);
+    router = new IntentRouterService(mockCache as IntentCachePort);
   });
 
   // ── Tier 1: Exact keyword matching ───────────────────────────
@@ -67,7 +67,7 @@ describe('IntentRouterService', () => {
 
     it('supports configurable action signal phrases', async () => {
       const customRouter = new IntentRouterService(
-        mockCache as unknown as IntentCacheService,
+        mockCache as IntentCachePort,
         {
           [TelecomIntent.CHECK_BALANCE]: ['balance'],
           [TelecomIntent.CHECK_USAGE]: ['usage'],

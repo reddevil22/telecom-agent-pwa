@@ -1,20 +1,25 @@
+import type { OnModuleDestroy } from '@nestjs/common';
+import type { IntentCacheMatch, IntentCachePort } from '../../domain/ports/intent-cache.port';
 import type { TelecomIntent } from '../../domain/types/intent';
 
-export interface FuzzyCacheResult {
+interface IntentCacheEntry {
+  tokenSet: Set<string>;
   intent: TelecomIntent;
-  confidence: number;
+  createdAt: number;
+  lastMatchedAt: number;
 }
 
-export class IntentCacheService {
-  private readonly entries = new Map<string, Array<{
-    tokenSet: Set<string>;
-    intent: TelecomIntent;
-    createdAt: number;
-    lastMatchedAt: number;
-  }>>();
+export interface FuzzyCacheResult extends IntentCacheMatch {}
+
+export class IntentCacheService implements IntentCachePort, OnModuleDestroy {
+  private readonly entries = new Map<string, IntentCacheEntry[]>();
+  private readonly userLastSeen = new Map<string, number>();
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   private static readonly MAX_ENTRIES_PER_USER = 50;
+  private static readonly MAX_USERS = 1000;
   private static readonly TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private static readonly CLEANUP_INTERVAL_MS = 120_000;
   private static readonly DEFAULT_SIMILARITY_THRESHOLD = 0.6;
   private static readonly MIN_TOKENS_FOR_MATCH = 2;
 
@@ -41,6 +46,21 @@ export class IntentCacheService {
       ? similarityThreshold
       : IntentCacheService.DEFAULT_SIMILARITY_THRESHOLD;
     this.similarityThreshold = Math.max(0, Math.min(1, parsed));
+
+    this.cleanupTimer = setInterval(
+      () => this.cleanupExpiredEntries(),
+      IntentCacheService.CLEANUP_INTERVAL_MS,
+    );
+    if (typeof this.cleanupTimer.unref === 'function') {
+      this.cleanupTimer.unref();
+    }
+  }
+
+  onModuleDestroy(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
   }
 
   tokenize(text: string): Set<string> {
@@ -85,6 +105,8 @@ export class IntentCacheService {
     }
 
     this.entries.set(key, entries);
+    this.userLastSeen.set(key, now);
+    this.evictLeastRecentlyUsedUsers();
   }
 
   findBestMatch(userId: string, prompt: string): FuzzyCacheResult | null {
@@ -95,12 +117,16 @@ export class IntentCacheService {
     if (!entries || entries.length === 0) return null;
 
     const now = Date.now();
+    let hasExpiredEntries = false;
     let bestEntry: typeof entries[0] | null = null;
     let bestScore = 0;
 
     for (const entry of entries) {
       // Skip expired
-      if (now - entry.createdAt >= IntentCacheService.TTL_MS) continue;
+      if (now - entry.createdAt >= IntentCacheService.TTL_MS) {
+        hasExpiredEntries = true;
+        continue;
+      }
 
       const score = this.jaccardSimilarity(tokenSet, entry.tokenSet);
       if (score > bestScore && score >= this.similarityThreshold) {
@@ -109,10 +135,15 @@ export class IntentCacheService {
       }
     }
 
+    if (hasExpiredEntries) {
+      this.pruneExpiredEntriesForUser(userId, now);
+    }
+
     if (!bestEntry) return null;
 
     // Update last matched time
     bestEntry.lastMatchedAt = now;
+    this.userLastSeen.set(userId, now);
 
     return {
       intent: bestEntry.intent,
@@ -122,6 +153,51 @@ export class IntentCacheService {
 
   invalidateAll(userId: string): void {
     this.entries.delete(userId);
+    this.userLastSeen.delete(userId);
+  }
+
+  private cleanupExpiredEntries(): void {
+    const now = Date.now();
+    for (const userId of this.entries.keys()) {
+      this.pruneExpiredEntriesForUser(userId, now);
+    }
+    this.evictLeastRecentlyUsedUsers();
+  }
+
+  private pruneExpiredEntriesForUser(userId: string, now: number): void {
+    const entries = this.entries.get(userId);
+    if (!entries) return;
+
+    const alive = entries.filter((entry) => now - entry.createdAt < IntentCacheService.TTL_MS);
+    if (alive.length === 0) {
+      this.entries.delete(userId);
+      this.userLastSeen.delete(userId);
+      return;
+    }
+
+    this.entries.set(userId, alive);
+  }
+
+  private evictLeastRecentlyUsedUsers(): void {
+    while (this.entries.size > IntentCacheService.MAX_USERS) {
+      let oldestUserId: string | null = null;
+      let oldestSeen = Number.POSITIVE_INFINITY;
+
+      for (const [userId, seenAt] of this.userLastSeen) {
+        if (seenAt < oldestSeen) {
+          oldestSeen = seenAt;
+          oldestUserId = userId;
+        }
+      }
+
+      if (!oldestUserId) {
+        oldestUserId = this.entries.keys().next().value as string | undefined ?? null;
+      }
+      if (!oldestUserId) break;
+
+      this.entries.delete(oldestUserId);
+      this.userLastSeen.delete(oldestUserId);
+    }
   }
 
   private jaccardSimilarity(a: Set<string>, b: Set<string>): number {

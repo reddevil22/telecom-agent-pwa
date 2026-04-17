@@ -1,9 +1,9 @@
-import { IsString, IsNumber, IsArray, ValidateNested, IsOptional, MaxLength, ArrayMaxSize, Min } from 'class-validator';
+import { IsString, IsNumber, IsArray, ValidateNested, IsOptional, MaxLength, ArrayMaxSize, Min, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SECURITY_LIMITS } from '../../../../domain/constants/security-constants';
 
 class ConversationMessageDto {
-  @IsString()
+  @IsIn(['user', 'agent'])
   role!: 'user' | 'agent';
 
   @IsString()

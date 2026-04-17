@@ -33,16 +33,18 @@ describe('Intent Taxonomy', () => {
   });
 
   it('TIER1_INTENTS excludes entity-extraction intents', () => {
-    expect(TIER1_INTENTS.has(TelecomIntent.VIEW_BUNDLE)).toBe(false);
-    expect(TIER1_INTENTS.has(TelecomIntent.PURCHASE_BUNDLE)).toBe(false);
-    expect(TIER1_INTENTS.has(TelecomIntent.TOP_UP)).toBe(false);
-    expect(TIER1_INTENTS.has(TelecomIntent.CREATE_TICKET)).toBe(false);
+    const tier1Values = new Set<string>(Array.from(TIER1_INTENTS));
+    expect(tier1Values.has(TelecomIntent.VIEW_BUNDLE)).toBe(false);
+    expect(tier1Values.has(TelecomIntent.PURCHASE_BUNDLE)).toBe(false);
+    expect(tier1Values.has(TelecomIntent.TOP_UP)).toBe(false);
+    expect(tier1Values.has(TelecomIntent.CREATE_TICKET)).toBe(false);
   });
 
   it('INTENT_KEYWORDS only has entries for TIER1 intents', () => {
     const keywordIntents = Object.keys(INTENT_KEYWORDS);
+    const tier1Values = new Set<string>(Array.from(TIER1_INTENTS));
     for (const intent of keywordIntents) {
-      expect(TIER1_INTENTS.has(intent as TelecomIntent)).toBe(true);
+      expect(tier1Values.has(intent)).toBe(true);
     }
   });
 

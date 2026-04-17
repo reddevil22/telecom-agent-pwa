@@ -1,7 +1,7 @@
 import type { IntentRouterPort } from '../ports/intent-router.port';
+import type { IntentCachePort } from '../ports/intent-cache.port';
 import type { IntentResolution } from '../types/intent';
 import { TelecomIntent, TIER1_INTENTS, INTENT_TOOL_MAP, INTENT_KEYWORDS, type IntentKeywordMap, type Tier1Intent } from '../types/intent';
-import type { IntentCacheService } from '../../application/supervisor/intent-cache.service';
 
 /**
  * Three-tier intent classification:
@@ -11,7 +11,7 @@ import type { IntentCacheService } from '../../application/supervisor/intent-cac
  */
 export class IntentRouterService implements IntentRouterPort {
   constructor(
-    private readonly cache: IntentCacheService,
+    private readonly cache: IntentCachePort,
     private readonly intentKeywords: IntentKeywordMap = INTENT_KEYWORDS,
     private readonly actionSignals: readonly string[] = IntentRouterService.DEFAULT_ACTION_SIGNALS,
   ) {}

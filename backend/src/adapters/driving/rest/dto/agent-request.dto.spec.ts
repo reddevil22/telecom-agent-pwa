@@ -90,16 +90,14 @@ describe('AgentRequestDto', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
-  it('passes when history message role is an unexpected string value (class-validator only checks IsString)', async () => {
-    // Note: role is typed as 'user' | 'agent' in TS, but class-validator
-    // only enforces @IsString(). Enum-style validation would need @IsIn().
+  it('fails when history message role is an unexpected string value', async () => {
     const history = [
       { role: 'hacker' as unknown as 'user', text: 'ok', timestamp: Date.now() },
     ];
     const dto = makeValidDto({ conversationHistory: history });
     const errors = await validate(dto);
-    // This documents the current behavior — no runtime enum validation
-    expect(errors.length).toBe(0);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some(e => e.property === 'conversationHistory')).toBe(true);
   });
 
   it('fails when prompt is not a string', async () => {

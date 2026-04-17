@@ -33,7 +33,7 @@ describe('SqliteConversationDataMapper', () => {
 
   describe('getConversation', () => {
     it('should return undefined for non-existent session', () => {
-      expect(mapper.getConversation('nonexistent')).toBeUndefined();
+      expect(mapper.getConversation('nonexistent', 'user-1')).toBeUndefined();
     });
 
     it('should return conversation with messages for existing session', () => {
@@ -41,7 +41,7 @@ describe('SqliteConversationDataMapper', () => {
       mapper.addMessage(id, 'user', 'Hello', null, Date.now());
       mapper.addMessage(id, 'agent', 'Hi there', 'balance', Date.now() + 1000);
 
-      const conv = mapper.getConversation('session-1');
+      const conv = mapper.getConversation('session-1', 'user-1');
 
       expect(conv).toBeDefined();
       expect(conv?.sessionId).toBe('session-1');
@@ -55,7 +55,7 @@ describe('SqliteConversationDataMapper', () => {
       mapper.addMessage(id, 'user', 'Hello', null, Date.now());
       mapper.softDeleteConversation(id);
 
-      expect(mapper.getConversation('session-1')).toBeUndefined();
+      expect(mapper.getConversation('session-1', 'user-1')).toBeUndefined();
     });
   });
 
@@ -64,14 +64,14 @@ describe('SqliteConversationDataMapper', () => {
       const id = mapper.createConversation('session-1', 'user-1');
       mapper.addMessage(id, 'user', 'Hello', null, Date.now());
 
-      const conv = mapper.getConversation('session-1');
+      const conv = mapper.getConversation('session-1', 'user-1');
       expect(conv?.messages.length).toBe(1);
       expect(conv?.messages[0].text).toBe('Hello');
     });
 
     it('should update conversation updated_at when adding message', () => {
       const id = mapper.createConversation('session-1', 'user-1');
-      const beforeConv = mapper.getConversation('session-1');
+      const beforeConv = mapper.getConversation('session-1', 'user-1');
       
       // SQLite datetime('now') has second precision, so we need to wait
       const start = Date.now();
@@ -79,7 +79,7 @@ describe('SqliteConversationDataMapper', () => {
       
       mapper.addMessage(id, 'agent', 'Response', 'balance', Date.now());
       
-      const afterConv = mapper.getConversation('session-1');
+      const afterConv = mapper.getConversation('session-1', 'user-1');
       expect(afterConv?.metadata.updatedAt.getTime())
         .toBeGreaterThan(beforeConv?.metadata.updatedAt.getTime() || 0);
     });
@@ -147,7 +147,7 @@ describe('SqliteConversationDataMapper', () => {
       const id = mapper.createConversation('session-1', 'user-1');
       mapper.softDeleteConversation(id);
 
-      expect(mapper.getConversation('session-1')).toBeUndefined();
+      expect(mapper.getConversation('session-1', 'user-1')).toBeUndefined();
     });
 
     it('should be idempotent (double delete does not crash)', () => {
@@ -163,8 +163,8 @@ describe('SqliteConversationDataMapper', () => {
       
       mapper.softDeleteConversation(id2);
       
-      expect(mapper.getConversation('session-1')).toBeDefined();
-      expect(mapper.getConversation('session-2')).toBeUndefined();
+      expect(mapper.getConversation('session-1', 'user-1')).toBeDefined();
+      expect(mapper.getConversation('session-2', 'user-2')).toBeUndefined();
     });
   });
 

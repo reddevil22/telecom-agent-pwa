@@ -17,6 +17,9 @@ export class PromptSanitizerPipe implements PipeTransform<AgentRequestDto, Agent
     // Strip control characters (keep \n, \r, \t)
     let cleaned = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
+    // Normalize compatibility characters to reduce homoglyph/format bypasses.
+    cleaned = cleaned.normalize('NFKC');
+
     // Collapse excessive whitespace (100+ spaces/tabs → 50 spaces)
     cleaned = cleaned.replace(/[ \t]{100,}/g, ' '.repeat(50));
 

@@ -75,17 +75,11 @@ async function collectResult(stream: AsyncGenerator<any>): Promise<any> {
 
 function createMockStorage(): ConversationStoragePort {
   return {
-    createConversation: jest.fn().mockResolvedValue({
-      id: 'conv-1',
-      sessionId: 's1',
-      userId: 'user-42',
-      messages: [],
-      metadata: { createdAt: new Date(), updatedAt: new Date(), totalMessages: 0 },
-    }),
-    getConversation: jest.fn().mockResolvedValue(null),
-    getConversationsByUser: jest.fn().mockResolvedValue([]),
-    addMessage: jest.fn().mockResolvedValue(undefined),
-    deleteConversation: jest.fn().mockResolvedValue(undefined),
+    createConversation: jest.fn().mockReturnValue('conv-1'),
+    getConversation: jest.fn().mockReturnValue(undefined),
+    getConversationsByUser: jest.fn().mockReturnValue([]),
+    addMessage: jest.fn(),
+    softDeleteConversation: jest.fn(),
   } as unknown as ConversationStoragePort;
 }
 
