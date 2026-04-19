@@ -17,9 +17,17 @@ export class IntentRouterService implements IntentRouterPort {
   ) {}
 
   async classify(prompt: string, userId: string): Promise<IntentResolution | null> {
+    // Deterministic top-up routing when the prompt includes an amount.
+    const topUp = this.topUpIntentMatch(prompt, userId);
+    if (topUp) return topUp;
+
     // Tier 1: Exact keyword match
     const tier1 = this.tier1KeywordMatch(prompt, userId);
     if (tier1) return tier1;
+
+    // Top-up prompts often contain "account" or "credit" and must bypass Tier 2 cache
+    // to avoid stale account/balance intent matches.
+    if (this.hasTopUpSignal(prompt)) return null;
 
     // Tier 2: Fuzzy intent cache
     const tier2 = this.tier2FuzzyCache(prompt, userId);
@@ -42,6 +50,9 @@ export class IntentRouterService implements IntentRouterPort {
   /** Words that signal a purchase/action intent requiring entity extraction */
   private static readonly DEFAULT_ACTION_SIGNALS = ['buy', 'purchase', 'order', 'subscribe', 'activate', 'get me', 'i want', 'i need'];
 
+  /** Phrases that indicate top-up intents and should bypass Tier 1 account/balance keyword routing */
+  private static readonly TOP_UP_SIGNALS = ['top up', 'topup', 'recharge', 'add credit', 'add money'];
+
   /** Deterministic tie-breaker when lexical specificity is equal */
   private static readonly INTENT_MATCH_PRIORITY: Readonly<Record<TelecomIntent, number>> = {
     [TelecomIntent.CHECK_BALANCE]: 100,
@@ -60,12 +71,16 @@ export class IntentRouterService implements IntentRouterPort {
     const matches: Array<{ intent: TelecomIntent; score: number; keywordCount: number }> = [];
 
     const hasActionSignal = this.actionSignals.some(signal => lower.includes(signal));
+    const hasTopUpSignal = this.hasTopUpSignal(prompt);
 
     for (const [intentKey, keywords] of Object.entries(this.intentKeywords)) {
       const intent = intentKey as TelecomIntent;
       // If the prompt has a purchase/action signal, skip BROWSE_BUNDLES —
       // "buy travel roaming bundle" should go to LLM for entity extraction, not list_bundles
       if (hasActionSignal && intent === TelecomIntent.BROWSE_BUNDLES) continue;
+      // Top-up prompts can contain words like "account" or "credit" that belong to Tier 1 intents.
+      // Bypass these Tier 1 matches and let LLM extract amount for top_up.
+      if (hasTopUpSignal && (intent === TelecomIntent.CHECK_BALANCE || intent === TelecomIntent.ACCOUNT_SUMMARY)) continue;
 
       const matchedKeywords = keywords.filter((kw) => lower.includes(kw));
       if (matchedKeywords.length === 0) continue;
@@ -102,6 +117,11 @@ export class IntentRouterService implements IntentRouterPort {
     };
   }
 
+  private hasTopUpSignal(prompt: string): boolean {
+    const lower = prompt.toLowerCase();
+    return IntentRouterService.TOP_UP_SIGNALS.some(signal => lower.includes(signal));
+  }
+
   private tier2FuzzyCache(prompt: string, userId: string): IntentResolution | null {
     const cached = this.cache.findBestMatch(userId, prompt);
     if (!cached) return null;
@@ -112,5 +132,24 @@ export class IntentRouterService implements IntentRouterPort {
       args: { userId },
       confidence: cached.confidence,
     };
+  }
+
+  private topUpIntentMatch(prompt: string, userId: string): IntentResolution | null {
+    if (!this.hasTopUpSignal(prompt)) return null;
+
+    const amount = this.extractAmount(prompt);
+    if (!amount) return null;
+
+    return {
+      intent: TelecomIntent.TOP_UP,
+      toolName: INTENT_TOOL_MAP[TelecomIntent.TOP_UP],
+      args: { userId, amount },
+      confidence: 1.0,
+    };
+  }
+
+  private extractAmount(prompt: string): string | null {
+    const match = prompt.match(/\b(\d+(?:\.\d+)?)\b/);
+    return match?.[1] ?? null;
   }
 }

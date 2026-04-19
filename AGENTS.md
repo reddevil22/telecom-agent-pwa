@@ -103,6 +103,9 @@ src/
 ```
 User prompt
   │
+  ├─ Top-up pre-check: if top-up/recharge/add-credit signal + amount is present,
+  │  route directly to `top_up` (deterministic, no LLM)
+  │
   ├─ Tier 1: Keyword match → sub-agent directly (no LLM, confidence 1.0)
   │   Covers: balance, usage, bundles, support, account
   │   Keywords externalized in backend/data/intent-keywords.json
@@ -114,7 +117,8 @@ User prompt
   │   Only caches Tier1-eligible intents (no entity-extraction intents).
   │
   └─ Tier 3: LLM ReAct loop → single tool call per request (no chaining)
-      Required for: purchase, top-up, create ticket, view bundle details (entity extraction)
+      Required for: purchase, create ticket, view bundle details,
+      and top-up prompts without extractable amount
 ```
 
 ### Circuit Breaker & Degraded Mode

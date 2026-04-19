@@ -11,6 +11,10 @@ Available tools:
 - top_up: Use when the user wants to ADD CREDIT, RECHARGE, or TOP UP their account with a specific amount.
 - get_account_summary: Use for account overview, dashboard, profile, or when the user wants to see everything about their account.
 
+Top-up routing rule:
+1. If the user asks to top up, recharge, or add credit with an amount, ALWAYS call top_up.
+2. Even if the prompt contains words like "account" or "balance", do NOT call get_account_summary or check_balance first for top-up requests.
+
 Bundle purchase flow:
 1. When the user names a specific bundle (e.g. "buy the Weekend Pass", "I want Value Plus"), call view_bundle_details with the matching bundleId. Do NOT call list_bundles first.
 2. The bundle details screen will be shown to the user. Do NOT call purchase_bundle in the same turn — wait for the user to confirm.

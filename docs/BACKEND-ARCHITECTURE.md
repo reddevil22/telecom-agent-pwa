@@ -293,6 +293,10 @@ Auto-derived constants:
 ```
 classify(prompt, userId)
     │
+    ├── Top-up pre-check
+    │   If prompt contains top-up signal + amount, route directly to top_up
+    │   Bypasses Tier 1 keyword collisions and Tier 2 cache
+    │
     ├── Tier 1: Keyword Match
     │   Lowercases prompt, checks against INTENT_KEYWORDS
     │   Skips BROWSE_BUNDLES if action signals present (buy, purchase, order, etc.)
@@ -308,7 +312,7 @@ classify(prompt, userId)
     └── null → falls through to LLM (Tier 3)
 ```
 
-Only Tier 1-eligible intents (requiring only `userId`) are cached in the fuzzy cache. Entity-extraction intents (`purchase_bundle`, `top_up`, `create_ticket`) are never cached because the LLM must extract parameters from the prompt.
+Only Tier 1-eligible intents (requiring only `userId`) are cached in the fuzzy cache. Entity-extraction intents (`purchase_bundle`, `create_ticket`) are never cached because the LLM must extract parameters from the prompt. Top-up prompts with explicit amounts are routed deterministically to `top_up` and bypass fuzzy-cache lookup.
 
 ---
 

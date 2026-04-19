@@ -105,6 +105,19 @@ describe('IntentRouterService', () => {
       await router.classify('some random prompt', 'user-1');
       expect(mockCache.findBestMatch).toHaveBeenCalled();
     });
+
+    it('ignores cached account intent for top-up phrasing and routes to top_up', async () => {
+      mockCache.findBestMatch.mockReturnValue({
+        intent: TelecomIntent.ACCOUNT_SUMMARY,
+        confidence: 0.9,
+      });
+
+      const result = await router.classify('top up my account by 5 dollars', 'user-1');
+      expect(result).not.toBeNull();
+      expect(result!.intent).toBe(TelecomIntent.TOP_UP);
+      expect(result!.toolName).toBe(INTENT_TOOL_MAP[TelecomIntent.TOP_UP]);
+      expect(result!.args).toEqual({ userId: 'user-1', amount: '5' });
+    });
   });
 
   // ── Tier 3: Entity-extraction intents always bypass ──────────
@@ -116,8 +129,7 @@ describe('IntentRouterService', () => {
       'buy travel roaming bundle',
       'I want to order the Unlimited Pro plan',
       'subscribe to Value Plus',
-      'top up 20 dollars',
-      'recharge my phone with 50',
+      'upgrade my package tomorrow',
     ])('returns null for "%s" (action signal prevents BROWSE_BUNDLES)', async (prompt) => {
       const result = await router.classify(prompt, 'user-1');
       expect(result).toBeNull();
@@ -127,6 +139,23 @@ describe('IntentRouterService', () => {
     // "create a ticket for slow internet" matches "ticket" → GET_SUPPORT (correct Tier 1)
     // These are valid Tier 1 matches because get_support is a Tier 1 intent.
     // Entity extraction (ticket subject/description) happens in the sub-agent.
+  });
+
+  describe('top-up amount extraction routing', () => {
+    it.each([
+      ['top up my account by 5 dollars', '5'],
+      ['add credit 12.5 now', '12.5'],
+      ['recharge 20', '20'],
+    ] as const)(
+      'routes "%s" directly to top_up with amount %s',
+      async (prompt, amount) => {
+        const result = await router.classify(prompt, 'user-1');
+        expect(result).not.toBeNull();
+        expect(result!.intent).toBe(TelecomIntent.TOP_UP);
+        expect(result!.toolName).toBe(INTENT_TOOL_MAP[TelecomIntent.TOP_UP]);
+        expect(result!.args).toEqual({ userId: 'user-1', amount });
+      },
+    );
   });
 
   // ── Truly unknown input ──────────────────────────────────────
