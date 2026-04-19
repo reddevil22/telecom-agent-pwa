@@ -85,6 +85,14 @@ export class ScreenCacheManager {
     }
 
     if (response.screenType === "confirmation") {
+      const isPendingConfirmation =
+        response.screenData.type === "confirmation" &&
+        response.screenData.status === "pending";
+
+      if (isPendingConfirmation) {
+        return;
+      }
+
       if (!toolName) {
         this.cache.invalidateAll(request.userId);
         return;

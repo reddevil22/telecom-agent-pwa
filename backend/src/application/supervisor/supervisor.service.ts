@@ -35,6 +35,7 @@ import {
   type ToolCall,
 } from "./tool-validation.service";
 import { ScreenCacheManager } from "./screen-cache-manager.service";
+import { randomUUID } from "crypto";
 
 class LlmCallError extends Error {
   constructor(message: string) {
@@ -66,6 +67,27 @@ interface ToolExecutionResult {
   screenType: ScreenType;
   screenData: AgentResponse["screenData"];
   processingSteps: AgentResponse["processingSteps"];
+}
+
+type GatedToolName = "top_up" | "create_ticket";
+
+interface PendingConfirmationEntry {
+  token: string;
+  userId: string;
+  sessionId: string;
+  toolName: GatedToolName;
+  args: Record<string, string>;
+  expiresAt: number;
+}
+
+interface ViewedBundleEntry {
+  bundleId: string;
+  expiresAt: number;
+}
+
+interface ConfirmationActionResult {
+  response: AgentResponse;
+  toolName?: string;
 }
 
 interface IterationResult {
@@ -114,6 +136,11 @@ export class SupervisorService {
   private readonly toolDegradation: ToolDegradationService;
   private readonly toolValidation: ToolValidationService;
   private readonly screenCacheManager: ScreenCacheManager;
+  private readonly pendingConfirmations = new Map<
+    string,
+    PendingConfirmationEntry
+  >();
+  private readonly viewedBundles = new Map<string, ViewedBundleEntry>();
 
   constructor(
     private readonly llm: LlmPort,
@@ -174,9 +201,27 @@ export class SupervisorService {
       // Start: yield Analyzing request step
       yield { label: "Analyzing request", status: "done" };
 
+      this.cleanupExpiredState();
+
+      const conversationId = this.initializeConversation(request);
+
+      const confirmationActionResult = await this.tryHandleConfirmationAction(
+        request,
+      );
+      if (confirmationActionResult) {
+        this.screenCacheManager.store(
+          request,
+          confirmationActionResult.response,
+          confirmationActionResult.toolName,
+        );
+        this.persistAgentResponse(conversationId, confirmationActionResult.response);
+        yield confirmationActionResult.response;
+        return;
+      }
+
       // Try intent router (keyword + fuzzy cache) before LLM
       let routedByIntent = false;
-      for await (const routedEvent of this.tryIntentRouter(request)) {
+      for await (const routedEvent of this.tryIntentRouter(request, conversationId)) {
         routedByIntent = true;
         yield routedEvent;
       }
@@ -204,7 +249,6 @@ export class SupervisorService {
         return;
       }
 
-      const conversationId = this.initializeConversation(request);
       const context: IterationContext = {
         messages: await this.buildInitialMessages(request),
         primaryResult: null,
@@ -254,6 +298,7 @@ export class SupervisorService {
 
   private async *tryIntentRouter(
     request: AgentRequest,
+    conversationId: string,
   ): AsyncGenerator<StepYield | AgentResponse> {
     if (!this.intentRouter) return;
 
@@ -307,17 +352,44 @@ export class SupervisorService {
       return;
     }
 
-    const conversationId = this.initializeConversation(request);
-
     yield { label: getStepLabel(resolution.toolName), status: "active" };
 
     let screenData: AgentResponse["screenData"];
     let processingSteps: AgentResponse["processingSteps"];
     const toolStart = Date.now();
     try {
-      const result = await subAgent.handle(request.userId, resolution.args);
-      screenData = result.screenData;
-      processingSteps = result.processingSteps;
+      if (this.isGatedTool(resolution.toolName)) {
+        const gated = this.createPendingConfirmation(
+          request,
+          resolution.toolName,
+          this.normalizeStringArgs(resolution.args),
+        );
+        screenData = gated.screenData;
+        processingSteps = gated.processingSteps;
+      } else if (
+        resolution.toolName === "purchase_bundle" &&
+        !this.hasViewedBundleForSession(
+          request.userId,
+          request.sessionId,
+          resolution.args.bundleId,
+        )
+      ) {
+        const blocked = this.buildPurchasePrerequisiteScreen();
+        screenData = blocked.screenData;
+        processingSteps = blocked.processingSteps;
+      } else {
+        const result = await subAgent.handle(request.userId, resolution.args);
+        screenData = result.screenData;
+        processingSteps = result.processingSteps;
+
+        if (resolution.toolName === "view_bundle_details") {
+          this.markViewedBundle(
+            request.userId,
+            request.sessionId,
+            resolution.args.bundleId,
+          );
+        }
+      }
       this.toolDegradation.recordToolSuccess(
         request.userId,
         resolution.toolName,
@@ -705,11 +777,53 @@ export class SupervisorService {
     toolCall: { function: { name: string; arguments: string } },
     screenType: ScreenType,
   ): Promise<ToolExecutionResult> {
-    const parsedArgs = JSON.parse(toolCall.function.arguments || "{}");
+    const parsedArgs = this.normalizeStringArgs(
+      JSON.parse(toolCall.function.arguments || "{}"),
+    );
+
+    if (this.isGatedTool(toolCall.function.name)) {
+      const gated = this.createPendingConfirmation(
+        request,
+        toolCall.function.name,
+        parsedArgs,
+      );
+      return {
+        toolName: toolCall.function.name,
+        screenType,
+        screenData: gated.screenData,
+        processingSteps: gated.processingSteps,
+      };
+    }
+
+    if (
+      toolCall.function.name === "purchase_bundle" &&
+      !this.hasViewedBundleForSession(
+        request.userId,
+        request.sessionId,
+        parsedArgs.bundleId,
+      )
+    ) {
+      const blocked = this.buildPurchasePrerequisiteScreen();
+      return {
+        toolName: toolCall.function.name,
+        screenType,
+        screenData: blocked.screenData,
+        processingSteps: blocked.processingSteps,
+      };
+    }
+
     const { screenData, processingSteps } = await subAgent.handle(
       request.userId,
       parsedArgs,
     );
+
+    if (toolCall.function.name === "view_bundle_details") {
+      this.markViewedBundle(
+        request.userId,
+        request.sessionId,
+        parsedArgs.bundleId,
+      );
+    }
 
     return {
       toolName: toolCall.function.name,
@@ -818,14 +932,269 @@ export class SupervisorService {
     screenData: AgentResponse["screenData"];
     processingSteps: AgentResponse["processingSteps"];
   }): AgentResponse {
+    const pendingConfirmationData =
+      primary.screenType === "confirmation" &&
+      primary.screenData.type === "confirmation" &&
+      primary.screenData.status === "pending"
+        ? primary.screenData
+        : null;
+
     return {
       screenType: primary.screenType,
       screenData: primary.screenData,
-      replyText: REPLY_MAP[primary.screenType],
-      suggestions: SUGGESTION_MAP[primary.screenType],
+      replyText: pendingConfirmationData
+        ? pendingConfirmationData.message
+        : REPLY_MAP[primary.screenType],
+      suggestions: pendingConfirmationData ? [] : SUGGESTION_MAP[primary.screenType],
       confidence: 0.95,
       processingSteps: primary.processingSteps,
     };
+  }
+
+  private isGatedTool(toolName: string): toolName is GatedToolName {
+    return toolName === "top_up" || toolName === "create_ticket";
+  }
+
+  private createPendingConfirmation(
+    request: AgentRequest,
+    toolName: GatedToolName,
+    args: Record<string, string>,
+  ): {
+    screenData: AgentResponse["screenData"];
+    processingSteps: AgentResponse["processingSteps"];
+  } {
+    const token = randomUUID();
+    this.pendingConfirmations.set(token, {
+      token,
+      userId: request.userId,
+      sessionId: request.sessionId,
+      toolName,
+      args,
+      expiresAt: Date.now() + SECURITY_LIMITS.CONFIRMATION_TTL_MS,
+    });
+
+    const details: Record<string, string | number> = {};
+    if (toolName === "top_up") {
+      details.amount = args.amount ?? "0";
+    }
+    if (toolName === "create_ticket") {
+      if (args.subject) details.subject = args.subject;
+    }
+
+    return {
+      screenData: {
+        type: "confirmation",
+        title:
+          toolName === "top_up"
+            ? "Confirm Top-up"
+            : "Review Support Ticket",
+        status: "pending",
+        message:
+          toolName === "top_up"
+            ? "Please confirm this top-up before we process it."
+            : "Please review your ticket details before submission.",
+        details,
+        requiresUserConfirmation: true,
+        confirmationToken: token,
+        actionType: toolName,
+      },
+      processingSteps: [
+        { label: "Preparing confirmation", status: "done" },
+        { label: "Awaiting confirmation", status: "active" },
+      ],
+    };
+  }
+
+  private buildPurchasePrerequisiteScreen(): {
+    screenData: AgentResponse["screenData"];
+    processingSteps: AgentResponse["processingSteps"];
+  } {
+    return {
+      screenData: {
+        type: "confirmation",
+        title: "Review Required",
+        status: "error",
+        message:
+          "Please view bundle details before confirming the purchase.",
+        details: {},
+        actionType: "purchase_bundle",
+      },
+      processingSteps: [{ label: "Verifying purchase flow", status: "done" }],
+    };
+  }
+
+  private async tryHandleConfirmationAction(
+    request: AgentRequest,
+  ): Promise<ConfirmationActionResult | null> {
+    const action = request.confirmationAction;
+    if (!action) return null;
+
+    const pending = this.pendingConfirmations.get(action.token);
+    if (!pending || pending.expiresAt <= Date.now()) {
+      this.pendingConfirmations.delete(action.token);
+      return {
+        response: this.buildResponse({
+          screenType: "confirmation",
+          screenData: {
+            type: "confirmation",
+            title: "Confirmation Expired",
+            status: "error",
+            message:
+              "That confirmation is no longer valid. Please try the action again.",
+            details: {},
+          },
+          processingSteps: [{ label: "Validating confirmation", status: "done" }],
+        }),
+      };
+    }
+
+    if (pending.userId !== request.userId || pending.sessionId !== request.sessionId) {
+      return {
+        response: this.buildUnknownResponse(
+          "Invalid confirmation context for this session.",
+          AgentErrorCode.TOOL_FAILED,
+        ),
+      };
+    }
+
+    this.pendingConfirmations.delete(action.token);
+
+    if (action.decision === "cancel") {
+      return {
+        response: this.buildResponse({
+          screenType: "confirmation",
+          screenData: {
+            type: "confirmation",
+            title: "Request Cancelled",
+            status: "error",
+            message: "No changes were made.",
+            details: {},
+            actionType: pending.toolName,
+          },
+          processingSteps: [{ label: "Cancelling request", status: "done" }],
+        }),
+      };
+    }
+
+    const subAgent = this.toolResolver.resolve(pending.toolName);
+    if (!subAgent) {
+      return {
+        response: this.buildUnknownResponse(
+          "Unable to complete confirmation. Please try again.",
+          AgentErrorCode.TOOL_FAILED,
+        ),
+      };
+    }
+
+    try {
+      const toolStart = Date.now();
+      const result = await subAgent.handle(request.userId, pending.args);
+      this.toolDegradation.recordToolSuccess(request.userId, pending.toolName);
+      this.metrics?.recordToolCall(
+        pending.toolName,
+        true,
+        Date.now() - toolStart,
+      );
+
+      return {
+        response: this.buildResponse({
+          screenType: TOOL_TO_SCREEN[pending.toolName] as ScreenType,
+          screenData: result.screenData,
+          processingSteps: result.processingSteps,
+        }),
+        toolName: pending.toolName,
+      };
+    } catch (error) {
+      this.toolDegradation.recordToolFailure(request.userId, pending.toolName);
+      this.logger?.error(
+        {
+          toolName: pending.toolName,
+          err:
+            error instanceof Error
+              ? { message: error.message, stack: error.stack }
+              : String(error),
+        },
+        "Confirmed sub-agent execution failed",
+      );
+      return {
+        response: this.buildUnknownResponse(
+          "Service temporarily unavailable. Please try again.",
+          AgentErrorCode.TOOL_FAILED,
+        ),
+      };
+    }
+  }
+
+  private normalizeStringArgs(args: unknown): Record<string, string> {
+    if (!args || typeof args !== "object") {
+      return {};
+    }
+
+    const normalized: Record<string, string> = {};
+    for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
+      if (typeof value === "string") {
+        normalized[key] = value;
+      }
+    }
+    return normalized;
+  }
+
+  private viewedBundleKey(userId: string, sessionId: string): string {
+    return `${userId}:${sessionId}`;
+  }
+
+  private markViewedBundle(
+    userId: string,
+    sessionId: string,
+    bundleId?: string,
+  ): void {
+    if (!bundleId) {
+      return;
+    }
+
+    this.viewedBundles.set(this.viewedBundleKey(userId, sessionId), {
+      bundleId,
+      expiresAt: Date.now() + SECURITY_LIMITS.CONFIRMATION_TTL_MS,
+    });
+  }
+
+  private hasViewedBundleForSession(
+    userId: string,
+    sessionId: string,
+    bundleId?: string,
+  ): boolean {
+    if (!bundleId) {
+      return false;
+    }
+
+    const key = this.viewedBundleKey(userId, sessionId);
+    const entry = this.viewedBundles.get(key);
+    if (!entry) {
+      return false;
+    }
+
+    if (entry.expiresAt <= Date.now()) {
+      this.viewedBundles.delete(key);
+      return false;
+    }
+
+    return entry.bundleId === bundleId;
+  }
+
+  private cleanupExpiredState(): void {
+    const now = Date.now();
+
+    for (const [token, entry] of this.pendingConfirmations.entries()) {
+      if (entry.expiresAt <= now) {
+        this.pendingConfirmations.delete(token);
+      }
+    }
+
+    for (const [key, entry] of this.viewedBundles.entries()) {
+      if (entry.expiresAt <= now) {
+        this.viewedBundles.delete(key);
+      }
+    }
   }
 
   private async buildInitialMessages(

@@ -69,7 +69,11 @@ export interface OrchestratorContext {
 }
 
 export type OrchestratorEvents =
-  | { type: "SUBMIT_PROMPT"; prompt: string }
+  | {
+      type: "SUBMIT_PROMPT";
+      prompt: string;
+      confirmationAction?: AgentRequest["confirmationAction"];
+    }
   | { type: "STEP_UPDATE"; steps: ProcessingStep[] }
   | { type: "LOAD_SESSION"; sessionId: string }
   | { type: "SESSION_LOADED"; messages: ConversationMessage[] }
@@ -91,6 +95,7 @@ export const orchestratorMachine = setup({
       AgentResponse,
       {
         prompt: string;
+        confirmationAction?: AgentRequest["confirmationAction"];
         conversationHistory: ConversationMessage[];
         sessionId: string;
         userId: string;
@@ -103,6 +108,9 @@ export const orchestratorMachine = setup({
         userId: input.userId,
         conversationHistory: input.conversationHistory,
         timestamp: Date.now(),
+        ...(input.confirmationAction
+          ? { confirmationAction: input.confirmationAction }
+          : {}),
       };
 
       // Try streaming first, fall back to non-streaming
@@ -362,6 +370,7 @@ export const orchestratorMachine = setup({
           >;
           return {
             prompt: submitEvent.prompt,
+            confirmationAction: submitEvent.confirmationAction,
             conversationHistory: context.conversationHistory.slice(0, -1),
             sessionId: context.sessionId,
             userId: context.userId,

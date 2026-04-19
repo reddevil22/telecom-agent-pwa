@@ -24,3 +24,14 @@ export function up(db: Database): void {
       ON telco_tickets(user_id, status, updated_at);
   `);
 }
+
+export function down(db: Database): void {
+  db.exec(`
+    DROP INDEX IF EXISTS idx_telco_tickets_user_status_updated;
+    DROP INDEX IF EXISTS idx_telco_tickets_user_created;
+    DROP INDEX IF EXISTS idx_telco_subscriptions_user_status_expires;
+    DROP INDEX IF EXISTS idx_messages_conversation_timestamp;
+    DROP INDEX IF EXISTS idx_conversations_user_deleted_updated;
+    DROP INDEX IF EXISTS idx_conversations_session_user_deleted;
+  `);
+}

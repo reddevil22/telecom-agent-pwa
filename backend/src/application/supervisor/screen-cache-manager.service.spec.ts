@@ -132,4 +132,40 @@ describe("ScreenCacheManager", () => {
 
     expect(cache.get("user-1", "balance")).toBeNull();
   });
+
+  it("keeps caches intact for pending confirmation responses", () => {
+    const cache = new InMemoryScreenCacheAdapter();
+    const manager = new ScreenCacheManager(
+      cache,
+      metrics,
+      logger as unknown as PinoLogger,
+      intentKeywords,
+    );
+
+    cache.set("user-1", "balance", makeBalanceResponse());
+
+    manager.store(
+      makeRequest("top up 10"),
+      {
+        screenType: "confirmation",
+        screenData: {
+          type: "confirmation",
+          title: "Confirm Top-up",
+          status: "pending",
+          message: "Please confirm.",
+          details: { amount: "10" },
+          requiresUserConfirmation: true,
+          confirmationToken: "token-1",
+          actionType: "top_up",
+        },
+        replyText: "Please confirm.",
+        suggestions: [],
+        confidence: 0.95,
+        processingSteps: [{ label: "Awaiting confirmation", status: "active" }],
+      },
+      "top_up",
+    );
+
+    expect(cache.get("user-1", "balance")).not.toBeNull();
+  });
 });

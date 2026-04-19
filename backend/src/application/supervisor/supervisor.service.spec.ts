@@ -410,6 +410,126 @@ describe("SupervisorService", () => {
     expect(result.screenType).toBe("usage");
   });
 
+  it("returns pending confirmation for top_up and executes only after confirm", async () => {
+    const topUpAgent: SubAgentPort = {
+      handle: jest.fn().mockResolvedValue({
+        screenData: {
+          type: "confirmation",
+          title: "Top-up Successful!",
+          status: "success" as const,
+          message: "Done",
+          details: {},
+        },
+        processingSteps: [{ label: "Processing top-up", status: "done" as const }],
+      }),
+    } as unknown as SubAgentPort;
+    service.registerAgent("top_up", topUpAgent);
+
+    (mockLlm.chatCompletion as jest.Mock).mockResolvedValueOnce(
+      mockToolCall("top_up", { userId: "user-42", amount: "15" }),
+    );
+
+    const pending = await collectResult(
+      service.processRequest(makeRequest({ prompt: "top up 15" })),
+    );
+
+    expect(pending.screenType).toBe("confirmation");
+    expect(pending.screenData.type).toBe("confirmation");
+    if (pending.screenData.type !== "confirmation") {
+      throw new Error("Expected confirmation screen");
+    }
+    expect(pending.screenData.status).toBe("pending");
+    expect(pending.screenData.requiresUserConfirmation).toBe(true);
+    expect(pending.screenData.confirmationToken).toBeTruthy();
+    expect(topUpAgent.handle).not.toHaveBeenCalled();
+
+    const confirmed = await collectResult(
+      service.processRequest(
+        makeRequest({
+          prompt: "Confirm request",
+          confirmationAction: {
+            token: pending.screenData.confirmationToken!,
+            decision: "confirm",
+          },
+        }),
+      ),
+    );
+
+    expect(topUpAgent.handle).toHaveBeenCalledTimes(1);
+    expect(confirmed.screenData.type).toBe("confirmation");
+    if (confirmed.screenData.type !== "confirmation") {
+      throw new Error("Expected confirmation screen");
+    }
+    expect(confirmed.screenData.status).toBe("success");
+  });
+
+  it("cancels pending create_ticket confirmation without executing the agent", async () => {
+    const createTicketAgent: SubAgentPort = {
+      handle: jest.fn(),
+    } as unknown as SubAgentPort;
+    service.registerAgent("create_ticket", createTicketAgent);
+
+    (mockLlm.chatCompletion as jest.Mock).mockResolvedValueOnce(
+      mockToolCall("create_ticket", {
+        userId: "user-42",
+        subject: "Billing issue",
+        description: "I was charged twice",
+      }),
+    );
+
+    const pending = await collectResult(
+      service.processRequest(makeRequest({ prompt: "Create a billing ticket" })),
+    );
+
+    expect(pending.screenData.type).toBe("confirmation");
+    if (pending.screenData.type !== "confirmation") {
+      throw new Error("Expected confirmation screen");
+    }
+
+    const cancelled = await collectResult(
+      service.processRequest(
+        makeRequest({
+          prompt: "Cancel request",
+          confirmationAction: {
+            token: pending.screenData.confirmationToken!,
+            decision: "cancel",
+          },
+        }),
+      ),
+    );
+
+    expect(createTicketAgent.handle).not.toHaveBeenCalled();
+    expect(cancelled.screenData.type).toBe("confirmation");
+    if (cancelled.screenData.type !== "confirmation") {
+      throw new Error("Expected confirmation screen");
+    }
+    expect(cancelled.screenData.title).toBe("Request Cancelled");
+  });
+
+  it("blocks purchase_bundle without prior view_bundle_details context", async () => {
+    const purchaseAgent: SubAgentPort = {
+      handle: jest.fn(),
+    } as unknown as SubAgentPort;
+    service.registerAgent("purchase_bundle", purchaseAgent);
+
+    (mockLlm.chatCompletion as jest.Mock).mockResolvedValueOnce(
+      mockToolCall("purchase_bundle", { userId: "user-42", bundleId: "b2" }),
+    );
+
+    const blocked = await collectResult(
+      service.processRequest(makeRequest({ prompt: "confirm purchase b2" })),
+    );
+
+    expect(purchaseAgent.handle).not.toHaveBeenCalled();
+    expect(blocked.screenType).toBe("confirmation");
+    expect(blocked.screenData.type).toBe("confirmation");
+    if (blocked.screenData.type !== "confirmation") {
+      throw new Error("Expected confirmation screen");
+    }
+    expect(blocked.screenData.status).toBe("error");
+    expect(blocked.screenData.message).toContain("view bundle details");
+  });
+
   // ── Single screen: first tool call returns immediately ──
 
   it("returns first tool result as single screen without supplementary", async () => {

@@ -13,6 +13,10 @@
   border-left: 4px solid var(--color-error);
 }
 
+.pending {
+  border-left: 4px solid var(--color-warning);
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -39,6 +43,11 @@
 
 .error .icon {
   background: var(--color-error);
+  color: var(--color-text-inverse);
+}
+
+.pending .icon {
+  background: var(--color-warning);
   color: var(--color-text-inverse);
 }
 
@@ -106,6 +115,33 @@
   font-size: var(--text-lg);
   font-weight: 700;
   color: var(--color-primary);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.confirmBtn,
+.cancelBtn {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirmBtn {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.cancelBtn {
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
 }
 
 .status.healthy {

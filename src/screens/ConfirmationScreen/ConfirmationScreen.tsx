@@ -7,22 +7,53 @@ interface Props {
   actor: ScreenActor;
 }
 
-export function ConfirmationScreen({ data }: Props) {
-  if (data.type !== 'confirmation') return null;
+export function ConfirmationScreen({ data, actor }: Props) {
+  const confirmationData = data.type === 'confirmation' ? data : null;
+  if (!confirmationData) return null;
+  const screen = confirmationData;
 
-  const isSuccess = data.status === 'success';
+  const isPending = screen.status === 'pending';
+  const isSuccess = screen.status === 'success';
+
+  function handleConfirm() {
+    if (!screen.confirmationToken) return;
+    actor.send({
+      type: 'SUBMIT_PROMPT',
+      prompt: 'Confirm request',
+      confirmationAction: {
+        token: screen.confirmationToken,
+        decision: 'confirm',
+      },
+    });
+  }
+
+  function handleCancel() {
+    if (!screen.confirmationToken) return;
+    actor.send({
+      type: 'SUBMIT_PROMPT',
+      prompt: 'Cancel request',
+      confirmationAction: {
+        token: screen.confirmationToken,
+        decision: 'cancel',
+      },
+    });
+  }
 
   return (
-    <div className={`${styles.card} ${isSuccess ? styles.success : styles.error}`}>
+    <div
+      className={`${styles.card} ${isPending ? styles.pending : isSuccess ? styles.success : styles.error}`}
+    >
       <div className={styles.header}>
-        <span className={styles.icon}>{isSuccess ? '\u2713' : '\u2717'}</span>
-        <h3 className={styles.title}>{data.title}</h3>
+        <span className={styles.icon}>
+          {isPending ? '?' : isSuccess ? '\u2713' : '\u2717'}
+        </span>
+        <h3 className={styles.title}>{screen.title}</h3>
       </div>
-      <p className={styles.message}>{data.message}</p>
+      <p className={styles.message}>{screen.message}</p>
 
-      {Object.keys(data.details).length > 0 && (
+      {Object.keys(screen.details).length > 0 && (
         <div className={styles.details}>
-          {Object.entries(data.details).map(([key, value]) => (
+          {Object.entries(screen.details).map(([key, value]) => (
             <div key={key} className={styles.detailRow}>
               <span className={styles.detailLabel}>{formatLabel(key)}</span>
               <span className={styles.detailValue}>{String(value)}</span>
@@ -31,12 +62,31 @@ export function ConfirmationScreen({ data }: Props) {
         </div>
       )}
 
-      {data.updatedBalance && (
+      {screen.updatedBalance && (
         <div className={styles.balanceCard}>
           <span className={styles.balanceLabel}>Updated Balance</span>
           <span className={styles.balanceAmount}>
-            {data.updatedBalance.currency} {data.updatedBalance.current.toFixed(2)}
+            {screen.updatedBalance.currency} {screen.updatedBalance.current.toFixed(2)}
           </span>
+        </div>
+      )}
+
+      {isPending && screen.requiresUserConfirmation && screen.confirmationToken && (
+        <div className={styles.actions}>
+          <button
+            className={styles.confirmBtn}
+            onClick={handleConfirm}
+            aria-label="Confirm request"
+          >
+            Confirm
+          </button>
+          <button
+            className={styles.cancelBtn}
+            onClick={handleCancel}
+            aria-label="Cancel request"
+          >
+            Cancel
+          </button>
         </div>
       )}
     </div>

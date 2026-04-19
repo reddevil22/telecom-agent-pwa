@@ -17,6 +17,10 @@ export interface AgentRequest {
   userId: string;
   conversationHistory: ConversationMessage[];
   timestamp: number;
+  confirmationAction?: {
+    token: string;
+    decision: "confirm" | "cancel";
+  };
 }
 
 export type ScreenType =
@@ -59,10 +63,13 @@ export interface SupportScreenData {
 export interface ConfirmationScreenData {
   type: "confirmation";
   title: string;
-  status: "success" | "error";
+  status: "pending" | "success" | "error";
   message: string;
   details: Record<string, string | number>;
   updatedBalance?: Balance;
+  requiresUserConfirmation?: boolean;
+  confirmationToken?: string;
+  actionType?: "top_up" | "purchase_bundle" | "create_ticket";
 }
 
 export interface AccountScreenData {
