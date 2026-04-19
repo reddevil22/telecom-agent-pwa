@@ -6,13 +6,13 @@ A conversational AI agent for telecom customers. Users type natural-language req
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, TypeScript, XState v5, Vite 8, CSS Modules |
-| Backend | NestJS 11, TypeScript, SQLite (better-sqlite3) |
-| LLM | DashScope (Alibaba Cloud) or local llama-server — any OpenAI-compatible API. GLM-5.1 was used during development. |
-| E2E Tests | Playwright |
-| Backend Tests | Jest + Supertest |
+| Layer         | Technology                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Frontend      | React 19, TypeScript, XState v5, Vite 8, CSS Modules                                                              |
+| Backend       | NestJS 11, TypeScript, SQLite (better-sqlite3)                                                                    |
+| LLM           | DashScope (Alibaba Cloud) or local llama-server — any OpenAI-compatible API. GLM-5.1 was used during development. |
+| E2E Tests     | Playwright                                                                                                        |
+| Backend Tests | Jest + Supertest                                                                                                  |
 
 ---
 
@@ -80,6 +80,7 @@ initializing → idle → processing → rendering → idle (loop)
 ```
 
 **Context** (machine state):
+
 - `conversationHistory` — chat messages
 - `currentScreenType` / `currentScreenData` — what to render
 - `currentSuggestions` — quick-reply chips
@@ -111,14 +112,14 @@ App
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/App.tsx` | Root — boots the XState machine, wraps in ErrorBoundary |
-| `src/machines/orchestratorMachine.ts` | State machine definition and all transitions |
-| `src/services/agentService.ts` | Thin `fetch` wrapper for `POST /api/agent/chat` |
-| `src/services/historyService.ts` | Session CRUD via backend API |
-| `src/types/agent.ts` | `AgentRequest`, `AgentResponse`, `ScreenData` discriminated union |
-| `src/screens/registry.ts` | ScreenType → component map |
+| File                                  | Purpose                                                           |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| `src/App.tsx`                         | Root — boots the XState machine, wraps in ErrorBoundary           |
+| `src/machines/orchestratorMachine.ts` | State machine definition and all transitions                      |
+| `src/services/agentService.ts`        | Thin `fetch` wrapper for `POST /api/agent/chat`                   |
+| `src/services/historyService.ts`      | Session CRUD via backend API                                      |
+| `src/types/agent.ts`                  | `AgentRequest`, `AgentResponse`, `ScreenData` discriminated union |
+| `src/screens/registry.ts`             | ScreenType → component map                                        |
 
 ---
 
@@ -165,6 +166,7 @@ backend/src/
 6. **Return** — when LLM stops calling tools, build the `AgentResponse`
 
 **Safety guards:**
+
 - `SUPERVISOR_MAX_ITERATIONS` caps the loop
 - `ALLOWED_TOOLS` whitelist prevents arbitrary tool calls
 - `TOOL_ARG_SCHEMAS` validates argument keys and types
@@ -176,7 +178,10 @@ Each implements `SubAgentPort`:
 
 ```typescript
 interface SubAgentPort {
-  handle(userId: string, params?: Record<string, string>): Promise<{
+  handle(
+    userId: string,
+    params?: Record<string, string>,
+  ): Promise<{
     screenData: ScreenData;
     processingSteps: ProcessingStep[];
   }>;
@@ -185,17 +190,17 @@ interface SubAgentPort {
 
 Registered via `SupervisorService.registerAgent(toolName, agent)`. The current set:
 
-| Tool Name | Agent | Screen |
-|-----------|-------|--------|
-| `check_balance` | SimpleQuerySubAgent | balance |
-| `list_bundles` | SimpleQuerySubAgent | bundles |
+| Tool Name             | Agent                     | Screen       |
+| --------------------- | ------------------------- | ------------ |
+| `check_balance`       | SimpleQuerySubAgent       | balance      |
+| `list_bundles`        | SimpleQuerySubAgent       | bundles      |
 | `view_bundle_details` | ViewBundleDetailsSubAgent | bundleDetail |
-| `purchase_bundle` | PurchaseBundleSubAgent | confirmation |
-| `check_usage` | SimpleQuerySubAgent | usage |
-| `create_ticket` | CreateTicketSubAgent | confirmation |
-| `get_support` | DualQuerySubAgent | support |
-| `top_up` | ActionSubAgent | confirmation |
-| `get_account_summary` | SimpleQuerySubAgent | account |
+| `purchase_bundle`     | PurchaseBundleSubAgent    | confirmation |
+| `check_usage`         | SimpleQuerySubAgent       | usage        |
+| `create_ticket`       | CreateTicketSubAgent      | confirmation |
+| `get_support`         | DualQuerySubAgent         | support      |
+| `top_up`              | ActionSubAgent            | confirmation |
+| `get_account_summary` | SimpleQuerySubAgent       | account      |
 
 `purchase_bundle` is typically a two-step UX: first `view_bundle_details`, then an explicit purchase confirmation prompt.
 
@@ -206,6 +211,7 @@ Keyword-based screen cache: if the user's prompt contains intent keywords ("bala
 ### Data Layer
 
 SQLite with `better-sqlite3`. Two tables:
+
 - `conversations` — session metadata (id, userId, timestamps)
 - `messages` — conversation history (role, text, screenType, timestamp)
 
@@ -218,17 +224,24 @@ Migrations run on startup via `sqlite-connection.service.ts` in `SqliteDataModul
 Single endpoint: `POST /api/agent/chat`
 
 **Request:**
+
 ```typescript
 {
   prompt: string;
   sessionId: string;
   userId: string;
-  conversationHistory: { role: 'user' | 'agent'; text: string; timestamp: number }[];
+  conversationHistory: {
+    role: "user" | "agent";
+    text: string;
+    timestamp: number;
+  }
+  [];
   timestamp: number;
 }
 ```
 
 **Response:**
+
 ```typescript
 {
   screenType: 'balance' | 'bundles' | 'bundleDetail' | 'usage'
@@ -248,14 +261,14 @@ The frontend uses `screenType` to pick the right React component and passes `scr
 
 ## Security Layers
 
-| Layer | Mechanism |
-|-------|-----------|
-| Input validation | `ValidationPipe` with `whitelist` + `forbidNonWhitelisted` on all DTOs |
-| Rate limiting | Custom guard on controller routes |
-| Tool validation | Allowlist + argument schema check in supervisor |
-| Prompt injection | Character budget on history, instruction leak detection |
-| LLM output | Tool calls validated before execution |
-| CORS | Restricted by `CORS_ORIGINS` (defaults include `localhost:5173`, `127.0.0.1:5173`, `localhost:3000`) |
+| Layer            | Mechanism                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| Input validation | `ValidationPipe` with `whitelist` + `forbidNonWhitelisted` on all DTOs                               |
+| Rate limiting    | Custom guard on controller routes                                                                    |
+| Tool validation  | Allowlist + argument schema check in supervisor                                                      |
+| Prompt injection | Character budget on history, instruction leak detection                                              |
+| LLM output       | Tool calls validated before execution                                                                |
+| CORS             | Restricted by `CORS_ORIGINS` (defaults include `localhost:5173`, `127.0.0.1:5173`, `localhost:3000`) |
 
 ---
 
