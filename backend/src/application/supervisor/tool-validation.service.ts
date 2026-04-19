@@ -20,7 +20,9 @@ const INVALID_TOOL_ERROR =
   "Invalid tool call. Use only the allowed tools with correct arguments.";
 
 export class ToolValidationService {
-  validate(toolCall: { function: { name: string; arguments: string } }): string | null {
+  validate(toolCall: {
+    function: { name: string; arguments: string };
+  }): string | null {
     if (!ALLOWED_TOOLS.has(toolCall.function.name)) {
       return INVALID_TOOL_ERROR;
     }

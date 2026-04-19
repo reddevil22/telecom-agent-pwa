@@ -10,11 +10,14 @@ export function createBillingAgentRegistrations(
   return [
     {
       toolName: "check_balance",
-      agent: new SimpleQuerySubAgent((userId) => balanceBff.getBalance(userId), {
-        screenType: "balance",
-        processingLabels: { fetching: "Fetching account balance" },
-        transformResult: (balance) => ({ balance }),
-      }) as SubAgentPort,
+      agent: new SimpleQuerySubAgent(
+        (userId) => balanceBff.getBalance(userId),
+        {
+          screenType: "balance",
+          processingLabels: { fetching: "Fetching account balance" },
+          transformResult: (balance) => ({ balance }),
+        },
+      ) as SubAgentPort,
     },
     {
       toolName: "top_up",

@@ -143,16 +143,16 @@ POST /api/agent/chat
 
 ### API Endpoints
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/agent/chat` | POST | Process prompt, return AgentResponse |
-| `/api/agent/chat/stream` | POST | SSE streaming (step + result + error events) |
-| `/api/agent/status` | GET | LLM availability and circuit state |
-| `/api/agent/quick-actions` | GET | Quick-action button config (cached 5 min) |
-| `/api/history/sessions` | GET | List user's conversation sessions |
-| `/api/history/session/:id` | GET | Get specific conversation |
-| `/api/history/session/:id` | DELETE | Soft-delete a conversation |
-| `/api/health/llm` | GET | LLM server health check |
+| Endpoint                   | Method | Purpose                                      |
+| -------------------------- | ------ | -------------------------------------------- |
+| `/api/agent/chat`          | POST   | Process prompt, return AgentResponse         |
+| `/api/agent/chat/stream`   | POST   | SSE streaming (step + result + error events) |
+| `/api/agent/status`        | GET    | LLM availability and circuit state           |
+| `/api/agent/quick-actions` | GET    | Quick-action button config (cached 5 min)    |
+| `/api/history/sessions`    | GET    | List user's conversation sessions            |
+| `/api/history/session/:id` | GET    | Get specific conversation                    |
+| `/api/history/session/:id` | DELETE | Soft-delete a conversation                   |
+| `/api/health/llm`          | GET    | LLM server health check                      |
 
 ### Security Layers
 
@@ -185,19 +185,19 @@ npx playwright test --config=playwright.demo.config.ts # demo recording
 
 ## Environment Variables
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `LLM_BASE_URL` | `http://localhost:8080/v1` | LLM API base URL |
-| `LLM_API_KEY` | `''` | API key (empty for local) |
-| `LLM_MODEL_NAME` | `meta-llama/Llama-3-70b` | Model identifier |
-| `LLM_TEMPERATURE` | `0.1` | Sampling temperature |
-| `LLM_MAX_TOKENS` | `1024` | Max response tokens |
-| `INTENT_CACHE_THRESHOLD` | `0.6` | Fuzzy cache similarity threshold |
-| `INTENT_KEYWORDS_PATH` | `data/intent-keywords.json` | External keyword config path |
-| `PORT` | `3001` | HTTP server port |
-| `NODE_ENV` | `development` | Runtime environment |
-| `LOG_LEVEL` | `info` | Pino log level |
-| `TELCO_SIMULATION_INTERVAL_MS` | `60000` | Mock telco usage tick interval |
+| Variable                       | Default                     | Purpose                          |
+| ------------------------------ | --------------------------- | -------------------------------- |
+| `LLM_BASE_URL`                 | `http://localhost:8080/v1`  | LLM API base URL                 |
+| `LLM_API_KEY`                  | `''`                        | API key (empty for local)        |
+| `LLM_MODEL_NAME`               | `meta-llama/Llama-3-70b`    | Model identifier                 |
+| `LLM_TEMPERATURE`              | `0.1`                       | Sampling temperature             |
+| `LLM_MAX_TOKENS`               | `1024`                      | Max response tokens              |
+| `INTENT_CACHE_THRESHOLD`       | `0.6`                       | Fuzzy cache similarity threshold |
+| `INTENT_KEYWORDS_PATH`         | `data/intent-keywords.json` | External keyword config path     |
+| `PORT`                         | `3001`                      | HTTP server port                 |
+| `NODE_ENV`                     | `development`               | Runtime environment              |
+| `LOG_LEVEL`                    | `info`                      | Pino log level                   |
+| `TELCO_SIMULATION_INTERVAL_MS` | `60000`                     | Mock telco usage tick interval   |
 
 ## Conventions
 

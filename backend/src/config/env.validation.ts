@@ -20,7 +20,8 @@ export const envValidationSchema = {
   PORT: { type: "number", default: 3001 },
   CORS_ORIGINS: {
     type: "string",
-    default: "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
+    default:
+      "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
   },
   NODE_ENV: { type: "string", default: "development" },
   LOG_LEVEL: { type: "string", default: "info" },

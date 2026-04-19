@@ -53,17 +53,19 @@ export class RateLimitGuard implements CanActivate {
   private resolveUserId(request: {
     userId?: string;
     headers?: Record<string, string | string[] | undefined>;
-  }): string {
-    if (request.userId && request.userId.trim() !== '') {
+  }): string | undefined {
+    if (request.userId && request.userId.trim() !== "") {
       return request.userId;
     }
 
-    const headerValue = request.headers?.['x-user-id'];
-    const resolvedHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-    if (resolvedHeader && resolvedHeader.trim() !== '') {
+    const headerValue = request.headers?.["x-user-id"];
+    const resolvedHeader = Array.isArray(headerValue)
+      ? headerValue[0]
+      : headerValue;
+    if (resolvedHeader && resolvedHeader.trim() !== "") {
       return resolvedHeader;
     }
 
-    return 'user-1';
+    return undefined;
   }
 }

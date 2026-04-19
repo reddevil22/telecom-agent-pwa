@@ -16,11 +16,14 @@ export function createBundleAgentRegistrations(
   return [
     {
       toolName: "list_bundles",
-      agent: new SimpleQuerySubAgent((userId) => bundlesBff.getBundles(userId), {
-        screenType: "bundles",
-        processingLabels: { fetching: "Retrieving available bundles" },
-        transformResult: (bundles) => ({ bundles }),
-      }) as SubAgentPort,
+      agent: new SimpleQuerySubAgent(
+        (userId) => bundlesBff.getBundles(userId),
+        {
+          screenType: "bundles",
+          processingLabels: { fetching: "Retrieving available bundles" },
+          transformResult: (bundles) => ({ bundles }),
+        },
+      ) as SubAgentPort,
     },
     {
       toolName: "view_bundle_details",

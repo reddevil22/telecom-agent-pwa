@@ -1,6 +1,9 @@
 import type { PinoLogger } from "nestjs-pino";
 import type { MetricsPort } from "../../domain/ports/metrics.port";
-import { TelecomIntent, type IntentKeywordMap } from "../../domain/types/intent";
+import {
+  TelecomIntent,
+  type IntentKeywordMap,
+} from "../../domain/types/intent";
 import type { AgentRequest, AgentResponse } from "../../domain/types/agent";
 import { InMemoryScreenCacheAdapter } from "../../infrastructure/cache/in-memory-screen-cache.adapter";
 import { ScreenCacheManager } from "./screen-cache-manager.service";

@@ -1,12 +1,12 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import Database from 'better-sqlite3';
-import { join } from 'path';
-import { mkdirSync, existsSync } from 'fs';
-import { up as runMigration001 } from './migrations/001_initial';
-import { up as runMigration002 } from './migrations/002_add_confirmation_screen_type';
-import { up as runMigration003 } from './migrations/003_add_bundle_detail_screen_type';
-import { up as runMigration004 } from './migrations/004_mock_telco';
-import { up as runMigration005 } from './migrations/005_add_account_screen_type';
+import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import Database from "better-sqlite3";
+import { join } from "path";
+import { mkdirSync, existsSync } from "fs";
+import { up as runMigration001 } from "./migrations/001_initial";
+import { up as runMigration002 } from "./migrations/002_add_confirmation_screen_type";
+import { up as runMigration003 } from "./migrations/003_add_bundle_detail_screen_type";
+import { up as runMigration004 } from "./migrations/004_mock_telco";
+import { up as runMigration005 } from "./migrations/005_add_account_screen_type";
 
 type Migration = {
   id: string;
@@ -14,11 +14,11 @@ type Migration = {
 };
 
 const MIGRATIONS: Migration[] = [
-  { id: '001_initial', up: runMigration001 },
-  { id: '002_add_confirmation_screen_type', up: runMigration002 },
-  { id: '003_add_bundle_detail_screen_type', up: runMigration003 },
-  { id: '004_mock_telco', up: runMigration004 },
-  { id: '005_add_account_screen_type', up: runMigration005 },
+  { id: "001_initial", up: runMigration001 },
+  { id: "002_add_confirmation_screen_type", up: runMigration002 },
+  { id: "003_add_bundle_detail_screen_type", up: runMigration003 },
+  { id: "004_mock_telco", up: runMigration004 },
+  { id: "005_add_account_screen_type", up: runMigration005 },
 ];
 
 @Injectable()
@@ -28,15 +28,15 @@ export class SqliteConnectionService implements OnModuleDestroy {
   private readonly dbPath: string;
 
   constructor() {
-    const dataDir = join(process.cwd(), 'data');
+    const dataDir = join(process.cwd(), "data");
     // Create data directory if it doesn't exist
     if (!existsSync(dataDir)) {
       mkdirSync(dataDir, { recursive: true });
     }
-    this.dbPath = join(dataDir, 'telecom.db');
+    this.dbPath = join(dataDir, "telecom.db");
     this.db = new Database(this.dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this.db.pragma("journal_mode = WAL");
+    this.db.pragma("foreign_keys = ON");
     this.runMigrations();
   }
 
@@ -65,7 +65,7 @@ export class SqliteConnectionService implements OnModuleDestroy {
         const transaction = this.db.transaction(() => {
           migration.up(this.db);
           this.db
-            .prepare('INSERT INTO _migrations (id) VALUES (?)')
+            .prepare("INSERT INTO _migrations (id) VALUES (?)")
             .run(migration.id);
         });
 
@@ -73,7 +73,7 @@ export class SqliteConnectionService implements OnModuleDestroy {
         this.logger.log(`[SQLite] Applied migration: ${migration.id}`);
       }
     } catch (error) {
-      this.logger.error('[SQLite] Migration failed', (error as Error).stack);
+      this.logger.error("[SQLite] Migration failed", (error as Error).stack);
       throw error;
     }
   }

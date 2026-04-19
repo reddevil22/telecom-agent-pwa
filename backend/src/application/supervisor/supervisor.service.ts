@@ -9,9 +9,7 @@ import {
   SUGGESTION_MAP,
   TOOL_TO_SCREEN,
 } from "../../domain/constants/agent-constants";
-import {
-  SECURITY_LIMITS,
-} from "../../domain/constants/security-constants";
+import { SECURITY_LIMITS } from "../../domain/constants/security-constants";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { TOOL_DEFINITIONS } from "./tool-definitions";
 import { ToolResolver } from "./tool-resolver";
@@ -143,12 +141,16 @@ export class SupervisorService {
       contextManager ??
       new ContextManagerService(this.llm, this.modelName, this.logger);
     this.toolDegradation =
-      toolDegradation ??
-      new ToolDegradationService(this.logger, this.metrics);
+      toolDegradation ?? new ToolDegradationService(this.logger, this.metrics);
     this.toolValidation = toolValidation ?? new ToolValidationService();
     this.screenCacheManager =
       screenCacheManager ??
-      new ScreenCacheManager(cache ?? null, this.metrics, this.logger, intentKeywords);
+      new ScreenCacheManager(
+        cache ?? null,
+        this.metrics,
+        this.logger,
+        intentKeywords,
+      );
     this.logger?.setContext(SupervisorService.name);
   }
 
@@ -316,14 +318,20 @@ export class SupervisorService {
       const result = await subAgent.handle(request.userId, resolution.args);
       screenData = result.screenData;
       processingSteps = result.processingSteps;
-      this.toolDegradation.recordToolSuccess(request.userId, resolution.toolName);
+      this.toolDegradation.recordToolSuccess(
+        request.userId,
+        resolution.toolName,
+      );
       this.metrics?.recordToolCall(
         resolution.toolName,
         true,
         Date.now() - toolStart,
       );
     } catch (error) {
-      this.toolDegradation.recordToolFailure(request.userId, resolution.toolName);
+      this.toolDegradation.recordToolFailure(
+        request.userId,
+        resolution.toolName,
+      );
       this.metrics?.recordToolCall(
         resolution.toolName,
         false,
@@ -611,14 +619,20 @@ export class SupervisorService {
         toolCall,
         screenType,
       );
-      this.toolDegradation.recordToolSuccess(request.userId, toolCall.function.name);
+      this.toolDegradation.recordToolSuccess(
+        request.userId,
+        toolCall.function.name,
+      );
       this.metrics?.recordToolCall(
         toolCall.function.name,
         true,
         Date.now() - toolStart,
       );
     } catch (error) {
-      this.toolDegradation.recordToolFailure(request.userId, toolCall.function.name);
+      this.toolDegradation.recordToolFailure(
+        request.userId,
+        toolCall.function.name,
+      );
       this.metrics?.recordToolCall(
         toolCall.function.name,
         false,
