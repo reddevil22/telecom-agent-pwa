@@ -158,6 +158,28 @@ describe('IntentRouterService', () => {
     );
   });
 
+  describe('purchase confirmation routing', () => {
+    it.each([
+      ['Purchase bundle b4 for my account. The bundle ID is b4.', 'b4'],
+      ['Confirm purchase of bundle b2 now', 'b2'],
+      ['Please activate b5', 'b5'],
+    ] as const)(
+      'routes "%s" directly to purchase_bundle with bundleId %s',
+      async (prompt, bundleId) => {
+        const result = await router.classify(prompt, 'user-1');
+        expect(result).not.toBeNull();
+        expect(result!.intent).toBe(TelecomIntent.PURCHASE_BUNDLE);
+        expect(result!.toolName).toBe(INTENT_TOOL_MAP[TelecomIntent.PURCHASE_BUNDLE]);
+        expect(result!.args).toEqual({ userId: 'user-1', bundleId });
+      },
+    );
+
+    it('falls back to Tier 3 when purchase intent has no concrete bundle id', async () => {
+      const result = await router.classify('buy the Value Plus bundle', 'user-1');
+      expect(result).toBeNull();
+    });
+  });
+
   // ── Truly unknown input ──────────────────────────────────────
 
   describe('unknown input', () => {

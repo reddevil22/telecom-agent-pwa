@@ -16,7 +16,10 @@ export function BundleDetailScreen({ data, actor }: Props) {
 
   function handleConfirm() {
     if (hasInsufficientBalance) return;
-    actor.send({ type: 'SUBMIT_PROMPT', prompt: `Purchase bundle ${bundle.id} for my account. The bundle ID is ${bundle.id}.` });
+    actor.send({
+      type: 'SUBMIT_PROMPT',
+      prompt: `Confirm purchase bundle ${bundle.id}. Use bundle ID ${bundle.id}.`,
+    });
   }
 
   function handleCancel() {

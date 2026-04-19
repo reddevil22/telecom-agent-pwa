@@ -21,6 +21,10 @@ export class IntentRouterService implements IntentRouterPort {
     const topUp = this.topUpIntentMatch(prompt, userId);
     if (topUp) return topUp;
 
+    // Deterministic purchase routing when the prompt includes a concrete bundle ID.
+    const purchase = this.purchaseIntentMatch(prompt, userId);
+    if (purchase) return purchase;
+
     // Tier 1: Exact keyword match
     const tier1 = this.tier1KeywordMatch(prompt, userId);
     if (tier1) return tier1;
@@ -49,6 +53,9 @@ export class IntentRouterService implements IntentRouterPort {
 
   /** Words that signal a purchase/action intent requiring entity extraction */
   private static readonly DEFAULT_ACTION_SIGNALS = ['buy', 'purchase', 'order', 'subscribe', 'activate', 'get me', 'i want', 'i need'];
+
+  /** Verbs that indicate an explicit purchase confirmation intent */
+  private static readonly PURCHASE_SIGNALS = ['buy', 'purchase', 'order', 'subscribe', 'activate', 'confirm'];
 
   /** Phrases that indicate top-up intents and should bypass Tier 1 account/balance keyword routing */
   private static readonly TOP_UP_SIGNALS = ['top up', 'topup', 'recharge', 'add credit', 'add money'];
@@ -148,8 +155,32 @@ export class IntentRouterService implements IntentRouterPort {
     };
   }
 
+  private purchaseIntentMatch(prompt: string, userId: string): IntentResolution | null {
+    const lower = prompt.toLowerCase();
+    const hasPurchaseSignal = IntentRouterService.PURCHASE_SIGNALS.some(signal => lower.includes(signal));
+    if (!hasPurchaseSignal) return null;
+
+    const bundleId = this.extractBundleId(lower);
+    if (!bundleId) return null;
+
+    return {
+      intent: TelecomIntent.PURCHASE_BUNDLE,
+      toolName: INTENT_TOOL_MAP[TelecomIntent.PURCHASE_BUNDLE],
+      args: { userId, bundleId },
+      confidence: 1.0,
+    };
+  }
+
   private extractAmount(prompt: string): string | null {
     const match = prompt.match(/\b(\d+(?:\.\d+)?)\b/);
     return match?.[1] ?? null;
+  }
+
+  private extractBundleId(prompt: string): string | null {
+    const explicitBundleRef = prompt.match(/\bbundle\s*(?:id(?:\s*is)?\s*)?(b\d+)\b/i);
+    if (explicitBundleRef?.[1]) return explicitBundleRef[1].toLowerCase();
+
+    const standaloneBundleId = prompt.match(/\b(b\d+)\b/i);
+    return standaloneBundleId?.[1]?.toLowerCase() ?? null;
   }
 }

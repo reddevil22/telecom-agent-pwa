@@ -4,6 +4,31 @@ import type {
   ProcessingStep,
 } from "../types/agent";
 
+const REQUEST_LIMITS = {
+  promptMaxLength: 1000,
+  historyMessageMaxLength: 500,
+  historyMaxEntries: 20,
+} as const;
+
+function clampText(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : value.slice(0, maxLength);
+}
+
+function normalizeRequest(request: AgentRequest): AgentRequest {
+  const conversationHistory = request.conversationHistory
+    .slice(-REQUEST_LIMITS.historyMaxEntries)
+    .map((message) => ({
+      ...message,
+      text: clampText(message.text, REQUEST_LIMITS.historyMessageMaxLength),
+    }));
+
+  return {
+    ...request,
+    prompt: clampText(request.prompt, REQUEST_LIMITS.promptMaxLength),
+    conversationHistory,
+  };
+}
+
 interface RequestOptions {
   signal?: AbortSignal;
 }
@@ -12,13 +37,15 @@ export async function invokeAgentService(
   request: AgentRequest,
   options: RequestOptions = {},
 ): Promise<AgentResponse> {
+  const payload = normalizeRequest(request);
+
   const res = await fetch("/api/agent/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-user-id": request.userId,
+      "x-user-id": payload.userId,
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify(payload),
     signal: options.signal,
   });
 
@@ -36,13 +63,15 @@ export async function invokeAgentStream(
   onStep: StepCallback,
   options: RequestOptions = {},
 ): Promise<AgentResponse> {
+  const payload = normalizeRequest(request);
+
   const res = await fetch("/api/agent/chat/stream", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-user-id": request.userId,
+      "x-user-id": payload.userId,
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify(payload),
     signal: options.signal,
   });
 

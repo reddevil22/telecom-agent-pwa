@@ -60,7 +60,7 @@ describe('AgentRequestDto', () => {
     expect(errors.some(e => e.property === 'timestamp')).toBe(true);
   });
 
-  it('fails when conversationHistory exceeds max entries', async () => {
+  it('truncates conversationHistory when it exceeds max entries', async () => {
     const history = Array.from({ length: SECURITY_LIMITS.HISTORY_MAX_ENTRIES + 1 }, (_, i) => ({
       role: 'user' as const,
       text: `msg ${i}`,
@@ -68,7 +68,9 @@ describe('AgentRequestDto', () => {
     }));
     const dto = makeValidDto({ conversationHistory: history });
     const errors = await validate(dto);
-    expect(errors.some(e => e.property === 'conversationHistory')).toBe(true);
+    expect(errors.length).toBe(0);
+    expect(dto.conversationHistory).toHaveLength(SECURITY_LIMITS.HISTORY_MAX_ENTRIES);
+    expect(dto.conversationHistory[0].text).toBe('msg 1');
   });
 
   it('passes with valid conversation history', async () => {

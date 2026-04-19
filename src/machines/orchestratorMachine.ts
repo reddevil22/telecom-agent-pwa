@@ -269,7 +269,7 @@ export const orchestratorMachine = setup({
   initial: "initializing",
   on: {
     USER_CHANGED: {
-      target: "idle",
+      target: ".idle",
       actions: "switchUser",
     },
   },

@@ -1,5 +1,5 @@
-import { IsString, IsNumber, IsArray, ValidateNested, IsOptional, MaxLength, ArrayMaxSize, Min, IsIn } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNumber, IsArray, ValidateNested, MaxLength, ArrayMaxSize, Min, IsIn } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 import { SECURITY_LIMITS } from '../../../../domain/constants/security-constants';
 
 class ConversationMessageDto {
@@ -27,6 +27,11 @@ export class AgentRequestDto {
   userId!: string;
 
   @IsArray()
+  @Transform(({ value }) =>
+    Array.isArray(value)
+      ? value.slice(-SECURITY_LIMITS.HISTORY_MAX_ENTRIES)
+      : value,
+  )
   @ArrayMaxSize(SECURITY_LIMITS.HISTORY_MAX_ENTRIES)
   @ValidateNested({ each: true })
   @Type(() => ConversationMessageDto)
