@@ -214,34 +214,44 @@ NestJS Injector
 Three generic patterns handle most tools. Complex flows get dedicated classes.
 
 ### SimpleQuerySubAgent
+
 Single BFF call → screen. Used for read-only operations.
+
 ```
 userId → BFF call → transformResult(screenData)
 ```
+
 Tools: `check_balance`, `list_bundles`, `check_usage`, `get_account_summary`
 
 ### DualQuerySubAgent
+
 Two parallel BFF calls → merged screen. Used for support (tickets + FAQ).
+
 ```
 userId → [BFF call 1, BFF call 2] → transformResult(data1, data2)
 ```
+
 Tools: `get_support`
 
 ### ActionSubAgent
+
 Validate params → execute action → confirmation screen. Used for mutations.
+
 ```
 params → validateParams() → executeAction(userId, params) → confirmation screen
 ```
+
 Tools: `top_up`
 
 ### Dedicated Sub-Agents
+
 Complex flows that don't fit the generic patterns:
 
-| Sub-Agent | Why Dedicated |
-|-----------|---------------|
-| `PurchaseBundleSubAgent` | Balance check → deduct → subscription creation, multi-step |
+| Sub-Agent                   | Why Dedicated                                                         |
+| --------------------------- | --------------------------------------------------------------------- |
+| `PurchaseBundleSubAgent`    | Balance check → deduct → subscription creation, multi-step            |
 | `ViewBundleDetailsSubAgent` | Needs both bundle details AND current balance for affordability check |
-| `CreateTicketSubAgent` | Extracts subject + description from LLM params, then creates ticket |
+| `CreateTicketSubAgent`      | Extracts subject + description from LLM params, then creates ticket   |
 
 ---
 
@@ -264,6 +274,7 @@ TOOL_REGISTRY = {
 ```
 
 Auto-derived constants:
+
 - `ALLOWED_TOOLS` — Set of valid tool names (security whitelist)
 - `TOOL_TO_SCREEN` — Map tool name → screen type
 - `TOOL_ARG_SCHEMAS` — Map tool name → allowed argument keys
@@ -335,100 +346,18 @@ HALF_OPEN (probe)
 
 ---
 
-## MockTelcoService
-
-`infrastructure/telco/mock-telco.service.ts` simulates a real telecom OSS/BSS:
-
-### Data Model
-
-```
-telco_accounts          telco_bundles_catalog
-┌──────────────┐       ┌──────────────────────┐
-│ userId (PK)  │       │ id (PK): b1–b5       │
-│ msisdn       │       │ name, price, data_gb  │
-│ name         │       │ minutes, sms          │
-│ balance      │       │ validity_days         │
-│ billing_*    │       │ category              │
-│ status       │       └──────────────────────┘
-└──────┬───────┘                │
-       │                        │ purchase
-       │    telco_subscriptions │
-       │   ┌────────────────────┤
-       │   │ subscriptionId     │
-       ├───│ userId (FK)        │
-       │   │ bundleId (FK)      │
-       │   │ data/voice/SMS     │
-       │   │ used + total       │
-       │   │ activatedAt        │
-       │   │ expiresAt          │
-       │   └────────────────────┘
-       │
-       │    telco_usage_records
-       │   ┌────────────────────┐
-       ├───│ userId (FK)        │
-       │   │ type (data/voice)  │
-       │   │ amount, direction  │
-       │   │ timestamp          │
-       │   └────────────────────┘
-       │
-       │    telco_tickets
-       │   ┌────────────────────┐
-       ├───│ userId (FK)        │
-       │   │ subject, desc      │
-       │   │ status             │
-       │   │ createdAt, updated │
-       │   └────────────────────┘
-       │
-       │    telco_faq
-       │   ┌────────────────────┐
-       └───│ question, answer   │
-           └────────────────────┘
-```
-
-### Time-Aware Simulation
-
-On every read, if `TELCO_SIMULATION_INTERVAL_MS` (default 60s) has elapsed since the last tick:
-1. Randomly increments data/voice/SMS usage on active subscriptions
-2. Expires subscriptions past their `expiresAt`
-3. Progresses ticket statuses: `open → in_progress → resolved`
-
-### Bundle Purchase Flow
-
-```
-purchaseBundle(userId, bundleId)
-    1. Lookup bundle in catalog → 404 if not found
-    2. Check user balance → error if insufficient
-    3. Deduct price from account balance
-    4. Create subscription row with full allowances
-    5. Record usage event
-    6. Return { success, balance, bundle }
-```
-
-### Account Summary Aggregation
-
-```
-getAccountSummary(userId)
-    1. Fetch account profile
-    2. Fetch active subscriptions JOINed with bundle catalog
-    3. Fetch recent transactions (purchases + top-ups + ticket events, sorted desc, capped at 5)
-    4. Fetch open (non-resolved) tickets
-    5. Return { profile, activeSubscriptions, recentTransactions, openTickets }
-```
-
----
-
 ## Security Layers
 
 Six layers of defense, all tunables in `domain/constants/security-constants.ts`:
 
-| Layer | Mechanism | Location |
-|-------|-----------|----------|
-| 1. DTO validation | class-validator, whitelist+forbidNonWhitelisted | `adapters/driving/rest/dto/` |
-| 2. Prompt sanitizer | Control chars, blocked injection patterns | `adapters/driving/rest/pipes/` |
-| 3. Rate limiting | 10 req / 60s sliding window per authenticated user (fallback to source IP) | `adapters/driving/rest/guards/` |
-| 4. System prompt hardening | Security rules, tool restrictions | `application/supervisor/system-prompt.ts` |
-| 5. Tool call validation | Whitelist + allowed args + type checks | `application/supervisor/tool-validation.service.ts` |
-| 6. History/budget caps | Max 20 history entries, total char budget | `supervisor.service.ts` → `buildInitialMessages()` |
+| Layer                      | Mechanism                                                                  | Location                                            |
+| -------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------- |
+| 1. DTO validation          | class-validator, whitelist+forbidNonWhitelisted                            | `adapters/driving/rest/dto/`                        |
+| 2. Prompt sanitizer        | Control chars, blocked injection patterns                                  | `adapters/driving/rest/pipes/`                      |
+| 3. Rate limiting           | 10 req / 60s sliding window per authenticated user (fallback to source IP) | `adapters/driving/rest/guards/`                     |
+| 4. System prompt hardening | Security rules, tool restrictions                                          | `application/supervisor/system-prompt.ts`           |
+| 5. Tool call validation    | Whitelist + allowed args + type checks                                     | `application/supervisor/tool-validation.service.ts` |
+| 6. History/budget caps     | Max 20 history entries, total char budget                                  | `supervisor.service.ts` → `buildInitialMessages()`  |
 
 ### userId Trust Boundary
 
@@ -436,39 +365,23 @@ The supervisor **always** passes `request.userId` to sub-agents, never the `user
 
 ---
 
-## Database
-
-SQLite via `better-sqlite3` with WAL mode. Auto-migrations on startup.
-
-**Location**: `backend/data/telecom.db`
-
-**5 migrations**: Initial schema → confirmation screen type support → bundle detail screen type support → telco tables + seed → account screen type
-
-**Seed data** (migration 004):
-- user-1: $50 balance, active Starter Pack (partially consumed), 2 support tickets, 5 FAQs
-- 5 bundles: Starter Pack ($9.99), Value Plus ($19.99), Unlimited Pro ($39.99), Weekend Pass ($4.99), Travel Roaming ($14.99)
-
-Delete `telecom.db` to force a fresh seed on next startup.
-
----
-
 ## Environment Variables
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `LLM_BASE_URL` | `http://localhost:8080/v1` | LLM API endpoint |
-| `LLM_API_KEY` | `''` | API key (empty for local llama-server) |
-| `LLM_MODEL_NAME` | `meta-llama/Llama-3-70b` | Model name (local) |
-| `LLM_PROVIDER` | `local` | `local` or `dashscope` |
-| `LLM_TEMPERATURE` | `0.1` | Sampling temperature |
-| `LLM_MAX_TOKENS` | `1024` | Max response tokens |
-| `DASHSCOPE_API_KEY` | — | Alibaba Cloud DashScope key |
-| `DASHSCOPE_BASE_URL` | — | DashScope endpoint |
-| `DASHSCOPE_MODEL_NAME` | — | DashScope model |
-| `PORT` | `3001` | HTTP server port |
-| `NODE_ENV` | `development` | Runtime environment |
-| `LOG_LEVEL` | `info` | Pino log level |
-| `TELCO_SIMULATION_INTERVAL_MS` | `60000` | Usage simulation tick interval |
+| Variable                       | Default                    | Purpose                                |
+| ------------------------------ | -------------------------- | -------------------------------------- |
+| `LLM_BASE_URL`                 | `http://localhost:8080/v1` | LLM API endpoint                       |
+| `LLM_API_KEY`                  | `''`                       | API key (empty for local llama-server) |
+| `LLM_MODEL_NAME`               | `meta-llama/Llama-3-70b`   | Model name (local)                     |
+| `LLM_PROVIDER`                 | `local`                    | `local` or `dashscope`                 |
+| `LLM_TEMPERATURE`              | `0.1`                      | Sampling temperature                   |
+| `LLM_MAX_TOKENS`               | `1024`                     | Max response tokens                    |
+| `DASHSCOPE_API_KEY`            | —                          | Alibaba Cloud DashScope key            |
+| `DASHSCOPE_BASE_URL`           | —                          | DashScope endpoint                     |
+| `DASHSCOPE_MODEL_NAME`         | —                          | DashScope model                        |
+| `PORT`                         | `3001`                     | HTTP server port                       |
+| `NODE_ENV`                     | `development`              | Runtime environment                    |
+| `LOG_LEVEL`                    | `info`                     | Pino log level                         |
+| `TELCO_SIMULATION_INTERVAL_MS` | `60000`                    | Usage simulation tick interval         |
 
 ---
 
