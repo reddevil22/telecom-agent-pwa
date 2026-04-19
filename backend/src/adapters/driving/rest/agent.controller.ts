@@ -10,7 +10,7 @@ import { PinoLogger } from 'nestjs-pino';
 
 type AuthedRequest = Request & { userId?: string };
 
-@Controller('agent')
+@Controller('api/agent')
 @UseGuards(RateLimitGuard)
 export class AgentController {
   constructor(
@@ -91,7 +91,7 @@ export class AgentController {
   }
 }
 
-@Controller('health')
+@Controller('api/health')
 export class HealthController {
   @Get()
   health() {

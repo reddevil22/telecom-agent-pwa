@@ -107,7 +107,6 @@ describe("App (e2e)", () => {
         transform: true,
       }),
     );
-    app.setGlobalPrefix("api");
     await app.init();
 
     rateLimiter = moduleFixture.get<RateLimiterPort>(RATE_LIMITER_PORT);

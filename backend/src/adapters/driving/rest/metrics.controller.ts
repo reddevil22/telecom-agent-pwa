@@ -9,7 +9,7 @@ import { ConfigService } from "@nestjs/config";
 import type { MetricsPort } from "../../../domain/ports/metrics.port";
 import { METRICS_PORT } from "../../../domain/tokens";
 
-@Controller("metrics")
+@Controller("api/metrics")
 export class MetricsController {
   constructor(
     @Inject(METRICS_PORT) private readonly metrics: MetricsPort,

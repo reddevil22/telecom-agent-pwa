@@ -18,10 +18,12 @@ export class RateLimitGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
       body?: { sessionId?: string };
-      headers?: Record<string, string>;
+      headers?: Record<string, string | string[] | undefined>;
       ip?: string;
       userId?: string;
     }>();
+
+    request.userId = this.resolveUserId(request);
 
     const key = this.resolveKey(request);
     if (!key) {
@@ -46,5 +48,22 @@ export class RateLimitGuard implements CanActivate {
     }
     // GET/other requests: rate limit by source IP only
     return request.ip ? `ip:${request.ip}` : null;
+  }
+
+  private resolveUserId(request: {
+    userId?: string;
+    headers?: Record<string, string | string[] | undefined>;
+  }): string {
+    if (request.userId && request.userId.trim() !== '') {
+      return request.userId;
+    }
+
+    const headerValue = request.headers?.['x-user-id'];
+    const resolvedHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+    if (resolvedHeader && resolvedHeader.trim() !== '') {
+      return resolvedHeader;
+    }
+
+    return 'user-1';
   }
 }

@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { LlmHealthService } from '../../../infrastructure/llm/llm-health.service';
 
-@Controller('health')
+@Controller('api/health')
 export class LlmHealthController {
   constructor(private readonly llmHealthService: LlmHealthService) {}
 

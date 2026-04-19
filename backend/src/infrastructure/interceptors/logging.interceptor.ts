@@ -1,5 +1,6 @@
 import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Inject } from '@nestjs/common';
 import { Request } from 'express';
+import { randomUUID } from 'crypto';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { PinoLogger } from 'nestjs-pino';
@@ -12,8 +13,20 @@ export class LoggingInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
+    const response = context.switchToHttp().getResponse();
+    const requestContext = request as Request & { correlationId?: string };
     const { method, url } = request;
-    const correlationId = (request as unknown as Record<string, unknown>)['correlationId'] as string | undefined;
+    const headerCorrelation = request.headers['x-correlation-id'];
+    const normalizedHeaderCorrelation = Array.isArray(headerCorrelation)
+      ? headerCorrelation[0]
+      : headerCorrelation;
+    const correlationId =
+      requestContext.correlationId
+      ?? (normalizedHeaderCorrelation && normalizedHeaderCorrelation.trim().length > 0
+        ? normalizedHeaderCorrelation
+        : randomUUID());
+    requestContext.correlationId = correlationId;
+    response.setHeader('x-correlation-id', correlationId);
     const startTime = Date.now();
 
     this.logger.info({ method, url, correlationId }, 'Incoming request');
@@ -22,7 +35,6 @@ export class LoggingInterceptor implements NestInterceptor {
       tap({
         next: () => {
           const duration = Date.now() - startTime;
-          const response = context.switchToHttp().getResponse();
           this.logger.info({
             method,
             url,

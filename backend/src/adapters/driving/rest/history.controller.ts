@@ -6,7 +6,7 @@ import type { Request } from 'express';
 
 type AuthedRequest = Request & { userId?: string };
 
-@Controller('history')
+@Controller('api/history')
 @UseGuards(RateLimitGuard)
 export class HistoryController {
   constructor(

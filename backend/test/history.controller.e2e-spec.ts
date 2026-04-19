@@ -10,6 +10,7 @@ import {
 import type { RateLimiterPort } from "../src/domain/ports/rate-limiter.port";
 
 describe("HistoryController (e2e)", () => {
+  const historyBasePath = "/api/history";
   let app: INestApplication;
   let storage: SqliteConversationDataMapper;
   let rateLimiter: RateLimiterPort;
@@ -46,7 +47,7 @@ describe("HistoryController (e2e)", () => {
     it("should use authenticated user when userId is missing", () => {
       const userId = "sessions-missing";
       return request(app.getHttpServer())
-        .get("/history/sessions")
+        .get(`${historyBasePath}/sessions`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -57,7 +58,7 @@ describe("HistoryController (e2e)", () => {
     it("should use authenticated user when userId is empty string", () => {
       const userId = "sessions-empty";
       return request(app.getHttpServer())
-        .get("/history/sessions?userId=")
+        .get(`${historyBasePath}/sessions?userId=`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -67,7 +68,7 @@ describe("HistoryController (e2e)", () => {
 
     it("should return 403 when query userId does not match authenticated user", () => {
       return request(app.getHttpServer())
-        .get("/history/sessions?userId=user-2")
+        .get(`${historyBasePath}/sessions?userId=user-2`)
         .set("x-user-id", "sessions-authz")
         .expect(403);
     });
@@ -75,7 +76,7 @@ describe("HistoryController (e2e)", () => {
     it("should return empty array for user with no conversations", () => {
       const userId = "sessions-empty-data";
       return request(app.getHttpServer())
-        .get(`/history/sessions?userId=${userId}`)
+        .get(`${historyBasePath}/sessions?userId=${userId}`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -89,7 +90,7 @@ describe("HistoryController (e2e)", () => {
       storage.addMessage(conversationId, "user", "Hello", null, Date.now());
 
       return request(app.getHttpServer())
-        .get(`/history/sessions?userId=${userId}`)
+        .get(`${historyBasePath}/sessions?userId=${userId}`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -107,7 +108,7 @@ describe("HistoryController (e2e)", () => {
       storage.createConversation("session-3", userId);
 
       return request(app.getHttpServer())
-        .get(`/history/sessions?userId=${userId}&limit=2`)
+        .get(`${historyBasePath}/sessions?userId=${userId}&limit=2`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -122,7 +123,7 @@ describe("HistoryController (e2e)", () => {
       storage.softDeleteConversation(id);
 
       return request(app.getHttpServer())
-        .get(`/history/sessions?userId=${userId}`)
+        .get(`${historyBasePath}/sessions?userId=${userId}`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -135,7 +136,7 @@ describe("HistoryController (e2e)", () => {
   describe("GET /history/session/:sessionId", () => {
     it("should return 404 for non-existent session", () => {
       return request(app.getHttpServer())
-        .get("/history/session/nonexistent")
+        .get(`${historyBasePath}/session/nonexistent`)
         .set("x-user-id", "session-missing")
         .expect(404);
     });
@@ -146,7 +147,7 @@ describe("HistoryController (e2e)", () => {
       storage.softDeleteConversation(id);
 
       return request(app.getHttpServer())
-        .get("/history/session/session-1")
+        .get(`${historyBasePath}/session/session-1`)
         .set("x-user-id", userId)
         .expect(404);
     });
@@ -155,7 +156,7 @@ describe("HistoryController (e2e)", () => {
       storage.createConversation("session-1", "user-2");
 
       return request(app.getHttpServer())
-        .get("/history/session/session-1")
+        .get(`${historyBasePath}/session/session-1`)
         .set("x-user-id", "user-1")
         .expect(404);
     });
@@ -173,7 +174,7 @@ describe("HistoryController (e2e)", () => {
       );
 
       return request(app.getHttpServer())
-        .get("/history/session/session-1")
+        .get(`${historyBasePath}/session/session-1`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -191,7 +192,7 @@ describe("HistoryController (e2e)", () => {
       storage.addMessage(id, "user", "Hello", null, Date.now());
 
       return request(app.getHttpServer())
-        .get("/history/session/session-1")
+        .get(`${historyBasePath}/session/session-1`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -207,7 +208,7 @@ describe("HistoryController (e2e)", () => {
   describe("DELETE /history/session/:sessionId", () => {
     it("should return 404 for non-existent session", () => {
       return request(app.getHttpServer())
-        .delete("/history/session/nonexistent")
+        .delete(`${historyBasePath}/session/nonexistent`)
         .set("x-user-id", "delete-missing")
         .expect(404);
     });
@@ -217,7 +218,7 @@ describe("HistoryController (e2e)", () => {
       storage.createConversation("session-1", userId);
 
       return request(app.getHttpServer())
-        .delete("/history/session/session-1")
+        .delete(`${historyBasePath}/session/session-1`)
         .set("x-user-id", userId)
         .expect(200)
         .expect((res) => {
@@ -226,7 +227,7 @@ describe("HistoryController (e2e)", () => {
         })
         .then(() => {
           return request(app.getHttpServer())
-            .get("/history/session/session-1")
+            .get(`${historyBasePath}/session/session-1`)
             .set("x-user-id", userId)
             .expect(404);
         });
@@ -236,7 +237,7 @@ describe("HistoryController (e2e)", () => {
       storage.createConversation("session-1", "user-2");
 
       return request(app.getHttpServer())
-        .delete("/history/session/session-1")
+        .delete(`${historyBasePath}/session/session-1`)
         .set("x-user-id", "user-1")
         .expect(404);
     });
@@ -247,7 +248,7 @@ describe("HistoryController (e2e)", () => {
       storage.softDeleteConversation(id);
 
       return request(app.getHttpServer())
-        .delete("/history/session/session-1")
+        .delete(`${historyBasePath}/session/session-1`)
         .set("x-user-id", userId)
         .expect(404);
     });
