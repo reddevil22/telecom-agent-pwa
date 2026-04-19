@@ -236,8 +236,16 @@ export class IntentRouterService implements IntentRouterPort {
   }
 
   private extractAmount(prompt: string): string | null {
-    const match = prompt.match(/\b(\d+(?:\.\d+)?)\b/);
-    return match?.[1] ?? null;
+    const signalMatch = prompt.match(
+      /(?:top\s*up|recharge|add\s+(?:credit|money))\b/i,
+    );
+    if (!signalMatch) return null;
+
+    const afterSignal = prompt.slice(
+      signalMatch.index! + signalMatch[0].length,
+    );
+    const numbers = [...afterSignal.matchAll(/\b(\d+(?:\.\d+)?)\b/g)];
+    return numbers.length > 0 ? numbers[numbers.length - 1][1] : null;
   }
 
   private extractBundleId(prompt: string): string | null {

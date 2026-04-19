@@ -126,4 +126,69 @@ describe("AgentRequestDto", () => {
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === "prompt")).toBe(true);
   });
+
+  it("fails when sessionId exceeds max length", async () => {
+    const dto = makeValidDto({
+      sessionId: "x".repeat(SECURITY_LIMITS.SESSION_ID_MAX_LENGTH + 1),
+    });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === "sessionId")).toBe(true);
+  });
+
+  it("passes when sessionId is at max length", async () => {
+    const dto = makeValidDto({
+      sessionId: "x".repeat(SECURITY_LIMITS.SESSION_ID_MAX_LENGTH),
+    });
+    const errors = await validate(dto);
+    expect(errors.length).toBe(0);
+  });
+
+  it("fails when userId exceeds max length", async () => {
+    const dto = makeValidDto({
+      userId: "x".repeat(SECURITY_LIMITS.USER_ID_MAX_LENGTH + 1),
+    });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === "userId")).toBe(true);
+  });
+
+  it("passes when userId is at max length", async () => {
+    const dto = makeValidDto({
+      userId: "x".repeat(SECURITY_LIMITS.USER_ID_MAX_LENGTH),
+    });
+    const errors = await validate(dto);
+    expect(errors.length).toBe(0);
+  });
+
+  it("passes with valid confirmationAction", async () => {
+    const dto = makeValidDto({
+      confirmationAction: {
+        token: "confirm-token-1",
+        decision: "confirm",
+      } as AgentRequestDto["confirmationAction"],
+    });
+    const errors = await validate(dto);
+    expect(errors.length).toBe(0);
+  });
+
+  it("fails when confirmationAction decision is invalid", async () => {
+    const dto = makeValidDto({
+      confirmationAction: {
+        token: "confirm-token-2",
+        decision: "approve",
+      } as unknown as AgentRequestDto["confirmationAction"],
+    });
+    const errors = await validate(dto);
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it("fails when confirmationAction token exceeds max length", async () => {
+    const dto = makeValidDto({
+      confirmationAction: {
+        token: "x".repeat(SECURITY_LIMITS.CONFIRMATION_TOKEN_MAX_LENGTH + 1),
+        decision: "cancel",
+      } as AgentRequestDto["confirmationAction"],
+    });
+    const errors = await validate(dto);
+    expect(errors.length).toBeGreaterThan(0);
+  });
 });

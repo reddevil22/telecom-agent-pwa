@@ -175,10 +175,6 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
   private isTransientError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
 
-    if (error.message.includes("timed out")) {
-      return true;
-    }
-
     if (error.message.includes("network request failed")) {
       return true;
     }

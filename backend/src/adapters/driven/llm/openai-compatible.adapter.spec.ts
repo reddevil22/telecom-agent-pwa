@@ -173,16 +173,10 @@ describe("OpenAiCompatibleLlmAdapter", () => {
     ).rejects.toThrow("LLM request failed: 500");
   });
 
-  it("throws descriptive timeout error when request exceeds timeout", async () => {
-    const delaySpy = jest
-      .spyOn(adapter as any, "delay")
-      .mockResolvedValue(undefined);
+  it("throws timeout error immediately without retrying", async () => {
     const timeoutError = new Error("Operation timed out");
     timeoutError.name = "TimeoutError";
-    mockFetch
-      .mockRejectedValueOnce(timeoutError)
-      .mockRejectedValueOnce(timeoutError)
-      .mockRejectedValueOnce(timeoutError);
+    mockFetch.mockRejectedValueOnce(timeoutError);
 
     await expect(
       adapter.chatCompletion({
@@ -191,10 +185,7 @@ describe("OpenAiCompatibleLlmAdapter", () => {
       }),
     ).rejects.toThrow("LLM request timed out");
 
-    expect(mockFetch).toHaveBeenCalledTimes(LLM_RETRY.MAX_RETRIES + 1);
-    expect(delaySpy).toHaveBeenCalledTimes(LLM_RETRY.MAX_RETRIES);
-
-    delaySpy.mockRestore();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it("sends all parameters in request body", async () => {
@@ -246,24 +237,20 @@ describe("OpenAiCompatibleLlmAdapter", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it("retries on timeout and succeeds on second attempt", async () => {
+  it("does not retry on timeout even if success would follow", async () => {
     const timeoutError = new Error("Operation timed out");
     timeoutError.name = "TimeoutError";
 
-    mockFetch.mockRejectedValueOnce(timeoutError).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [{ message: { content: "ok-after-timeout" } }],
+    mockFetch.mockRejectedValueOnce(timeoutError);
+
+    await expect(
+      adapter.chatCompletion({
+        model: "test",
+        messages: [{ role: "user", content: "hi" }],
       }),
-    });
+    ).rejects.toThrow("LLM request timed out");
 
-    const result = await adapter.chatCompletion({
-      model: "test",
-      messages: [{ role: "user", content: "hi" }],
-    });
-
-    expect(result.message.content).toBe("ok-after-timeout");
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it("retries on 429 and succeeds", async () => {

@@ -167,6 +167,20 @@ describe("IntentRouterService", () => {
         expect(result!.args).toEqual({ userId: "user-1", amount });
       },
     );
+
+    it("extracts the amount after the signal, not unrelated numbers", async () => {
+      const result = await router.classify(
+        "recharge account 12345 with 50 dollars",
+        "user-1",
+      );
+      expect(result).not.toBeNull();
+      expect(result!.args).toEqual({ userId: "user-1", amount: "50" });
+    });
+
+    it("falls through when top-up signal has no amount after it", async () => {
+      const result = await router.classify("please recharge", "user-1");
+      expect(result).toBeNull();
+    });
   });
 
   describe("purchase confirmation routing", () => {

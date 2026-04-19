@@ -7,6 +7,7 @@ import {
   ArrayMaxSize,
   Min,
   IsIn,
+  IsOptional,
 } from "class-validator";
 import { Type, Transform } from "class-transformer";
 import { SECURITY_LIMITS } from "../../../../domain/constants/security-constants";
@@ -24,15 +25,26 @@ class ConversationMessageDto {
   timestamp!: number;
 }
 
+class ConfirmationActionDto {
+  @IsString()
+  @MaxLength(SECURITY_LIMITS.CONFIRMATION_TOKEN_MAX_LENGTH)
+  token!: string;
+
+  @IsIn(["confirm", "cancel"])
+  decision!: "confirm" | "cancel";
+}
+
 export class AgentRequestDto {
   @IsString()
   @MaxLength(SECURITY_LIMITS.PROMPT_MAX_LENGTH)
   prompt!: string;
 
   @IsString()
+  @MaxLength(SECURITY_LIMITS.SESSION_ID_MAX_LENGTH)
   sessionId!: string;
 
   @IsString()
+  @MaxLength(SECURITY_LIMITS.USER_ID_MAX_LENGTH)
   userId!: string;
 
   @IsArray()
@@ -49,4 +61,9 @@ export class AgentRequestDto {
   @IsNumber()
   @Min(0)
   timestamp!: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ConfirmationActionDto)
+  confirmationAction?: ConfirmationActionDto;
 }

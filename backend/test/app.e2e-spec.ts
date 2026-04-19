@@ -108,13 +108,13 @@ describe("App (e2e)", () => {
       }),
     );
     await app.init();
+    app.enableShutdownHooks();
 
     rateLimiter = moduleFixture.get<RateLimiterPort>(RATE_LIMITER_PORT);
   });
 
   afterAll(async () => {
     await app.close();
-    await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
   beforeEach(() => {

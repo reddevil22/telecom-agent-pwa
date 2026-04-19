@@ -25,6 +25,7 @@ describe("HistoryController (e2e)", () => {
       new ValidationPipe({ whitelist: true, transform: true }),
     );
     await app.init();
+    app.enableShutdownHooks();
 
     storage = moduleFixture.get<SqliteConversationDataMapper>(
       CONVERSATION_STORAGE_PORT,
