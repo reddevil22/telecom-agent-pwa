@@ -60,19 +60,17 @@ src/
 │
 ├── adapters/                         ← Inbound (driving) and outbound (driven) adapters
 │   ├── driving/rest/                  Inbound — HTTP API
-│   │   ├── agent.controller.ts        POST /chat, /chat/stream · GET /status, /quick-actions
+│   │   ├── agent.controller.ts        POST /api/agent/chat, /api/agent/chat/stream · GET /api/agent/status, /api/agent/quick-actions
 │   │   ├── quick-actions.config.ts    Static 5-button config (balance, bundles, usage, support, account)
-│   │   ├── history.controller.ts      GET /sessions, /session/:id · DELETE /session/:id
-│   │   ├── llm-health.controller.ts   GET /health/llm
+│   │   ├── history.controller.ts      GET /api/history/sessions, /api/history/session/:id · DELETE /api/history/session/:id
+│   │   ├── llm-health.controller.ts   GET /api/health/llm
 │   │   ├── dto/
 │   │   │   └── agent-request.dto.ts   class-validator: prompt (max 1000), sessionId, userId, history
 │   │   ├── guards/
-│   │   │   └── rate-limit.guard.ts    10 req / 60s sliding window per sessionId
+│   │   │   └── rate-limit.guard.ts    10 req / 60s sliding window per authenticated user (fallback to source IP)
 │   │   ├── pipes/
 │   │   │   └── prompt-sanitizer.pipe.ts  Control chars, injection patterns (≤15ms overhead)
-│   │   └── middleware/
-│   │       ├── auth.middleware.ts     Sets userId header (placeholder for real auth)
-│   │       └── correlation-id.middleware.ts  Request tracking ID
+│   │   └── middleware/                Legacy stubs (request context now handled by guard/interceptor)
 │   └── driven/                        Outbound — external systems
 │       ├── llm/
 │       │   ├── llm.module.ts          NestJS module providing LLM_PORT
@@ -93,8 +91,8 @@ src/
 │   │   ├── conversation-data.mapper.ts    Implements ConversationStoragePort against SQLite
 │   │   └── migrations/
 │   │       ├── 001_initial.ts         conversations + messages tables
-│   │       ├── 002_add_screen_type.ts screen_type column on messages
-│   │       ├── 003_soft_delete.ts     deleted_at column on conversations
+│   │       ├── 002_add_confirmation_screen_type.ts  adds confirmation screen type support
+│   │       ├── 003_add_bundle_detail_screen_type.ts adds bundle detail screen type support
 │   │       ├── 004_mock_telco.ts      telco_* tables + seed data for user-1
 │   │       └── 005_add_account_screen_type.ts  'account' to screen_type CHECK
 │   ├── telco/
@@ -106,11 +104,11 @@ src/
 │
 ├── config/                           ← Environment configuration
 │   ├── config.module.ts              ConfigModule.forRoot() with validation
-│   └── env.validation.ts            Joi schema for all env vars with defaults
+│   └── env.validation.ts             Typed validation schema object with defaults
 │
 ├── app.agent-module.ts              ← DI wiring: creates SupervisorService + registers all 9 sub-agents
-├── app.module.ts                    ← Root module: Logger + Config + Agent + SqliteData + LlmHealth
-└── main.ts                          ← Bootstrap: ValidationPipe (whitelist+forbid), CORS, /api prefix
+├── app.module.ts                    ← Root module: Logger + Config + Agent + SqliteData + LlmHealth + APP_INTERCEPTOR/APP_FILTER
+└── main.ts                          ← Bootstrap: ValidationPipe (whitelist+forbid), CORS (controllers own /api/* route prefixes)
 ```
 
 ---
@@ -260,7 +258,7 @@ TOOL_REGISTRY = {
   get_support:         { screenType: 'support',      allowedArgs: ['userId'], ... },
   purchase_bundle:     { screenType: 'confirmation', allowedArgs: ['userId', 'bundleId'], ... },
   top_up:              { screenType: 'confirmation', allowedArgs: ['userId', 'amount'], ... },
-  create_ticket:       { screenType: 'support',      allowedArgs: ['userId', 'subject', 'description'], ... },
+    create_ticket:       { screenType: 'confirmation', allowedArgs: ['userId', 'subject', 'description'], ... },
   get_account_summary: { screenType: 'account',      allowedArgs: ['userId'], ... },
 }
 ```
@@ -427,9 +425,9 @@ Six layers of defense, all tunables in `domain/constants/security-constants.ts`:
 |-------|-----------|----------|
 | 1. DTO validation | class-validator, whitelist+forbidNonWhitelisted | `adapters/driving/rest/dto/` |
 | 2. Prompt sanitizer | Control chars, blocked injection patterns | `adapters/driving/rest/pipes/` |
-| 3. Rate limiting | 10 req / 60s sliding window per sessionId | `adapters/driving/rest/guards/` |
+| 3. Rate limiting | 10 req / 60s sliding window per authenticated user (fallback to source IP) | `adapters/driving/rest/guards/` |
 | 4. System prompt hardening | Security rules, tool restrictions | `application/supervisor/system-prompt.ts` |
-| 5. Tool call validation | Whitelist + allowed args + type checks | `supervisor.service.ts` → `validateToolCallWithError()` |
+| 5. Tool call validation | Whitelist + allowed args + type checks | `application/supervisor/tool-validation.service.ts` |
 | 6. History/budget caps | Max 20 history entries, total char budget | `supervisor.service.ts` → `buildInitialMessages()` |
 
 ### userId Trust Boundary
@@ -444,7 +442,7 @@ SQLite via `better-sqlite3` with WAL mode. Auto-migrations on startup.
 
 **Location**: `backend/data/telecom.db`
 
-**5 migrations**: Initial schema → screen type column → soft delete → telco tables + seed → account screen type
+**5 migrations**: Initial schema → confirmation screen type support → bundle detail screen type support → telco tables + seed → account screen type
 
 **Seed data** (migration 004):
 - user-1: $50 balance, active Starter Pack (partially consumed), 2 support tickets, 5 FAQs

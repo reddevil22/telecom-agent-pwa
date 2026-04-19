@@ -42,11 +42,11 @@ backend/src/
 │
 ├── adapters/
 │   ├── driving/rest/        # Inbound HTTP API
-│   │   ├── agent.controller.ts     # POST /chat, /chat/stream; GET /status, /quick-actions
+│   │   ├── agent.controller.ts     # POST /api/agent/chat, /api/agent/chat/stream; GET /api/agent/status, /api/agent/quick-actions
 │   │   ├── history.controller.ts   # GET/DELETE /api/history/*
 │   │   ├── llm-health.controller.ts # GET /api/health/llm
 │   │   ├── dto/                    # AgentRequestDto (class-validator)
-│   │   ├── guards/                 # RateLimitGuard (10 req/60s per session)
+│   │   ├── guards/                 # RateLimitGuard (10 req/60s per authenticated user, fallback to source IP)
 │   │   └── pipes/                  # PromptSanitizerPipe (injection patterns, control chars)
 │   └── driven/              # Outbound
 │       ├── llm/             # OpenAI-compatible adapter
@@ -60,8 +60,8 @@ backend/src/
 │
 ├── config/                  # ConfigModule, env validation, intent-routing config loader
 ├── app.agent-module.ts      # Wires ports, adapters, sub-agents, IntentRouter, CircuitBreaker
-├── app.module.ts            # Root: ConfigModule + AgentModule + SqliteDataModule
-└── main.ts                  # Bootstrap: ValidationPipe (whitelist+forbid), CORS, /api prefix
+├── app.module.ts            # Root: ConfigModule + AgentModule + SqliteDataModule (+ global interceptor/filter providers)
+└── main.ts                  # Bootstrap: ValidationPipe (whitelist+forbid), CORS (routes are explicitly /api/* at controller level)
 ```
 
 ### Frontend — React + XState

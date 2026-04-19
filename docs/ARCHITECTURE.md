@@ -47,8 +47,8 @@ User types a message
 │     to the matching sub-agent   │
 │  5. Sub-agent returns screen    │
 │     data                        │
-│  6. Feed result back to LLM     │
-│     (loop until no more tools)  │
+│  6. Return after first          │
+│     successful tool call        │
 │  7. Store in cache, persist to  │
 │     SQLite                      │
 └──────────────┬──────────────────┘
@@ -150,7 +150,7 @@ backend/src/
     ├── cache/        # In-memory screen cache
     ├── interceptors/ # LoggingInterceptor
     ├── filters/      # AllExceptionsFilter
-    └── middleware/    # Correlation ID middleware
+  └── middleware/    # Legacy stubs (request context is set via interceptor + guard)
 ```
 
 ### The Supervisor (ReAct Loop)
@@ -187,13 +187,17 @@ Registered via `SupervisorService.registerAgent(toolName, agent)`. The current s
 
 | Tool Name | Agent | Screen |
 |-----------|-------|--------|
-| `get_balance` | BalanceAgent | balance |
-| `list_bundles` | BundlesAgent | bundles |
-| `get_bundle_detail` | BundleDetailAgent | bundleDetail (pauses for confirmation) |
-| `purchase_bundle` | PurchaseAgent | confirmation |
-| `get_usage` | UsageAgent | usage |
-| `create_support_ticket` | SupportAgent | confirmation |
-| `get_support_info` | SupportAgent | support |
+| `check_balance` | SimpleQuerySubAgent | balance |
+| `list_bundles` | SimpleQuerySubAgent | bundles |
+| `view_bundle_details` | ViewBundleDetailsSubAgent | bundleDetail |
+| `purchase_bundle` | PurchaseBundleSubAgent | confirmation |
+| `check_usage` | SimpleQuerySubAgent | usage |
+| `create_ticket` | CreateTicketSubAgent | confirmation |
+| `get_support` | DualQuerySubAgent | support |
+| `top_up` | ActionSubAgent | confirmation |
+| `get_account_summary` | SimpleQuerySubAgent | account |
+
+`purchase_bundle` is typically a two-step UX: first `view_bundle_details`, then an explicit purchase confirmation prompt.
 
 ### Caching
 
@@ -205,7 +209,7 @@ SQLite with `better-sqlite3`. Two tables:
 - `conversations` — session metadata (id, userId, timestamps)
 - `messages` — conversation history (role, text, screenType, timestamp)
 
-Migrations run on startup via `data.module.ts`.
+Migrations run on startup via `sqlite-connection.service.ts` in `SqliteDataModule`.
 
 ---
 
@@ -251,7 +255,7 @@ The frontend uses `screenType` to pick the right React component and passes `scr
 | Tool validation | Allowlist + argument schema check in supervisor |
 | Prompt injection | Character budget on history, instruction leak detection |
 | LLM output | Tool calls validated before execution |
-| CORS | Restricted to `localhost:5173` and `localhost:3000` |
+| CORS | Restricted by `CORS_ORIGINS` (defaults include `localhost:5173`, `127.0.0.1:5173`, `localhost:3000`) |
 
 ---
 
