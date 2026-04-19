@@ -1,10 +1,19 @@
-import { IsString, IsNumber, IsArray, ValidateNested, MaxLength, ArrayMaxSize, Min, IsIn } from 'class-validator';
-import { Type, Transform } from 'class-transformer';
-import { SECURITY_LIMITS } from '../../../../domain/constants/security-constants';
+import {
+  IsString,
+  IsNumber,
+  IsArray,
+  ValidateNested,
+  MaxLength,
+  ArrayMaxSize,
+  Min,
+  IsIn,
+} from "class-validator";
+import { Type, Transform } from "class-transformer";
+import { SECURITY_LIMITS } from "../../../../domain/constants/security-constants";
 
 class ConversationMessageDto {
-  @IsIn(['user', 'agent'])
-  role!: 'user' | 'agent';
+  @IsIn(["user", "agent"])
+  role!: "user" | "agent";
 
   @IsString()
   @MaxLength(SECURITY_LIMITS.HISTORY_MESSAGE_MAX_LENGTH)

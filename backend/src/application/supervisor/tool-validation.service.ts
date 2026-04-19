@@ -1,5 +1,6 @@
 import {
   ALLOWED_TOOLS,
+  TOOL_ARG_CONSTRAINTS,
   TOOL_ARG_SCHEMAS,
 } from "../../domain/constants/security-constants";
 
@@ -50,6 +51,24 @@ export class ToolValidationService {
     for (const key of expectedKeys) {
       if (typeof args[key] !== "string") {
         return INVALID_TOOL_ERROR;
+      }
+    }
+
+    const constraints = TOOL_ARG_CONSTRAINTS[toolCall.function.name];
+    if (constraints) {
+      for (const [key, constraint] of Object.entries(constraints)) {
+        const value = args[key];
+        if (typeof value !== "string") {
+          continue;
+        }
+
+        if (value.length > constraint.maxLength) {
+          return INVALID_TOOL_ERROR;
+        }
+
+        if (constraint.pattern && !constraint.pattern.test(value)) {
+          return INVALID_TOOL_ERROR;
+        }
       }
     }
 

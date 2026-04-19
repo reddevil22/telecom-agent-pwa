@@ -1,6 +1,6 @@
-import type { ScreenData } from '../../types/agent';
-import type { ScreenActor } from '../../types/screens';
-import styles from './BundleDetailScreen.module.css';
+import type { ScreenData } from "../../types/agent";
+import type { ScreenActor } from "../../types/screens";
+import styles from "./BundleDetailScreen.module.css";
 
 interface Props {
   data: ScreenData;
@@ -8,7 +8,7 @@ interface Props {
 }
 
 export function BundleDetailScreen({ data, actor }: Props) {
-  if (data.type !== 'bundleDetail') return null;
+  if (data.type !== "bundleDetail") return null;
 
   const { bundle, currentBalance } = data;
   const balanceAfter = currentBalance.current - bundle.price;
@@ -17,13 +17,13 @@ export function BundleDetailScreen({ data, actor }: Props) {
   function handleConfirm() {
     if (hasInsufficientBalance) return;
     actor.send({
-      type: 'SUBMIT_PROMPT',
+      type: "SUBMIT_PROMPT",
       prompt: `Confirm purchase bundle ${bundle.id}. Use bundle ID ${bundle.id}.`,
     });
   }
 
   function handleCancel() {
-    actor.send({ type: 'SUBMIT_PROMPT', prompt: 'List all available bundles' });
+    actor.send({ type: "SUBMIT_PROMPT", prompt: "List all available bundles" });
   }
 
   return (
@@ -49,13 +49,13 @@ export function BundleDetailScreen({ data, actor }: Props) {
           </div>
           <div className={styles.feature}>
             <span className={styles.featureValue}>
-              {bundle.minutes === -1 ? '∞' : bundle.minutes}
+              {bundle.minutes === -1 ? "∞" : bundle.minutes}
             </span>
             <span className={styles.featureLabel}>Minutes</span>
           </div>
           <div className={styles.feature}>
             <span className={styles.featureValue}>
-              {bundle.sms === -1 ? '∞' : bundle.sms}
+              {bundle.sms === -1 ? "∞" : bundle.sms}
             </span>
             <span className={styles.featureLabel}>SMS</span>
           </div>
@@ -69,8 +69,12 @@ export function BundleDetailScreen({ data, actor }: Props) {
             </span>
           </div>
           <div className={styles.balanceAfter}>
-            <span className={styles.balanceAfterLabel}>Balance After Purchase</span>
-            <span className={`${styles.balanceAfterValue} ${hasInsufficientBalance ? styles.insufficient : ''}`}>
+            <span className={styles.balanceAfterLabel}>
+              Balance After Purchase
+            </span>
+            <span
+              className={`${styles.balanceAfterValue} ${hasInsufficientBalance ? styles.insufficient : ""}`}
+            >
               {currentBalance.currency} {balanceAfter.toFixed(2)}
             </span>
           </div>
@@ -89,11 +93,21 @@ export function BundleDetailScreen({ data, actor }: Props) {
             className={styles.confirmBtn}
             onClick={handleConfirm}
             disabled={hasInsufficientBalance}
-            aria-label={hasInsufficientBalance ? 'Insufficient balance to purchase' : `Confirm purchase of ${bundle.name}`}
+            aria-label={
+              hasInsufficientBalance
+                ? "Insufficient balance to purchase"
+                : `Confirm purchase of ${bundle.name}`
+            }
           >
-            {hasInsufficientBalance ? 'Insufficient Balance' : 'Confirm Purchase'}
+            {hasInsufficientBalance
+              ? "Insufficient Balance"
+              : "Confirm Purchase"}
           </button>
-          <button className={styles.cancelBtn} onClick={handleCancel} aria-label="Cancel and go back to bundles">
+          <button
+            className={styles.cancelBtn}
+            onClick={handleCancel}
+            aria-label="Cancel and go back to bundles"
+          >
             Cancel
           </button>
         </div>

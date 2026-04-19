@@ -1,5 +1,6 @@
 import type { LlmPort, LlmChatResponse } from "../../../domain/ports/llm.port";
 import type { PinoLogger } from "nestjs-pino";
+import { LLM_RETRY } from "../../../domain/constants/security-constants";
 
 export class OpenAiCompatibleLlmAdapter implements LlmPort {
   private readonly baseUrl: string;
@@ -33,22 +34,37 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
     temperature?: number;
     max_tokens?: number;
   }): Promise<LlmChatResponse> {
-    try {
-      return await this.requestOnce(params);
-    } catch (error) {
-      if (!this.isTransientError(error)) {
-        throw error;
-      }
+    let lastError: Error | null = null;
 
-      this.logger?.warn(
-        {
-          err: error instanceof Error ? error.message : String(error),
-        },
-        "LLM transient error, retrying once",
-      );
-      await this.delay(1000);
-      return this.requestOnce(params);
+    for (let attempt = 0; attempt <= LLM_RETRY.MAX_RETRIES; attempt += 1) {
+      try {
+        return await this.requestOnce(params);
+      } catch (error) {
+        const normalizedError =
+          error instanceof Error ? error : new Error(String(error));
+        lastError = normalizedError;
+
+        if (
+          attempt >= LLM_RETRY.MAX_RETRIES ||
+          !this.isTransientError(normalizedError)
+        ) {
+          throw normalizedError;
+        }
+
+        const delayMs = LLM_RETRY.BASE_DELAY_MS * Math.pow(2, attempt);
+        this.logger?.warn(
+          {
+            attempt: attempt + 1,
+            delayMs,
+            err: normalizedError.message,
+          },
+          "LLM transient error, retrying",
+        );
+        await this.delay(delayMs);
+      }
     }
+
+    throw lastError ?? new Error("LLM request failed with unknown error");
   }
 
   private async requestOnce(params: {
@@ -167,7 +183,9 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
       return true;
     }
 
-    return /LLM request failed: (502|503|504)\b/.test(error.message);
+    return LLM_RETRY.RETRYABLE_STATUS_CODES.some((code) =>
+      error.message.includes(`LLM request failed: ${code}`),
+    );
   }
 
   private async delay(ms: number): Promise<void> {

@@ -1,7 +1,14 @@
-import type { IntentRouterPort } from '../ports/intent-router.port';
-import type { IntentCachePort } from '../ports/intent-cache.port';
-import type { IntentResolution } from '../types/intent';
-import { TelecomIntent, TIER1_INTENTS, INTENT_TOOL_MAP, INTENT_KEYWORDS, type IntentKeywordMap, type Tier1Intent } from '../types/intent';
+import type { IntentRouterPort } from "../ports/intent-router.port";
+import type { IntentCachePort } from "../ports/intent-cache.port";
+import type { IntentResolution } from "../types/intent";
+import {
+  TelecomIntent,
+  TIER1_INTENTS,
+  INTENT_TOOL_MAP,
+  INTENT_KEYWORDS,
+  type IntentKeywordMap,
+  type Tier1Intent,
+} from "../types/intent";
 
 /**
  * Three-tier intent classification:
@@ -16,7 +23,10 @@ export class IntentRouterService implements IntentRouterPort {
     private readonly actionSignals: readonly string[] = IntentRouterService.DEFAULT_ACTION_SIGNALS,
   ) {}
 
-  async classify(prompt: string, userId: string): Promise<IntentResolution | null> {
+  async classify(
+    prompt: string,
+    userId: string,
+  ): Promise<IntentResolution | null> {
     // Deterministic top-up routing when the prompt includes an amount.
     const topUp = this.topUpIntentMatch(prompt, userId);
     if (topUp) return topUp;
@@ -52,16 +62,40 @@ export class IntentRouterService implements IntentRouterPort {
   }
 
   /** Words that signal a purchase/action intent requiring entity extraction */
-  private static readonly DEFAULT_ACTION_SIGNALS = ['buy', 'purchase', 'order', 'subscribe', 'activate', 'get me', 'i want', 'i need'];
+  private static readonly DEFAULT_ACTION_SIGNALS = [
+    "buy",
+    "purchase",
+    "order",
+    "subscribe",
+    "activate",
+    "get me",
+    "i want",
+    "i need",
+  ];
 
   /** Verbs that indicate an explicit purchase confirmation intent */
-  private static readonly PURCHASE_SIGNALS = ['buy', 'purchase', 'order', 'subscribe', 'activate', 'confirm'];
+  private static readonly PURCHASE_SIGNALS = [
+    "buy",
+    "purchase",
+    "order",
+    "subscribe",
+    "activate",
+    "confirm",
+  ];
 
   /** Phrases that indicate top-up intents and should bypass Tier 1 account/balance keyword routing */
-  private static readonly TOP_UP_SIGNALS = ['top up', 'topup', 'recharge', 'add credit', 'add money'];
+  private static readonly TOP_UP_SIGNALS = [
+    "top up",
+    "topup",
+    "recharge",
+    "add credit",
+    "add money",
+  ];
 
   /** Deterministic tie-breaker when lexical specificity is equal */
-  private static readonly INTENT_MATCH_PRIORITY: Readonly<Record<TelecomIntent, number>> = {
+  private static readonly INTENT_MATCH_PRIORITY: Readonly<
+    Record<TelecomIntent, number>
+  > = {
     [TelecomIntent.CHECK_BALANCE]: 100,
     [TelecomIntent.CHECK_USAGE]: 95,
     [TelecomIntent.BROWSE_BUNDLES]: 90,
@@ -73,11 +107,20 @@ export class IntentRouterService implements IntentRouterPort {
     [TelecomIntent.CREATE_TICKET]: 55,
   };
 
-  private tier1KeywordMatch(prompt: string, userId: string): IntentResolution | null {
+  private tier1KeywordMatch(
+    prompt: string,
+    userId: string,
+  ): IntentResolution | null {
     const lower = prompt.toLowerCase();
-    const matches: Array<{ intent: TelecomIntent; score: number; keywordCount: number }> = [];
+    const matches: Array<{
+      intent: TelecomIntent;
+      score: number;
+      keywordCount: number;
+    }> = [];
 
-    const hasActionSignal = this.actionSignals.some(signal => lower.includes(signal));
+    const hasActionSignal = this.actionSignals.some((signal) =>
+      lower.includes(signal),
+    );
     const hasTopUpSignal = this.hasTopUpSignal(prompt);
 
     for (const [intentKey, keywords] of Object.entries(this.intentKeywords)) {
@@ -87,7 +130,12 @@ export class IntentRouterService implements IntentRouterPort {
       if (hasActionSignal && intent === TelecomIntent.BROWSE_BUNDLES) continue;
       // Top-up prompts can contain words like "account" or "credit" that belong to Tier 1 intents.
       // Bypass these Tier 1 matches and let LLM extract amount for top_up.
-      if (hasTopUpSignal && (intent === TelecomIntent.CHECK_BALANCE || intent === TelecomIntent.ACCOUNT_SUMMARY)) continue;
+      if (
+        hasTopUpSignal &&
+        (intent === TelecomIntent.CHECK_BALANCE ||
+          intent === TelecomIntent.ACCOUNT_SUMMARY)
+      )
+        continue;
 
       const matchedKeywords = keywords.filter((kw) => lower.includes(kw));
       if (matchedKeywords.length === 0) continue;
@@ -112,7 +160,10 @@ export class IntentRouterService implements IntentRouterPort {
       const keywordCountDiff = b.keywordCount - a.keywordCount;
       if (keywordCountDiff !== 0) return keywordCountDiff;
 
-      return IntentRouterService.INTENT_MATCH_PRIORITY[b.intent] - IntentRouterService.INTENT_MATCH_PRIORITY[a.intent];
+      return (
+        IntentRouterService.INTENT_MATCH_PRIORITY[b.intent] -
+        IntentRouterService.INTENT_MATCH_PRIORITY[a.intent]
+      );
     });
 
     const intent = matches[0].intent;
@@ -126,10 +177,15 @@ export class IntentRouterService implements IntentRouterPort {
 
   private hasTopUpSignal(prompt: string): boolean {
     const lower = prompt.toLowerCase();
-    return IntentRouterService.TOP_UP_SIGNALS.some(signal => lower.includes(signal));
+    return IntentRouterService.TOP_UP_SIGNALS.some((signal) =>
+      lower.includes(signal),
+    );
   }
 
-  private tier2FuzzyCache(prompt: string, userId: string): IntentResolution | null {
+  private tier2FuzzyCache(
+    prompt: string,
+    userId: string,
+  ): IntentResolution | null {
     const cached = this.cache.findBestMatch(userId, prompt);
     if (!cached) return null;
 
@@ -141,7 +197,10 @@ export class IntentRouterService implements IntentRouterPort {
     };
   }
 
-  private topUpIntentMatch(prompt: string, userId: string): IntentResolution | null {
+  private topUpIntentMatch(
+    prompt: string,
+    userId: string,
+  ): IntentResolution | null {
     if (!this.hasTopUpSignal(prompt)) return null;
 
     const amount = this.extractAmount(prompt);
@@ -155,9 +214,14 @@ export class IntentRouterService implements IntentRouterPort {
     };
   }
 
-  private purchaseIntentMatch(prompt: string, userId: string): IntentResolution | null {
+  private purchaseIntentMatch(
+    prompt: string,
+    userId: string,
+  ): IntentResolution | null {
     const lower = prompt.toLowerCase();
-    const hasPurchaseSignal = IntentRouterService.PURCHASE_SIGNALS.some(signal => lower.includes(signal));
+    const hasPurchaseSignal = IntentRouterService.PURCHASE_SIGNALS.some(
+      (signal) => lower.includes(signal),
+    );
     if (!hasPurchaseSignal) return null;
 
     const bundleId = this.extractBundleId(lower);
@@ -177,7 +241,9 @@ export class IntentRouterService implements IntentRouterPort {
   }
 
   private extractBundleId(prompt: string): string | null {
-    const explicitBundleRef = prompt.match(/\bbundle\s*(?:id(?:\s*is)?\s*)?(b\d+)\b/i);
+    const explicitBundleRef = prompt.match(
+      /\bbundle\s*(?:id(?:\s*is)?\s*)?(b\d+)\b/i,
+    );
     if (explicitBundleRef?.[1]) return explicitBundleRef[1].toLowerCase();
 
     const standaloneBundleId = prompt.match(/\b(b\d+)\b/i);

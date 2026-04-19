@@ -12,6 +12,12 @@ export const SECURITY_LIMITS = {
   RATE_LIMIT_CLEANUP_INTERVAL_MS: 120_000,
 } as const;
 
+export const LLM_RETRY = {
+  MAX_RETRIES: 2,
+  BASE_DELAY_MS: 500,
+  RETRYABLE_STATUS_CODES: [429, 502, 503, 504],
+} as const;
+
 export const BLOCKED_PATTERNS: readonly RegExp[] = [
   /ignore\s+(\w+\s+)?(all\s+)?previous\s+instructions/i,
   /you\s+are\s+now/i,
@@ -29,4 +35,8 @@ export const BLOCKED_PATTERNS: readonly RegExp[] = [
 ];
 
 // Re-export from tool-registry for backward compatibility
-export { ALLOWED_TOOLS, TOOL_ARG_SCHEMAS } from "./tool-registry";
+export {
+  ALLOWED_TOOLS,
+  TOOL_ARG_SCHEMAS,
+  TOOL_ARG_CONSTRAINTS,
+} from "./tool-registry";

@@ -1,4 +1,5 @@
 import { OpenAiCompatibleLlmAdapter } from "./openai-compatible.adapter";
+import { LLM_RETRY } from "../../../domain/constants/security-constants";
 
 // Mock global fetch
 const mockFetch = jest.fn();
@@ -173,9 +174,13 @@ describe("OpenAiCompatibleLlmAdapter", () => {
   });
 
   it("throws descriptive timeout error when request exceeds timeout", async () => {
+    const delaySpy = jest
+      .spyOn(adapter as any, "delay")
+      .mockResolvedValue(undefined);
     const timeoutError = new Error("Operation timed out");
     timeoutError.name = "TimeoutError";
     mockFetch
+      .mockRejectedValueOnce(timeoutError)
       .mockRejectedValueOnce(timeoutError)
       .mockRejectedValueOnce(timeoutError);
 
@@ -185,6 +190,11 @@ describe("OpenAiCompatibleLlmAdapter", () => {
         messages: [{ role: "user", content: "hi" }],
       }),
     ).rejects.toThrow("LLM request timed out");
+
+    expect(mockFetch).toHaveBeenCalledTimes(LLM_RETRY.MAX_RETRIES + 1);
+    expect(delaySpy).toHaveBeenCalledTimes(LLM_RETRY.MAX_RETRIES);
+
+    delaySpy.mockRestore();
   });
 
   it("sends all parameters in request body", async () => {
@@ -213,7 +223,7 @@ describe("OpenAiCompatibleLlmAdapter", () => {
     expect(body).toEqual(params);
   });
 
-  it("retries once on transient HTTP failures and then succeeds", async () => {
+  it("retries on transient 503 and succeeds on second attempt", async () => {
     mockFetch
       .mockResolvedValueOnce({
         ok: false,
@@ -236,7 +246,50 @@ describe("OpenAiCompatibleLlmAdapter", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it("does not retry on non-transient HTTP failures", async () => {
+  it("retries on timeout and succeeds on second attempt", async () => {
+    const timeoutError = new Error("Operation timed out");
+    timeoutError.name = "TimeoutError";
+
+    mockFetch.mockRejectedValueOnce(timeoutError).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "ok-after-timeout" } }],
+      }),
+    });
+
+    const result = await adapter.chatCompletion({
+      model: "test",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(result.message.content).toBe("ok-after-timeout");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries on 429 and succeeds", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => "Too Many Requests",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: "ok-after-429" } }],
+        }),
+      });
+
+    const result = await adapter.chatCompletion({
+      model: "test",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(result.message.content).toBe("ok-after-429");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry on 400 Bad Request", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 400,
@@ -251,5 +304,72 @@ describe("OpenAiCompatibleLlmAdapter", () => {
     ).rejects.toThrow("LLM request failed: 400");
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry on 401 Unauthorized", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () => "Unauthorized",
+    });
+
+    await expect(
+      adapter.chatCompletion({
+        model: "test",
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    ).rejects.toThrow("LLM request failed: 401");
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("exhausts retries and throws final error after MAX_RETRIES", async () => {
+    const delaySpy = jest
+      .spyOn(adapter as any, "delay")
+      .mockResolvedValue(undefined);
+
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => "Service Unavailable",
+    });
+
+    await expect(
+      adapter.chatCompletion({
+        model: "test",
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    ).rejects.toThrow("LLM request failed: 503");
+
+    expect(mockFetch).toHaveBeenCalledTimes(LLM_RETRY.MAX_RETRIES + 1);
+    expect(delaySpy).toHaveBeenCalledTimes(LLM_RETRY.MAX_RETRIES);
+
+    delaySpy.mockRestore();
+  });
+
+  it("uses exponential delay between retries", async () => {
+    const delaySpy = jest
+      .spyOn(adapter as any, "delay")
+      .mockResolvedValue(undefined);
+
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => "Service Unavailable",
+    });
+
+    await expect(
+      adapter.chatCompletion({
+        model: "test",
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    ).rejects.toThrow("LLM request failed: 503");
+
+    expect(delaySpy.mock.calls.map((args) => args[0])).toEqual([
+      LLM_RETRY.BASE_DELAY_MS,
+      LLM_RETRY.BASE_DELAY_MS * 2,
+    ]);
+
+    delaySpy.mockRestore();
   });
 });
