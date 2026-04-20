@@ -1,5 +1,6 @@
 import type { ScreenData } from "../../types/agent";
 import type { ScreenActor } from "../../types/screens";
+import { TopUpPanel } from "./TopUpPanel";
 import styles from "./BundleDetailScreen.module.css";
 
 interface Props {
@@ -111,6 +112,27 @@ export function BundleDetailScreen({ data, actor }: Props) {
             Cancel
           </button>
         </div>
+
+        {hasInsufficientBalance && (
+          <TopUpPanel
+            currentBalance={currentBalance.current}
+            bundlePrice={bundle.price}
+            currency={currentBalance.currency}
+            onTopUpSuccess={(_newBalance) => {
+              // Machine will push updated screenData after top-up via SSE
+              // Force a re-render by triggering a minimal update
+              actor.send({
+                type: "SUBMIT_PROMPT",
+                prompt: `top up $10`,
+              });
+            }}
+            onTopUpError={(error) => {
+              console.error("Top-up failed:", error);
+            }}
+            onCancel={handleCancel}
+            cheapestBundle={undefined}
+          />
+        )}
       </div>
     </div>
   );
