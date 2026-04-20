@@ -26,9 +26,6 @@ export class RateLimitGuard implements CanActivate {
     request.userId = this.resolveUserId(request);
 
     const key = this.resolveKey(request);
-    if (!key) {
-      return true;
-    }
 
     const allowed = await this.rateLimiter.isAllowed(key, Date.now());
     if (!allowed) {
@@ -41,13 +38,14 @@ export class RateLimitGuard implements CanActivate {
     return true;
   }
 
-  private resolveKey(request: { userId?: string; ip?: string }): string | null {
+  private resolveKey(request: { userId?: string; ip?: string }): string {
     // Authenticated requests: rate limit by authenticated user
     if (request.userId) {
       return `user:${request.userId}`;
     }
     // GET/other requests: rate limit by source IP only
-    return request.ip ? `ip:${request.ip}` : null;
+    // Fall back to a shared bucket rather than bypassing rate limiting.
+    return request.ip ? `ip:${request.ip}` : "unknown";
   }
 
   private resolveUserId(request: {

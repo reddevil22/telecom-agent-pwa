@@ -155,6 +155,17 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
       return { message: { content: null }, usage: raw.usage };
     }
 
+    if (!this.isValidMessage(choice.message)) {
+      this.logger?.warn(
+        {
+          responseShape: JSON.stringify(raw).slice(0, 500),
+          duration,
+        },
+        "Invalid LLM message payload",
+      );
+      return { message: { content: null }, usage: raw.usage };
+    }
+
     this.logger?.debug(
       {
         model: params.model,
@@ -181,6 +192,68 @@ export class OpenAiCompatibleLlmAdapter implements LlmPort {
 
     return LLM_RETRY.RETRYABLE_STATUS_CODES.some((code) =>
       error.message.includes(`LLM request failed: ${code}`),
+    );
+  }
+
+  private isValidMessage(message: unknown): message is LlmChatResponse["message"] {
+    if (typeof message !== "object" || message === null) {
+      return false;
+    }
+
+    const candidate = message as {
+      content?: unknown;
+      tool_calls?: unknown;
+    };
+
+    const hasValidContent =
+      candidate.content === null || typeof candidate.content === "string";
+    if (!hasValidContent) {
+      return false;
+    }
+
+    if (candidate.tool_calls === undefined) {
+      return true;
+    }
+
+    if (!Array.isArray(candidate.tool_calls)) {
+      return false;
+    }
+
+    return candidate.tool_calls.every((toolCall) =>
+      this.isValidToolCall(toolCall),
+    );
+  }
+
+  private isValidToolCall(
+    toolCall: unknown,
+  ): toolCall is NonNullable<LlmChatResponse["message"]["tool_calls"]>[number] {
+    if (typeof toolCall !== "object" || toolCall === null) {
+      return false;
+    }
+
+    const candidate = toolCall as {
+      id?: unknown;
+      type?: unknown;
+      function?: { name?: unknown; arguments?: unknown } | unknown;
+    };
+
+    if (
+      typeof candidate.id !== "string" ||
+      candidate.type !== "function" ||
+      typeof candidate.function !== "object" ||
+      candidate.function === null
+    ) {
+      return false;
+    }
+
+    const toolFn = candidate.function as {
+      name?: unknown;
+      arguments?: unknown;
+    };
+
+    return (
+      typeof toolFn.name === "string" &&
+      typeof toolFn.arguments === "string"
     );
   }
 

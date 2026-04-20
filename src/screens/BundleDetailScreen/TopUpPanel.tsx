@@ -3,12 +3,15 @@ import styles from "./TopUpPanel.module.css";
 
 export type TopUpState = "showing_panel" | "topup_pending" | "topup_success" | "topup_failed";
 
+export type TopUpOutcome =
+  | { status: "success"; balance: number }
+  | { status: "error"; error: string };
+
 export interface TopUpPanelProps {
   currentBalance: number;
   bundlePrice: number;
   currency: string;
-  onTopUpSuccess: (newBalance: number) => void;
-  onTopUpError: (error: string) => void;
+  topUpOutcome?: TopUpOutcome | null;
   onCancel: () => void;
   onTopUpRequest: (amount: number) => void;
   cheapestBundle?: { id: string; name: string; price: number };
@@ -20,15 +23,13 @@ export function TopUpPanel({
   currentBalance,
   bundlePrice,
   currency,
-  onTopUpSuccess,
-  onTopUpError,
+  topUpOutcome,
   onCancel,
   onTopUpRequest,
   cheapestBundle,
 }: TopUpPanelProps) {
   const [topUpState, setTopUpState] = useState<TopUpState>("showing_panel");
   const [errorMessage, setErrorMessage] = useState("");
-  const [updatedBalance, setUpdatedBalance] = useState<number | null>(null);
 
   function handleTopUp(amount: number) {
     setTopUpState("topup_pending");
@@ -36,35 +37,25 @@ export function TopUpPanel({
     onTopUpRequest(amount);
   }
 
-  // Called by parent via window.__topUpPanel.handleResponseSuccess(newBalance)
-  function handleResponseSuccess(newBalance: number) {
-    setUpdatedBalance(newBalance);
-    onTopUpSuccess(newBalance);
-    setTopUpState("topup_success");
-  }
+  const effectiveState: TopUpState =
+    topUpOutcome?.status === "success"
+      ? "topup_success"
+      : topUpOutcome?.status === "error"
+        ? "topup_failed"
+        : topUpState;
+  const effectiveBalance =
+    topUpOutcome?.status === "success" ? topUpOutcome.balance : null;
+  const effectiveErrorMessage =
+    topUpOutcome?.status === "error"
+      ? topUpOutcome.error || "Top-up failed"
+      : errorMessage;
 
-  // Called by parent via window.__topUpPanel.handleResponseError(error)
-  function handleResponseError(error: string) {
-    const msg = error || "Top-up failed";
-    setErrorMessage(msg);
-    onTopUpError(msg);
-    setTopUpState("topup_failed");
-  }
-
-  // Expose API for parent to call back after machine processes the response
-  if (typeof window !== "undefined") {
-    (window as unknown as { __topUpPanel: unknown }).__topUpPanel = {
-      handleResponseSuccess,
-      handleResponseError,
-    };
-  }
-
-  if (topUpState === "topup_success" && updatedBalance !== null) {
+  if (effectiveState === "topup_success" && effectiveBalance !== null) {
     return (
       <div className={styles.panel} role="region" aria-label="Top up balance">
         <div className={styles.successBanner}>
           <span className={styles.icon}>✓</span>
-          <span>Balance updated: {currency} {updatedBalance.toFixed(2)}</span>
+          <span>Balance updated: {currency} {effectiveBalance.toFixed(2)}</span>
         </div>
       </div>
     );
@@ -72,22 +63,25 @@ export function TopUpPanel({
 
   return (
     <div className={styles.panel} role="region" aria-label="Top up balance">
-      {topUpState === "topup_pending" ? (
+      {effectiveState === "topup_pending" ? (
         <div className={styles.pendingBanner}>
           <span className={styles.spinner}>⏳</span>
           <span>Adding funds...</span>
         </div>
-      ) : topUpState === "topup_failed" ? (
+      ) : effectiveState === "topup_failed" ? (
         <div className={styles.errorBanner}>
           <div className={styles.errorHeader}>
             <span className={styles.icon}>⚠️</span>
             <span className={styles.errorTitle}>Top-up failed</span>
           </div>
-          <p className={styles.errorMessage}>{errorMessage}</p>
+          <p className={styles.errorMessage}>{effectiveErrorMessage}</p>
           <div className={styles.errorActions}>
             <button
               className={styles.retryBtn}
-              onClick={() => setTopUpState("showing_panel")}
+              onClick={() => {
+                setErrorMessage("");
+                setTopUpState("showing_panel");
+              }}
             >
               Try again
             </button>

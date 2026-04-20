@@ -38,6 +38,7 @@ export function PromptContainer({ actor, inputRef }: Props) {
       <form onSubmit={handleSubmit} className={styles.inputRow}>
         <input
           ref={inputRef}
+          data-testid="prompt-input"
           className={styles.input}
           type="text"
           placeholder="Ask about balance, bundles, usage, or support"
@@ -46,7 +47,13 @@ export function PromptContainer({ actor, inputRef }: Props) {
           disabled={isProcessing}
           aria-label="Type your message"
         />
-        <button className={styles.submitBtn} type="submit" disabled={isProcessing || !input.trim()} aria-label="Send message">
+        <button
+          data-testid="send-button"
+          className={styles.submitBtn}
+          type="submit"
+          disabled={isProcessing || !input.trim()}
+          aria-label="Send message"
+        >
           &#x27A4;
         </button>
       </form>

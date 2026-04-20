@@ -24,15 +24,15 @@ export function BalanceScreen({ data, actor }: Props) {
   const [debouncedAmount, setDebouncedAmount] = useState("");
   const [touched, setTouched] = useState(false);
 
-  if (data.type !== "balance") return null;
-  const { balance } = data;
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedAmount(amount);
     }, 220);
     return () => window.clearTimeout(timer);
   }, [amount]);
+
+  if (data.type !== "balance") return null;
+  const { balance } = data;
 
   function getAmountError(value: string): string | null {
     const trimmed = value.trim();
@@ -69,7 +69,7 @@ export function BalanceScreen({ data, actor }: Props) {
   }
 
   return (
-    <div className={styles.balanceContainer}>
+    <div data-testid="balance-screen" className={styles.balanceContainer}>
       <div className={styles.balanceRow}>
         <span className={styles.balanceAmount}>
           ${balance.current.toFixed(2)}

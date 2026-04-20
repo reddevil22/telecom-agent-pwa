@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "./fetchUtils";
+
 export interface SessionSummary {
   sessionId: string;
   messageCount: number;
@@ -24,11 +26,12 @@ export interface ConversationDocument {
 
 export const historyService = {
   async getSavedSessions(userId: string): Promise<SessionSummary[]> {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `/api/history/sessions?userId=${encodeURIComponent(userId)}`,
       {
         headers: { "x-user-id": userId },
       },
+      10_000,
     );
     if (!res.ok) {
       throw new Error(
@@ -51,11 +54,12 @@ export const historyService = {
     sessionId: string,
     userId: string,
   ): Promise<ConversationMessage[]> {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `/api/history/session/${encodeURIComponent(sessionId)}`,
       {
         headers: { "x-user-id": userId },
       },
+      10_000,
     );
     if (!res.ok) throw new Error("Session not found");
     const conv: ConversationDocument = await res.json();
@@ -63,12 +67,13 @@ export const historyService = {
   },
 
   async deleteSession(sessionId: string, userId: string): Promise<void> {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `/api/history/session/${encodeURIComponent(sessionId)}`,
       {
         method: "DELETE",
         headers: { "x-user-id": userId },
       },
+      10_000,
     );
     if (!res.ok) throw new Error("Failed to delete session");
   },

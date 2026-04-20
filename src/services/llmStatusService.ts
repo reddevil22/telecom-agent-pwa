@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "./fetchUtils";
+
 export interface LlmStatus {
   llm: 'available' | 'unavailable';
   mode: 'normal' | 'degraded';
@@ -7,6 +9,7 @@ export interface LlmStatus {
 export type StatusListener = (status: LlmStatus) => void;
 
 const POLL_INTERVAL_MS = 15_000;
+const STATUS_TIMEOUT_MS = 5_000;
 
 class LlmStatusServiceImpl {
   private status: LlmStatus = { llm: 'available', mode: 'normal', circuitState: 'closed' };
@@ -42,7 +45,11 @@ class LlmStatusServiceImpl {
 
   private async poll(): Promise<void> {
     try {
-      const res = await fetch('/api/agent/status');
+      const res = await fetchWithTimeout(
+        "/api/agent/status",
+        {},
+        STATUS_TIMEOUT_MS,
+      );
       if (!res.ok) return;
       const next = await res.json() as LlmStatus;
       const changed = next.mode !== this.status.mode;
