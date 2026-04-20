@@ -83,6 +83,7 @@ src/
 │   ├── BalanceScreen/      # Account balance display
 │   ├── BundlesScreen/      # Available bundles
 │   ├── BundleDetailScreen/ # Bundle purchase confirmation
+│   │   └── TopUpPanel.tsx  # Inline top-up when balance insufficient
 │   ├── UsageScreen/        # Data/voice/SMS usage
 │   ├── SupportScreen/      # Tickets and FAQ
 │   ├── AccountScreen/      # Full account overview

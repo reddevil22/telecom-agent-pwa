@@ -202,7 +202,9 @@ Registered via `SupervisorService.registerAgent(toolName, agent)`. The current s
 | `top_up`              | ActionSubAgent            | confirmation |
 | `get_account_summary` | SimpleQuerySubAgent       | account      |
 
-`purchase_bundle` is typically a two-step UX: first `view_bundle_details`, then an explicit purchase confirmation prompt.
+`purchase_bundle` and `top_up` are two-step UX flows: the backend returns a `confirmation` screen with `requiresUserConfirmation: true` and a `confirmationToken`. The frontend must send a second `SUBMIT_PROMPT` with `confirmationAction: { token, decision: "confirm" }` to execute the action.
+
+`top_up` additionally has an inline variant: `BundleDetailScreen` renders a `TopUpPanel` component when balance is insufficient. The panel sends the top-up through the XState machine (same as chat), and uses a `window.__topUpPanel` callback API to receive success/error responses from the parent when the machine's screen state transitions.
 
 ### Caching
 
