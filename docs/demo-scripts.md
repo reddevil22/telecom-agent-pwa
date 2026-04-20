@@ -1,6 +1,6 @@
 # Telecom Agent PWA Demo Scripts
 
-Two screen-recording scripts demonstrating the difference between keyword-routed requests (non-LLM) and LLM-powered requests.
+Three screen-recording scripts: non-LLM keyword routing, LLM-powered streaming, and the in-context top-up purchase flow.
 
 ---
 
@@ -11,10 +11,11 @@ Two screen-recording scripts demonstrating the difference between keyword-routed
 | Step | Action | Expected Result |
 |------|--------|----------------|
 | 1 | Open `http://localhost:5173` | App loads with "How can I help you today?" |
-| 2 | Click **💰 Balance** | Balance screen: `$13.79`, auto-renews Apr 29 — instant |
-| 3 | Click **📦 Bundles** | Bundle list: Value Plus + Weekend Pass, Starter Pack, Travel Roaming, Unlimited Pro — instant |
-| 4 | Type `check my usage` and send | Usage screen: Data (6.2/4006 GB), Voice (215/500 min), SMS (55/200) — instant |
-| 5 | Type `I need support` and send | Support screen with Tickets and FAQ sections — instant |
+| 2 | Select **Jamie Chen - Value Plus** from the user dropdown | Context switches to Jamie |
+| 3 | Click **💰 Balance** | Balance screen: shows current balance — instant |
+| 4 | Click **📦 Bundles** | Bundle list: Value Plus + Weekend Pass, Starter Pack, Travel Roaming, Unlimited Pro — instant |
+| 5 | Type `check my usage` and send | Usage screen with data/voice/SMS — instant |
+| 6 | Type `I need support` and send | Support screen with Tickets and FAQ sections — instant |
 
 **Visual cues:**
 - No loading spinner or processing indicator
@@ -30,16 +31,45 @@ Two screen-recording scripts demonstrating the difference between keyword-routed
 | Step | Action | Expected Result |
 |------|--------|----------------|
 | 1 | Open `http://localhost:5173` | App loads |
-| 2 | Type `Can I add more data to my current plan?` and send | "Step 2 of 3: Processing" appears → Account Overview screen with active subscriptions |
-| 3 | Type `I'm watching Netflix and streaming music while commuting. What bundle should I get?` and send | "Step 2 of 3: Processing" appears → Bundle list with Value Plus recommended |
-| 4 | Switch user to **Sam Patel - Unlimited Pro** | Context resets to Sam's account |
-| 5 | Type `Can I add more data to my current plan?` and send | LLM processes → Sam's Account Overview with Unlimited Pro data |
+| 2 | Select **Jamie Chen - Value Plus** from the user dropdown | Context switches to Jamie |
+| 3 | Type `Can I add more data to my current plan?` and send | "Step 2 of 3: Processing" appears → Account Overview screen with active subscriptions |
+| 4 | Type `I'm watching Netflix and streaming music while commuting. What bundle should I get?` and send | "Step 2 of 3: Processing" appears → Bundle list with Value Plus recommended |
+| 5 | Switch user to **Sam Patel - Unlimited Pro** | Context resets to Sam's account |
+| 6 | Type `Can I add more data to my current plan?` and send | LLM processes → Sam's Account Overview with Unlimited Pro data |
 
 **Visual cues:**
 - "Step 2 of 3: Processing (in progress)" indicator with step checklist
 - Text input disabled during processing
 - Response time: 5-15 seconds
 - Network tab: SSE streaming to `/api/agent/chat/stream`
+
+---
+
+## Version C — In-Context Top-Up (Customer Feature)
+
+**Purpose:** Demonstrate the inline top-up panel — the customer adds funds without leaving the bundle purchase flow.
+
+**Prerequisite:** Use Jamie Chen (balance $13.79). If balance has changed, reset via `node reset-test-balance.cjs`.
+
+| Step | Action | Expected Result |
+|------|--------|----------------|
+| 1 | Open `http://localhost:5173` | App loads |
+| 2 | Select **Jamie Chen - Value Plus** from the user dropdown | Context switches to Jamie ($13.79 balance) |
+| 3 | Click **📦 Bundles** quick action | Bundle list appears — instant |
+| 4 | Click **View Details** on **Value Plus** ($19.99) | Bundle detail screen shows: current balance $13.79, balance after purchase: **-$6.20**, insufficient balance warning |
+| 5 | Observe the **Top Up Panel** appears below the warning | Panel shows "You have $13.79 — needs $19.99" with +$5, +$10, +$20, +$50 buttons |
+| 6 | Observe **Confirm Purchase** button is disabled | Button shows "Insufficient Balance" and is greyed out |
+| 7 | Click **+$10** on the top-up panel | "Adding funds..." spinner appears in the panel |
+| 8 | Confirm dialog appears | "Confirm Top-up" dialog with "Please confirm this top-up before we process it." |
+| 9 | Click **Confirm request** | Dialog closes, "Top-up Successful!" screen shows with "New Balance: USD 23.79" |
+| 10 | **Confirm Purchase** button is now enabled | Button turns active, shows "Confirm Purchase" |
+| 11 | Click **Confirm Purchase** | Purchase confirmation appears — bundle confirmed |
+
+**Visual cues:**
+- Top-up panel is visually distinct: error-bg color with border
+- Confirmation dialog is a separate screen overlay
+- Success screen confirms new balance before enabling purchase
+- User never navigated away from the bundle detail screen
 
 ---
 
@@ -58,13 +88,18 @@ Two screen-recording scripts demonstrating the difference between keyword-routed
 - `I'm traveling to Europe next month and need data while roaming`
 - `I'm watching Netflix and streaming music while commuting. What bundle should I get?`
 
+### In-Context Top-Up (Version C) — UI-driven:
+- No text prompt needed — triggered by navigating to a bundle detail screen when balance is insufficient
+- The top-up amount buttons send `top up $N` through the same chat endpoint as typed prompts
+
 ---
 
 ## Key Visual Comparison
 
-| | Version A (Non-LLM) | Version B (LLM) |
-|--|--|--|
-| Response time | < 1 second | 5-15 seconds |
-| Processing indicator | Never | "Step 2 of 3: Processing" |
-| Network (`/chat/stream`) | No calls | SSE streaming |
-| Response type | Structured screens only | Free-text + suggestions + screens |
+| | Version A (Non-LLM) | Version B (LLM) | Version C (Top-Up) |
+|--|--|--|--|
+| Response time | < 1 second | 5-15 seconds | 3-8 seconds |
+| Processing indicator | Never | "Step 2 of 3: Processing" | "Adding funds..." spinner |
+| Network (`/chat/stream`) | No calls | SSE streaming | SSE streaming |
+| Trigger | Quick action button or typed keyword | Free-text nuance | UI navigation (balance check) |
+| Purchase context | N/A | N/A | Inline — no navigation away |
