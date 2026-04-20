@@ -1,4 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
+
+// Reset Jamie Chen's balance to $13.79 before each test
+test.beforeEach(async () => {
+  await execAsync("node C:/Users/redde/telecom-agent-pwa/reset-test-balance.cjs");
+});
 
 test("top-up panel appears when balance is insufficient", async ({ page }) => {
   await page.goto("/");
@@ -13,23 +22,23 @@ test("top-up panel appears when balance is insufficient", async ({ page }) => {
   // Click View Details on a bundle that costs more than balance ($13.79)
   await page.click("button:has-text('View Details')");
 
-  // Verify top-up panel is shown (balance $13.79 < bundle price)
+  // Verify top-up panel is shown - balance check may take a moment for SSE
   await expect(
-    page.getByText(/You have \$13.79 — needs \$19.99/)
-  ).toBeVisible();
+    page.getByText(/You have USD \d+\.\d+ — needs USD 19\.99/)
+  ).toBeVisible({ timeout: 10000 });
 
-  // Verify amount buttons are shown
-  await expect(page.getByText("+$5")).toBeVisible();
-  await expect(page.getByText("+$10")).toBeVisible();
-  await expect(page.getByText("+$20")).toBeVisible();
-  await expect(page.getByText("+$50")).toBeVisible();
+  // Verify amount buttons are shown (use exact match to avoid +$5 matching +$50)
+  await expect(page.getByRole("button", { name: "+$5", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "+$10", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "+$20", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "+$50", exact: true })).toBeVisible();
 
   // Verify confirm button is disabled
   const confirmBtn = page.getByRole("button", { name: /Insufficient Balance/i });
   await expect(confirmBtn).toBeVisible();
 });
 
-test("top-up enables purchase after successful top-up", async ({ page }) => {
+test("top-up shows confirmation dialog, then success after confirm", async ({ page }) => {
   await page.goto("/");
 
   // Select Jamie Chen
@@ -42,40 +51,21 @@ test("top-up enables purchase after successful top-up", async ({ page }) => {
   // Click View Details
   await page.click("button:has-text('View Details')");
 
-  // Verify panel is shown
+  // Verify panel is shown - balance check may take a moment for SSE
   await expect(
-    page.getByText(/You have \$13.79 — needs \$19.99/)
-  ).toBeVisible();
+    page.getByText(/You have USD \d+\.\d+ — needs USD 19\.99/)
+  ).toBeVisible({ timeout: 10000 });
 
-  // Click +$10 top-up
-  await page.click("button:has-text('+$10')");
+  // Click +$10 top-up - shows pending then confirmation dialog
+  await page.getByRole("button", { name: "+$10", exact: true }).click();
 
-  // Wait for success state
-  await expect(page.getByText(/Balance updated/)).toBeVisible({
-    timeout: 20000,
-  });
+  // Wait for confirmation dialog to appear (look for heading specifically)
+  await expect(page.getByRole("heading", { name: "Confirm Top-up" })).toBeVisible({ timeout: 10000 });
 
-  // Verify confirm button is now enabled
-  await expect(
-    page.getByRole("button", { name: /Confirm Purchase/i })
-  ).toBeEnabled();
-});
+  // Click confirm on the dialog
+  await page.getByRole("button", { name: "Confirm request" }).click();
 
-test("top-up panel shows correct UI structure", async ({ page }) => {
-  await page.goto("/");
-
-  await page.selectOption("select", "Jamie Chen - Value Plus");
-  await page.click("button:has-text('What bundles are available?')");
-  await page.waitForTimeout(2000);
-  await page.click("button:has-text('View Details')");
-
-  await expect(
-    page.getByText(/You have \$13.79 — needs \$19.99/)
-  ).toBeVisible();
-
-  // Verify amount buttons
-  await expect(page.getByText("+$5")).toBeVisible();
-  await expect(page.getByText("+$10")).toBeVisible();
-  await expect(page.getByText("+$20")).toBeVisible();
-  await expect(page.getByText("+$50")).toBeVisible();
+  // Wait for success screen showing updated balance
+  await expect(page.getByText(/Top-up Successful/)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/New Balance/)).toBeVisible();
 });

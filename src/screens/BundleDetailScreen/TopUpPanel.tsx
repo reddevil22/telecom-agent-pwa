@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { invokeAgentStream } from "../../services/agentService";
-import { userSessionService } from "../../services/userSessionService";
 import styles from "./TopUpPanel.module.css";
 
 export type TopUpState = "showing_panel" | "topup_pending" | "topup_success" | "topup_failed";
@@ -12,6 +10,7 @@ export interface TopUpPanelProps {
   onTopUpSuccess: (newBalance: number) => void;
   onTopUpError: (error: string) => void;
   onCancel: () => void;
+  onTopUpRequest: (amount: number) => void;
   cheapestBundle?: { id: string; name: string; price: number };
 }
 
@@ -24,51 +23,40 @@ export function TopUpPanel({
   onTopUpSuccess,
   onTopUpError,
   onCancel,
+  onTopUpRequest,
   cheapestBundle,
 }: TopUpPanelProps) {
   const [topUpState, setTopUpState] = useState<TopUpState>("showing_panel");
   const [errorMessage, setErrorMessage] = useState("");
   const [updatedBalance, setUpdatedBalance] = useState<number | null>(null);
 
-  async function handleTopUp(amount: number) {
+  function handleTopUp(amount: number) {
     setTopUpState("topup_pending");
     setErrorMessage("");
+    onTopUpRequest(amount);
+  }
 
-    try {
-      const response = await invokeAgentStream(
-        {
-          prompt: `top up $${amount}`,
-          sessionId: crypto.randomUUID(),
-          userId: userSessionService.getSelectedUserId(),
-          conversationHistory: [],
-          timestamp: Date.now(),
-        },
-        () => {},
-      );
+  // Called by parent via window.__topUpPanel.handleResponseSuccess(newBalance)
+  function handleResponseSuccess(newBalance: number) {
+    setUpdatedBalance(newBalance);
+    onTopUpSuccess(newBalance);
+    setTopUpState("topup_success");
+  }
 
-      // Extract new balance from response
-      if (response.screenData.type === "balance") {
-        const newBalance = response.screenData.balance.current;
-        setUpdatedBalance(newBalance);
-        onTopUpSuccess(newBalance);
-        setTopUpState("topup_success");
-      } else if (response.screenData.type === "bundleDetail") {
-        // top_up returns balance screen typically
-        const newBalance = response.screenData.currentBalance.current;
-        setUpdatedBalance(newBalance);
-        onTopUpSuccess(newBalance);
-        setTopUpState("topup_success");
-      } else {
-        onTopUpError("Unexpected response from server");
-        setErrorMessage("Could not add funds. Try again.");
-        setTopUpState("topup_failed");
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Top-up failed";
-      setErrorMessage(msg);
-      onTopUpError(msg);
-      setTopUpState("topup_failed");
-    }
+  // Called by parent via window.__topUpPanel.handleResponseError(error)
+  function handleResponseError(error: string) {
+    const msg = error || "Top-up failed";
+    setErrorMessage(msg);
+    onTopUpError(msg);
+    setTopUpState("topup_failed");
+  }
+
+  // Expose API for parent to call back after machine processes the response
+  if (typeof window !== "undefined") {
+    (window as unknown as { __topUpPanel: unknown }).__topUpPanel = {
+      handleResponseSuccess,
+      handleResponseError,
+    };
   }
 
   if (topUpState === "topup_success" && updatedBalance !== null) {
@@ -135,7 +123,6 @@ export function TopUpPanel({
               <button
                 className={styles.cheapestBtn}
                 onClick={() => {
-                  // Navigate to cheapest bundle via cancel (back to bundles)
                   onCancel();
                 }}
               >

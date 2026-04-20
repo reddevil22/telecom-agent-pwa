@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ScreenData } from "../../types/agent";
 import type { ScreenActor } from "../../types/screens";
 import { TopUpPanel } from "./TopUpPanel";
@@ -15,6 +16,10 @@ export function BundleDetailScreen({ data, actor }: Props) {
   const balanceAfter = currentBalance.current - bundle.price;
   const hasInsufficientBalance = balanceAfter < 0;
 
+  // Track whether we just completed a top-up so we can sync the panel
+  const pendingTopUpRef = useRef(false);
+  const prevScreenDataRef = useRef<ScreenData | null>(null);
+
   function handleConfirm() {
     if (hasInsufficientBalance) return;
     actor.send({
@@ -26,6 +31,65 @@ export function BundleDetailScreen({ data, actor }: Props) {
   function handleCancel() {
     actor.send({ type: "SUBMIT_PROMPT", prompt: "List all available bundles" });
   }
+
+  function handleTopUpRequest(amount: number) {
+    pendingTopUpRef.current = true;
+    actor.send({
+      type: "SUBMIT_PROMPT",
+      prompt: `top up $${amount}`,
+    });
+  }
+
+  // When screenData changes after a top-up, sync TopUpPanel state
+  useEffect(() => {
+    const prev = prevScreenDataRef.current;
+    prevScreenDataRef.current = data;
+
+    if (!pendingTopUpRef.current) return;
+
+    // Handle confirmation with success status and updatedBalance
+    if (
+      data.type === "confirmation" &&
+      data.status === "success" &&
+      data.updatedBalance
+    ) {
+      pendingTopUpRef.current = false;
+      const newBalance = data.updatedBalance.current;
+      const win = window as unknown as { __topUpPanel?: unknown };
+      if (win.__topUpPanel) {
+        const api = win.__topUpPanel as {
+          handleResponseSuccess: (balance: number) => void;
+        };
+        api.handleResponseSuccess(newBalance);
+      }
+      return;
+    }
+
+    // Handle the case where confirmation transitions to bundleDetail/balance
+    if (!prev || prev.type !== "confirmation") return;
+
+    if (data.type === "bundleDetail") {
+      pendingTopUpRef.current = false;
+      const newBalance = data.currentBalance.current;
+      const win = window as unknown as { __topUpPanel?: unknown };
+      if (win.__topUpPanel) {
+        const api = win.__topUpPanel as {
+          handleResponseSuccess: (balance: number) => void;
+        };
+        api.handleResponseSuccess(newBalance);
+      }
+    } else if (data.type === "balance") {
+      pendingTopUpRef.current = false;
+      const newBalance = data.balance.current;
+      const win = window as unknown as { __topUpPanel?: unknown };
+      if (win.__topUpPanel) {
+        const api = win.__topUpPanel as {
+          handleResponseSuccess: (balance: number) => void;
+        };
+        api.handleResponseSuccess(newBalance);
+      }
+    }
+  }, [data]);
 
   return (
     <div className={styles.container}>
@@ -119,17 +183,13 @@ export function BundleDetailScreen({ data, actor }: Props) {
             bundlePrice={bundle.price}
             currency={currentBalance.currency}
             onTopUpSuccess={(_newBalance) => {
-              // Machine will push updated screenData after top-up via SSE
-              // Force a re-render by triggering a minimal update
-              actor.send({
-                type: "SUBMIT_PROMPT",
-                prompt: `top up $10`,
-              });
+              // Balance updated, machine will push updated screenData via SSE
             }}
             onTopUpError={(error) => {
               console.error("Top-up failed:", error);
             }}
             onCancel={handleCancel}
+            onTopUpRequest={handleTopUpRequest}
             cheapestBundle={undefined}
           />
         )}
