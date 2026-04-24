@@ -123,8 +123,9 @@ export const orchestratorMachine = setup({
             },
             { signal },
           );
-        } catch {
+        } catch (err) {
           // Streaming failed, fall back to standard call
+          console.warn("Agent stream failed, falling back to REST:", err);
         }
       }
 
