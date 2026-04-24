@@ -8,6 +8,7 @@ import { up as runMigration003 } from "./migrations/003_add_bundle_detail_screen
 import { up as runMigration004 } from "./migrations/004_mock_telco";
 import { up as runMigration005 } from "./migrations/005_add_account_screen_type";
 import { up as runMigration006 } from "./migrations/006_add_indexes";
+import { up as runMigration007 } from "./migrations/007_add_data_gift_screen_type";
 
 type Migration = {
   id: string;
@@ -21,6 +22,7 @@ const MIGRATIONS: Migration[] = [
   { id: "004_mock_telco", up: runMigration004 },
   { id: "005_add_account_screen_type", up: runMigration005 },
   { id: "006_add_indexes", up: runMigration006 },
+  { id: "007_add_data_gift_screen_type", up: runMigration007 },
 ];
 
 @Injectable()

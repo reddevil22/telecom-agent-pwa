@@ -40,6 +40,7 @@ export type ScreenType =
   | "support"
   | "confirmation"
   | "account"
+  | "dataGift"
   | "unknown";
 
 // ── Screen data (discriminated union) ──
@@ -80,7 +81,7 @@ export interface ConfirmationScreenData {
   updatedBalance?: Balance;
   requiresUserConfirmation?: boolean;
   confirmationToken?: string;
-  actionType?: "top_up" | "purchase_bundle" | "create_ticket";
+  actionType?: "top_up" | "purchase_bundle" | "create_ticket" | "share_data";
 }
 
 export interface AccountScreenData {
@@ -123,6 +124,23 @@ export interface AccountScreenData {
   }>;
 }
 
+export interface DataGiftScreenData {
+  type: "dataGift";
+  status: "pending" | "success" | "error";
+  title: string;
+  message: string;
+  details: {
+    recipientName: string;
+    recipientMsisdn: string;
+    amountMb: number;
+    sourceBundleName: string;
+    remainingMb: number;
+  };
+  requiresUserConfirmation?: boolean;
+  confirmationToken?: string;
+  actionType?: "share_data";
+}
+
 export interface UnknownScreenData {
   type: "unknown";
 }
@@ -135,6 +153,7 @@ export type ScreenData =
   | SupportScreenData
   | ConfirmationScreenData
   | AccountScreenData
+  | DataGiftScreenData
   | UnknownScreenData;
 
 export interface ProcessingStep {

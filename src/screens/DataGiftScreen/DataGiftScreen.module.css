@@ -1,0 +1,114 @@
+.card {
+  padding: var(--space-lg);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  max-width: 480px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+}
+
+.pending {
+  border-left: 4px solid var(--primary);
+}
+
+.success {
+  border-left: 4px solid var(--success);
+}
+
+.error {
+  border-left: 4px solid var(--error);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.icon {
+  font-size: 1.5rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-elevated);
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.message {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-lg);
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-lg);
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.detailLabel {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.detailValue {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.confirmBtn {
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.confirmBtn:hover {
+  background: var(--primary-dark);
+}
+
+.cancelBtn {
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cancelBtn:hover {
+  background: var(--border);
+}

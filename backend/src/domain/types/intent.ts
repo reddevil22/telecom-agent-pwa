@@ -14,6 +14,7 @@ export enum TelecomIntent {
   GET_SUPPORT = 'get_support',
   CREATE_TICKET = 'create_ticket',
   ACCOUNT_SUMMARY = 'account_summary',
+  SHARE_DATA = 'share_data',
 }
 
 export type Tier1Intent =
@@ -60,6 +61,7 @@ export const INTENT_TOOL_MAP: Readonly<Record<TelecomIntent, string>> = {
   [TelecomIntent.GET_SUPPORT]: 'get_support',
   [TelecomIntent.CREATE_TICKET]: 'create_ticket',
   [TelecomIntent.ACCOUNT_SUMMARY]: 'get_account_summary',
+  [TelecomIntent.SHARE_DATA]: 'share_data',
 };
 
 /**

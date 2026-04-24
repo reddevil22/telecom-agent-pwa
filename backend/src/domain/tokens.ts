@@ -10,3 +10,4 @@ export const INTENT_CACHE_PORT = Symbol("INTENT_CACHE_PORT");
 export const METRICS_PORT = Symbol("METRICS_PORT");
 export const RATE_LIMITER_PORT = Symbol("RATE_LIMITER_PORT");
 export const INTENT_ROUTING_CONFIG = Symbol("INTENT_ROUTING_CONFIG");
+export const DATA_GIFT_BFF_PORT = Symbol("DATA_GIFT_BFF_PORT");

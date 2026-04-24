@@ -12,6 +12,7 @@ import { BalanceBffModule } from "./adapters/driven/bff/balance/balance-bff.modu
 import { BundlesBffModule } from "./adapters/driven/bff/bundles/bundles-bff.module";
 import { UsageBffModule } from "./adapters/driven/bff/usage/usage-bff.module";
 import { SupportBffModule } from "./adapters/driven/bff/support/support-bff.module";
+import { DataGiftBffModule } from "./adapters/driven/bff/data-gift/data-gift-bff.module";
 import { SqliteDataModule } from "./infrastructure/data/sqlite-data.module";
 import {
   LLM_PORT,
@@ -19,6 +20,7 @@ import {
   BUNDLES_BFF_PORT,
   USAGE_BFF_PORT,
   SUPPORT_BFF_PORT,
+  DATA_GIFT_BFF_PORT,
   CONVERSATION_STORAGE_PORT,
   SCREEN_CACHE_PORT,
   INTENT_CACHE_PORT,
@@ -32,6 +34,7 @@ import type {
   BundlesBffPort,
   UsageBffPort,
   SupportBffPort,
+  DataGiftBffPort,
 } from "./domain/ports/bff-ports";
 import type { ConversationStoragePort } from "./domain/ports/conversation-storage.port";
 import type { ScreenCachePort } from "./domain/ports/screen-cache.port";
@@ -49,6 +52,7 @@ import { createBillingAgentRegistrations } from "./application/sub-agents/billin
 import { createBundleAgentRegistrations } from "./application/sub-agents/bundle-agents.provider";
 import { createSupportAgentRegistrations } from "./application/sub-agents/support-agents.provider";
 import { createAccountAgentRegistrations } from "./application/sub-agents/account-agents.provider";
+import { createDataGiftAgentRegistrations } from "./application/sub-agents/data-gift-agents.provider";
 import { SimpleMetricsAdapter } from "./infrastructure/metrics/simple-metrics.adapter";
 import { InMemoryRateLimiterAdapter } from "./infrastructure/rate-limiter/in-memory-rate-limiter.adapter";
 import type { SubAgentRegistration } from "./application/sub-agents/sub-agent-registration";
@@ -71,6 +75,7 @@ function registerSubAgents(
     BundlesBffModule,
     UsageBffModule,
     SupportBffModule,
+    DataGiftBffModule,
     SqliteDataModule,
     ScreenCacheModule,
     MockTelcoModule,
@@ -129,6 +134,7 @@ function registerSubAgents(
         bundlesBff: BundlesBffPort,
         usageBff: UsageBffPort,
         supportBff: SupportBffPort,
+        dataGiftBff: DataGiftBffPort,
         storage: ConversationStoragePort,
         cache: ScreenCachePort,
         config: ConfigService,
@@ -157,6 +163,11 @@ function registerSubAgents(
           circuitBreaker,
           intentRoutingConfig.keywords,
           metrics,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          dataGiftBff,
         );
 
         registerSubAgents(
@@ -175,6 +186,10 @@ function registerSubAgents(
           supervisor,
           createAccountAgentRegistrations(usageBff, telcoService),
         );
+        registerSubAgents(
+          supervisor,
+          createDataGiftAgentRegistrations(dataGiftBff),
+        );
 
         return supervisor;
       },
@@ -184,6 +199,7 @@ function registerSubAgents(
         BUNDLES_BFF_PORT,
         USAGE_BFF_PORT,
         SUPPORT_BFF_PORT,
+        DATA_GIFT_BFF_PORT,
         CONVERSATION_STORAGE_PORT,
         SCREEN_CACHE_PORT,
         ConfigService,

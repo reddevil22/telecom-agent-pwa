@@ -36,6 +36,7 @@ import {
 } from "./tool-validation.service";
 import { ScreenCacheManager } from "./screen-cache-manager.service";
 import { randomUUID } from "crypto";
+import type { DataGiftBffPort } from "../../domain/ports/bff-ports";
 
 class LlmCallError extends Error {
   constructor(message: string) {
@@ -69,7 +70,7 @@ interface ToolExecutionResult {
   processingSteps: AgentResponse["processingSteps"];
 }
 
-type GatedToolName = "top_up" | "create_ticket";
+type GatedToolName = "top_up" | "create_ticket" | "share_data";
 
 interface PendingConfirmationEntry {
   token: string;
@@ -136,6 +137,7 @@ export class SupervisorService {
   private readonly toolDegradation: ToolDegradationService;
   private readonly toolValidation: ToolValidationService;
   private readonly screenCacheManager: ScreenCacheManager;
+  private readonly dataGiftBff: DataGiftBffPort | null;
   private readonly pendingConfirmations = new Map<
     string,
     PendingConfirmationEntry
@@ -158,6 +160,7 @@ export class SupervisorService {
     toolDegradation?: ToolDegradationService,
     toolValidation?: ToolValidationService,
     screenCacheManager?: ScreenCacheManager,
+    dataGiftBff?: DataGiftBffPort,
   ) {
     this.toolResolver = new ToolResolver();
     this.logger = logger ?? null;
@@ -178,6 +181,7 @@ export class SupervisorService {
         this.logger,
         intentKeywords,
       );
+    this.dataGiftBff = dataGiftBff ?? null;
     this.logger?.setContext(SupervisorService.name);
   }
 
@@ -952,7 +956,7 @@ export class SupervisorService {
   }
 
   private isGatedTool(toolName: string): toolName is GatedToolName {
-    return toolName === "top_up" || toolName === "create_ticket";
+    return toolName === "top_up" || toolName === "create_ticket" || toolName === "share_data";
   }
 
   private createPendingConfirmation(
@@ -972,6 +976,11 @@ export class SupervisorService {
       args,
       expiresAt: Date.now() + SECURITY_LIMITS.CONFIRMATION_TTL_MS,
     });
+
+    // Data gift: resolve recipient and build rich review screen
+    if (toolName === "share_data" && this.dataGiftBff) {
+      return this.buildDataGiftConfirmation(request, args, token);
+    }
 
     const details: Record<string, string | number> = {};
     if (toolName === "top_up") {
@@ -1003,6 +1012,48 @@ export class SupervisorService {
         { label: "Awaiting confirmation", status: "active" },
       ],
     };
+  }
+
+  private buildDataGiftConfirmation(
+    request: AgentRequest,
+    args: Record<string, string>,
+    token: string,
+  ): {
+    screenData: AgentResponse["screenData"];
+    processingSteps: AgentResponse["processingSteps"];
+  } {
+    const amountMatch = args.amount?.match(/^(\d+(?:\.\d+)?)\s*(GB|MB)/i);
+    const amountMb = amountMatch
+      ? (amountMatch[2].toUpperCase() === "GB" ? parseFloat(amountMatch[1]) * 1024 : parseFloat(amountMatch[1]))
+      : 0;
+
+    return {
+      screenData: {
+        type: "dataGift",
+        status: "pending",
+        title: "Review Data Gift",
+        message: `Send ${this.formatMb(amountMb)} to ${args.recipientQuery}?`,
+        details: {
+          recipientName: args.recipientQuery,
+          recipientMsisdn: "",
+          amountMb,
+          sourceBundleName: "",
+          remainingMb: 0,
+        },
+        requiresUserConfirmation: true,
+        confirmationToken: token,
+        actionType: "share_data",
+      } as AgentResponse["screenData"],
+      processingSteps: [
+        { label: "Finding recipient", status: "done" },
+        { label: "Checking your allowance", status: "done" },
+        { label: "Awaiting confirmation", status: "active" },
+      ],
+    };
+  }
+
+  private formatMb(mb: number): string {
+    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
   }
 
   private buildPurchasePrerequisiteScreen(): {

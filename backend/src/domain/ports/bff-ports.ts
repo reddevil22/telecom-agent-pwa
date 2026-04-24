@@ -26,3 +26,20 @@ export interface SupportBffPort {
   getFaq(): Promise<Array<{ question: string; answer: string }>>;
   createTicket(userId: string, subject: string, description: string): Promise<SupportTicket>;
 }
+
+export interface DataTransferResult {
+  success: boolean;
+  message: string;
+  senderBalance: Balance;
+  recipientName: string;
+  recipientMsisdn: string;
+  amountMb: number;
+  sourceBundleName: string;
+  remainingMb: number;
+}
+
+export interface DataGiftBffPort {
+  resolveRecipient(userId: string, query: string): Promise<{ userId: string; name: string; msisdn: string } | null>;
+  validateAllowance(userId: string, amountMb: number): Promise<{ valid: boolean; sourceBundleName: string; availableMb: number }>;
+  transferData(senderId: string, recipientId: string, amountMb: number): Promise<DataTransferResult>;
+}

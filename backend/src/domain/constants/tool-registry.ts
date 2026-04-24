@@ -212,6 +212,37 @@ export const TOOL_REGISTRY: Record<string, ToolMetadata> = {
       required: ["userId"],
     },
   },
+  share_data: {
+    name: "share_data",
+    screenType: "dataGift",
+    allowedArgs: ["userId", "recipientQuery", "amount"],
+    replyText: "Review your data gift before confirming.",
+    suggestions: [
+      "Show my balance",
+      "Check my usage",
+      "What bundles are available?",
+    ],
+    description:
+      "Share or gift data from the user's active bundle to another person. " +
+      "Extract the recipient (name or phone number) and amount (e.g. '2 GB', '500 MB'). " +
+      "ALWAYS call this tool first — the backend will show a review screen. " +
+      "NEVER skip the review step.",
+    parameters: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "The user ID" },
+        recipientQuery: {
+          type: "string",
+          description: "Name or phone number of the recipient (e.g. 'Jamie', '+12025555678')",
+        },
+        amount: {
+          type: "string",
+          description: "Amount to share (e.g. '2 GB', '500 MB', '1.5GB')",
+        },
+      },
+      required: ["userId", "recipientQuery", "amount"],
+    },
+  },
 };
 
 // Derived constants for backward compatibility
@@ -264,6 +295,11 @@ export const TOOL_ARG_CONSTRAINTS: ToolArgConstraints = {
     subject: { maxLength: 200 },
     description: { maxLength: 1000 },
   },
+  share_data: {
+    userId: { maxLength: 64 },
+    recipientQuery: { maxLength: 64 },
+    amount: { maxLength: 16, pattern: /^\d+(\.\d+)?\s*(GB|MB|gb|mb)$/i },
+  },
 };
 
 export const REPLY_MAP: Record<ScreenType, string> = {
@@ -274,6 +310,7 @@ export const REPLY_MAP: Record<ScreenType, string> = {
   support: "Here are your support options and recent tickets.",
   confirmation: "Your request has been processed.",
   account: "Here is your account overview.",
+  dataGift: "Review your data gift before confirming.",
   unknown:
     "I'm not sure what you're looking for. Here are some things I can help with.",
 };
@@ -290,6 +327,7 @@ export const SUGGESTION_MAP: Record<ScreenType, string[]> = {
     "Check my usage",
   ],
   account: ["Show my balance", "Check my usage", "What bundles are available?"],
+  dataGift: ["Show my balance", "Check my usage", "What bundles are available?"],
   unknown: [
     "Show my balance",
     "What bundles are available?",

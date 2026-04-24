@@ -27,6 +27,10 @@ export class IntentRouterService implements IntentRouterPort {
     prompt: string,
     userId: string,
   ): Promise<IntentResolution | null> {
+    // Deterministic data-gift routing when the prompt includes recipient + amount.
+    const shareData = this.shareDataIntentMatch(prompt, userId);
+    if (shareData) return shareData;
+
     // Deterministic top-up routing when the prompt includes an amount.
     const topUp = this.topUpIntentMatch(prompt, userId);
     if (topUp) return topUp;
@@ -92,6 +96,14 @@ export class IntentRouterService implements IntentRouterPort {
     "add money",
   ];
 
+  /** Phrases that indicate data-gift intents */
+  private static readonly SHARE_DATA_SIGNALS = [
+    "share data",
+    "gift data",
+    "send data",
+    "transfer data",
+  ];
+
   /** Deterministic tie-breaker when lexical specificity is equal */
   private static readonly INTENT_MATCH_PRIORITY: Readonly<
     Record<TelecomIntent, number>
@@ -105,6 +117,7 @@ export class IntentRouterService implements IntentRouterPort {
     [TelecomIntent.PURCHASE_BUNDLE]: 65,
     [TelecomIntent.TOP_UP]: 60,
     [TelecomIntent.CREATE_TICKET]: 55,
+    [TelecomIntent.SHARE_DATA]: 50,
   };
 
   private tier1KeywordMatch(
@@ -256,5 +269,53 @@ export class IntentRouterService implements IntentRouterPort {
 
     const standaloneBundleId = prompt.match(/\b(b\d+)\b/i);
     return standaloneBundleId?.[1]?.toLowerCase() ?? null;
+  }
+
+  private hasShareDataSignal(prompt: string): boolean {
+    const lower = prompt.toLowerCase();
+    return IntentRouterService.SHARE_DATA_SIGNALS.some((signal) =>
+      lower.includes(signal),
+    );
+  }
+
+  private shareDataIntentMatch(
+    prompt: string,
+    userId: string,
+  ): IntentResolution | null {
+    if (!this.hasShareDataSignal(prompt)) return null;
+
+    const amount = this.extractDataAmount(prompt);
+    if (!amount) return null;
+
+    const recipientQuery = this.extractRecipientQuery(prompt);
+    if (!recipientQuery) return null;
+
+    return {
+      intent: TelecomIntent.SHARE_DATA,
+      toolName: INTENT_TOOL_MAP[TelecomIntent.SHARE_DATA],
+      args: { userId, recipientQuery, amount },
+      confidence: 1.0,
+    };
+  }
+
+  private extractDataAmount(prompt: string): string | null {
+    const match = prompt.match(/\b(\d+(?:\.\d+)?)\s*(GB|MB|gb|mb)\b/);
+    return match ? `${match[1]} ${match[2].toUpperCase()}` : null;
+  }
+
+  private extractRecipientQuery(prompt: string): string | null {
+    // Look for "with X", "to X", "for X" after the amount
+    const match = prompt.match(/(?:with|to|for)\s+([A-Za-z][A-Za-z0-9\s+]*?)(?:\s*$|\s+(?:from|using|via)\b)/i);
+    if (match?.[1]) return match[1].trim();
+
+    // Fallback: last capitalized word or phone number
+    const words = prompt.split(/\s+/);
+    for (let i = words.length - 1; i >= 0; i--) {
+      const w = words[i].replace(/[^A-Za-z0-9+]/g, "");
+      if (/^[A-Za-z]/.test(w) || /^\+?\d{3,}$/.test(w)) {
+        return w;
+      }
+    }
+    return null;
   }
 }

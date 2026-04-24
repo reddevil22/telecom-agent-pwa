@@ -11,6 +11,7 @@ import type {
   TransactionEntry,
   OpenTicket,
 } from "../../domain/types/domain";
+import type { DataTransferResult } from "../../domain/ports/bff-ports";
 import { randomUUID } from "crypto";
 
 export interface TelcoAccount {
@@ -764,6 +765,119 @@ export class MockTelcoService {
       sms: row.sms as number,
       validity: `${row.validity_days as number} days`,
       popular: (row.popular as number) === 1 ? true : undefined,
+    };
+  }
+
+  // ── Data Gifting ──
+
+  resolveRecipient(query: string): { userId: string; name: string; msisdn: string } | null {
+    const lower = query.toLowerCase().trim();
+    const rows = this.db.prepare("SELECT user_id, name, msisdn FROM telco_accounts").all() as Array<{
+      user_id: string;
+      name: string;
+      msisdn: string;
+    }>;
+
+    for (const row of rows) {
+      if (row.user_id === lower || row.name.toLowerCase().includes(lower) || row.msisdn.includes(query)) {
+        return { userId: row.user_id, name: row.name, msisdn: row.msisdn };
+      }
+    }
+    return null;
+  }
+
+  validateDataAllowance(userId: string, amountMb: number): {
+    valid: boolean;
+    sourceBundleName: string;
+    availableMb: number;
+  } {
+    const sub = this.db.prepare(`
+      SELECT s.*, c.name as bundle_name
+      FROM telco_subscriptions s
+      JOIN telco_bundles_catalog c ON c.id = s.bundle_id
+      WHERE s.user_id = ? AND s.status = 'active' AND s.expires_at > datetime('now')
+      ORDER BY (s.data_total_mb - s.data_used_mb) DESC
+      LIMIT 1
+    `).get(userId) as {
+      data_total_mb: number;
+      data_used_mb: number;
+      bundle_name: string;
+    } | undefined;
+
+    if (!sub) {
+      return { valid: false, sourceBundleName: "", availableMb: 0 };
+    }
+
+    const available = sub.data_total_mb - sub.data_used_mb;
+    return {
+      valid: available >= amountMb,
+      sourceBundleName: sub.bundle_name,
+      availableMb: available,
+    };
+  }
+
+  transferData(senderId: string, recipientId: string, amountMb: number): DataTransferResult {
+    const senderAccount = this.requireAccount(senderId);
+    const recipientAccount = this.getAccount(recipientId);
+    if (!recipientAccount) {
+      throw new Error("Recipient not found");
+    }
+
+    if (senderId === recipientId) {
+      throw new Error("Cannot share data with yourself");
+    }
+
+    const validation = this.validateDataAllowance(senderId, amountMb);
+    if (!validation.valid) {
+      throw new Error("Insufficient data allowance");
+    }
+
+    const sourceSub = this.db.prepare(`
+      SELECT s.* FROM telco_subscriptions s
+      WHERE s.user_id = ? AND s.status = 'active' AND s.expires_at > datetime('now')
+      ORDER BY (s.data_total_mb - s.data_used_mb) DESC
+      LIMIT 1
+    `).get(senderId) as { id: string; data_total_mb: number; data_used_mb: number };
+
+    this.db.prepare("UPDATE telco_subscriptions SET data_used_mb = data_used_mb + ? WHERE id = ?")
+      .run(amountMb, sourceSub.id);
+
+    const recipientSub = this.db.prepare(`
+      SELECT * FROM telco_subscriptions
+      WHERE user_id = ? AND status = 'active' AND expires_at > datetime('now')
+      ORDER BY expires_at DESC
+      LIMIT 1
+    `).get(recipientId) as { id: string; data_total_mb: number } | undefined;
+
+    if (recipientSub) {
+      this.db.prepare("UPDATE telco_subscriptions SET data_total_mb = data_total_mb + ? WHERE id = ?")
+        .run(amountMb, recipientSub.id);
+    } else {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 7 * 86400000);
+      this.db.prepare(`
+        INSERT INTO telco_subscriptions
+        (id, user_id, bundle_id, status, data_total_mb, data_used_mb,
+         minutes_total, minutes_used, sms_total, sms_used, activated_at, expires_at)
+        VALUES (?, ?, 'gift', 'active', ?, 0, 0, 0, 0, 0, ?, ?)
+      `).run(
+        `gift-${randomUUID().slice(0, 8)}`,
+        recipientId,
+        amountMb,
+        now.toISOString().split("T")[0],
+        expiresAt.toISOString().split("T")[0],
+      );
+    }
+
+    return {
+      success: true,
+      message: "Data shared successfully!",
+      senderBalance: this.accountToBalance(senderAccount),
+      recipientName: recipientAccount.name,
+      recipientMsisdn: recipientAccount.msisdn,
+      amountMb,
+      sourceBundleName: validation.sourceBundleName,
+      remainingMb: validation.availableMb - amountMb,
     };
   }
 }

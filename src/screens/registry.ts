@@ -24,6 +24,9 @@ const ConfirmationScreen = lazy(async () => ({
 const AccountScreen = lazy(async () => ({
   default: (await import("./AccountScreen/AccountScreen")).AccountScreen,
 }));
+const DataGiftScreen = lazy(async () => ({
+  default: (await import("./DataGiftScreen/DataGiftScreen")).DataGiftScreen,
+}));
 
 export const screenRegistry: ScreenRegistry = new Map([
   ["balance", { component: BalanceScreen, displayName: "Balance" }],
@@ -39,4 +42,5 @@ export const screenRegistry: ScreenRegistry = new Map([
     { component: ConfirmationScreen, displayName: "Confirmation" },
   ],
   ["account", { component: AccountScreen, displayName: "Account" }],
+  ["dataGift", { component: DataGiftScreen, displayName: "Data Gift" }],
 ]);
