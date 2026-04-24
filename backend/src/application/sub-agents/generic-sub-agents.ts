@@ -3,8 +3,7 @@ import type { ScreenData, ProcessingStep, ScreenType } from '../../domain/types/
 import type { Balance } from '../../domain/types/domain';
 import { ProcessingStepLabels, ConfirmationTitles } from '../../domain/constants/processing-steps'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type BffMethod = (userId: string) => Promise<any>;
+export type BffMethod = (userId: string) => Promise<unknown>;
 
 export interface SimpleQueryConfig {
   screenType: ScreenType;
