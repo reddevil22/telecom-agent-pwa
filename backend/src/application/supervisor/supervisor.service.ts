@@ -103,15 +103,15 @@ type StepYield = { label: string; status: "active" | "done" | "error" };
  */
 function getStepLabel(toolName: string): string {
   switch (toolName) {
-    case "get_balance":
+    case "check_balance":
       return "Checking your balance";
-    case "get_bundles":
+    case "list_bundles":
       return "Finding the best bundles for you";
-    case "get_usage":
+    case "check_usage":
       return "Reviewing your usage";
     case "get_support":
       return "Loading support options";
-    case "get_account":
+    case "get_account_summary":
       return "Fetching your account";
     case "purchase_bundle":
       return "Activating your bundle";
