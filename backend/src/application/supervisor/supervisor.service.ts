@@ -1056,6 +1056,14 @@ export class SupervisorService {
     return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
   }
 
+  /**
+   * Builds a flow-gate screen that blocks purchase until the user first views
+   * the bundle detail screen. This is *not* an error — it's a UX prerequisite
+   * check. ConfirmationScreenData.status only supports "pending"|"success"|"error",
+   * and "error" is the closest match for "action blocked pending prerequisite".
+   * "pending" would incorrectly trigger the requiresUserConfirmation flow
+   * (see buildResponse), which is reserved for actual confirm/cancel prompts.
+   */
   private buildPurchasePrerequisiteScreen(): {
     screenData: AgentResponse["screenData"];
     processingSteps: AgentResponse["processingSteps"];
@@ -1063,10 +1071,10 @@ export class SupervisorService {
     return {
       screenData: {
         type: "confirmation",
-        title: "Review Required",
+        title: "Action Needed",
         status: "error",
         message:
-          "Please view bundle details before confirming the purchase.",
+          "Please view the bundle details before you can confirm the purchase.",
         details: {},
         actionType: "purchase_bundle",
       },

@@ -527,7 +527,7 @@ describe("SupervisorService", () => {
       throw new Error("Expected confirmation screen");
     }
     expect(blocked.screenData.status).toBe("error");
-    expect(blocked.screenData.message).toContain("view bundle details");
+    expect(blocked.screenData.message).toContain("view the bundle details");
   });
 
   // ── Single screen: first tool call returns immediately ──
