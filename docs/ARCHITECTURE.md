@@ -137,14 +137,14 @@ backend/src/
 │
 ├── application/      # Use cases
 │   ├── supervisor/   # SupervisorService — the ReAct loop
-│   └── sub-agents/   # BalanceAgent, BundlesAgent, UsageAgent, SupportAgent
+│   └── sub-agents/   # BalanceAgent, BundlesAgent, UsageAgent, SupportAgent, DataGiftAgent
 │
 ├── adapters/
 │   ├── driving/      # Inbound
 │   │   └── rest/     # Controllers, DTOs, guards, pipes
 │   └── driven/       # Outbound
 │       ├── llm/      # OpenAI-compatible LLM adapter
-│       └── bff/      # External service adapters (balance, bundles, etc.)
+│       └── bff/      # External service adapters (balance, bundles, data-gift, etc.)
 │
 └── infrastructure/   # Cross-cutting
     ├── data/         # SQLite access (better-sqlite3)
@@ -201,8 +201,9 @@ Registered via `SupervisorService.registerAgent(toolName, agent)`. The current s
 | `get_support`         | DualQuerySubAgent         | support      |
 | `top_up`              | ActionSubAgent            | confirmation |
 | `get_account_summary` | SimpleQuerySubAgent       | account      |
+| `share_data`          | DataGiftSubAgent          | dataGift     |
 
-`purchase_bundle` and `top_up` are two-step UX flows: the backend returns a `confirmation` screen with `requiresUserConfirmation: true` and a `confirmationToken`. The frontend must send a second `SUBMIT_PROMPT` with `confirmationAction: { token, decision: "confirm" }` to execute the action.
+`purchase_bundle`, `top_up`, and `share_data` are **gated** two-step UX flows: the backend returns a review/confirmation screen with `requiresUserConfirmation: true` and a `confirmationToken`. The frontend must send a second `SUBMIT_PROMPT` with `confirmationAction: { token, decision: "confirm" }` to execute the action.
 
 `top_up` additionally has an inline variant: `BundleDetailScreen` renders a `TopUpPanel` component when balance is insufficient. The panel sends the top-up through the XState machine (same as chat), and uses a `window.__topUpPanel` callback API to receive success/error responses from the parent when the machine's screen state transitions.
 
@@ -247,7 +248,7 @@ Single endpoint: `POST /api/agent/chat`
 ```typescript
 {
   screenType: 'balance' | 'bundles' | 'bundleDetail' | 'usage'
-            | 'support' | 'confirmation' | 'unknown';
+            | 'support' | 'confirmation' | 'dataGift' | 'unknown';
   screenData: ScreenData;    // discriminated union on screenType
   replyText: string;
   suggestions: string[];

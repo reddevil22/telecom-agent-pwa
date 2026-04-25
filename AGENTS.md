@@ -38,7 +38,8 @@ backend/src/
 │       ├── generic-sub-agents.ts   # SimpleQuerySubAgent, DualQuerySubAgent, ActionSubAgent
 │       ├── purchase-bundle-sub-agent.service.ts
 │       ├── create-ticket-sub-agent.service.ts
-│       └── view-bundle-details-sub-agent.service.ts
+│       ├── view-bundle-details-sub-agent.service.ts
+│       └── data-gift-sub-agent.service.ts
 │
 ├── adapters/
 │   ├── driving/rest/        # Inbound HTTP API
@@ -51,10 +52,11 @@ backend/src/
 │   └── driven/              # Outbound
 │       ├── llm/             # OpenAI-compatible adapter
 │       └── bff/             # BFF adapters → MockTelcoService
+│           └── data-gift/   # DataGiftBffAdapter
 │
 ├── infrastructure/
 │   ├── cache/               # In-memory screen cache (5-min TTL)
-│   ├── data/                # SQLite persistence (WAL mode, migrations 001–005)
+│   ├── data/                # SQLite persistence (WAL mode, migrations 001–007)
 │   ├── telco/               # MockTelcoService — stateful telco BFF simulation
 │   └── llm/                 # LLM health monitoring (5s cache)
 │
@@ -87,6 +89,7 @@ src/
 │   ├── UsageScreen/        # Data/voice/SMS usage
 │   ├── SupportScreen/      # Tickets and FAQ
 │   ├── AccountScreen/      # Full account overview
+│   ├── DataGiftScreen/     # Data gifting review & confirmation
 │   └── registry.ts         # Screen type → component map
 ├── services/
 │   ├── agentService.ts     # REST + SSE streaming to backend
@@ -104,14 +107,19 @@ src/
 ```
 User prompt
   │
+  ├─ Data-gift pre-check: if share/gift/send/transfer data signal + amount +
+  │  recipient are present, route directly to `share_data` (deterministic, no LLM)
+  │
   ├─ Top-up pre-check: if top-up/recharge/add-credit signal + amount is present,
   │  route directly to `top_up` (deterministic, no LLM)
   │
   ├─ Tier 1: Keyword match → sub-agent directly (no LLM, confidence 1.0)
-  │   Covers: balance, usage, bundles, support, account
+  │   Covers: balance, usage, bundles, support, account, share_data keywords
   │   Keywords externalized in backend/data/intent-keywords.json
   │   Multi-match resolved by lexical specificity scoring + priority tie-breaking
   │   Skips BROWSE_BUNDLES when action signals detected (buy, purchase, order, etc.)
+  │   Skips CHECK_BALANCE / ACCOUNT_SUMMARY when top-up signals detected
+  │   Skips GET_SUPPORT when create-ticket signals detected
   │
   ├─ Tier 2: Fuzzy intent cache → Jaccard similarity on token sets (≥0.6, configurable)
   │   Min 2 tokens required. Per-user, 50-entry LRU, 5-min TTL.
@@ -165,7 +173,7 @@ POST /api/agent/chat
 
 ### Database
 
-SQLite at `backend/data/telecom.db` (auto-created). Tables: `conversations`, `messages`, `telco_accounts`, `telco_bundles_catalog`, `telco_subscriptions`, `telco_usage_records`, `telco_tickets`, `telco_faq`.
+SQLite at `backend/data/telecom.db` (auto-created). Tables: `conversations`, `messages`, `telco_accounts`, `telco_bundles_catalog`, `telco_subscriptions`, `telco_usage_records`, `telco_tickets`, `telco_faq`. Migration 007 adds `dataGift` to the `messages.screen_type` CHECK constraint.
 
 ## Build and Test
 
@@ -218,4 +226,5 @@ npx playwright test --config=playwright.demo.config.ts # demo recording
 - **Domain boundary**: Domain layer has zero NestJS imports. Ports are plain TypeScript interfaces.
 - **Single screen per request**: Supervisor returns after first successful tool call. No tool chaining.
 - **userId trust boundary**: Supervisor always passes `request.userId` to sub-agents, never LLM-parsed values.
-- **Tool whitelist**: 9 tools registered (`check_balance`, `list_bundles`, `check_usage`, `get_support`, `view_bundle_details`, `purchase_bundle`, `top_up`, `create_ticket`, `get_account_summary`).
+- **Tool whitelist**: 10 tools registered (`check_balance`, `list_bundles`, `check_usage`, `get_support`, `view_bundle_details`, `purchase_bundle`, `top_up`, `create_ticket`, `get_account_summary`, `share_data`).
+- **CSS design tokens**: All token variables use the `--color-*` prefix (e.g., `--color-primary`, `--color-bg-card`, `--color-text-primary`, `--color-success`, `--color-error`). Do not use bare names like `--primary` or `--surface` — they will resolve to transparent and break UI visibility.
