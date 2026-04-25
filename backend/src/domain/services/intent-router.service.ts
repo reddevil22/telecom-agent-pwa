@@ -104,6 +104,18 @@ export class IntentRouterService implements IntentRouterPort {
     "transfer data",
   ];
 
+  /** Phrases that indicate ticket creation intents and should bypass Tier 1 get_support keyword routing */
+  private static readonly CREATE_TICKET_SIGNALS = [
+    "create a ticket",
+    "create ticket",
+    "new ticket",
+    "submit ticket",
+    "report an issue",
+    "report a problem",
+    "file a complaint",
+    "open a ticket",
+  ];
+
   /** Deterministic tie-breaker when lexical specificity is equal */
   private static readonly INTENT_MATCH_PRIORITY: Readonly<
     Record<TelecomIntent, number>
@@ -135,6 +147,7 @@ export class IntentRouterService implements IntentRouterPort {
       lower.includes(signal),
     );
     const hasTopUpSignal = this.hasTopUpSignal(prompt);
+    const hasCreateTicketSignal = this.hasCreateTicketSignal(prompt);
 
     for (const [intentKey, keywords] of Object.entries(this.intentKeywords)) {
       const intent = intentKey as TelecomIntent;
@@ -149,6 +162,9 @@ export class IntentRouterService implements IntentRouterPort {
           intent === TelecomIntent.ACCOUNT_SUMMARY)
       )
         continue;
+      // Ticket creation prompts contain words like "ticket" and "support" that belong to
+      // the get_support keyword list. Bypass Tier 1 and let LLM create the ticket.
+      if (hasCreateTicketSignal && intent === TelecomIntent.GET_SUPPORT) continue;
 
       const matchedKeywords = keywords.filter((kw) => lower.includes(kw));
       if (matchedKeywords.length === 0) continue;
@@ -191,6 +207,13 @@ export class IntentRouterService implements IntentRouterPort {
   private hasTopUpSignal(prompt: string): boolean {
     const lower = prompt.toLowerCase();
     return IntentRouterService.TOP_UP_SIGNALS.some((signal) =>
+      lower.includes(signal),
+    );
+  }
+
+  private hasCreateTicketSignal(prompt: string): boolean {
+    const lower = prompt.toLowerCase();
+    return IntentRouterService.CREATE_TICKET_SIGNALS.some((signal) =>
       lower.includes(signal),
     );
   }
