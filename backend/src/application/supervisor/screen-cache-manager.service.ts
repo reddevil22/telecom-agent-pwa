@@ -29,6 +29,7 @@ export class ScreenCacheManager {
     purchase_bundle: ["balance", "bundles"],
     top_up: ["balance"],
     create_ticket: ["support"],
+    share_data: ["usage"],
   };
 
   /**
@@ -152,6 +153,17 @@ export class ScreenCacheManager {
         this.cache.invalidate(request.userId, screenType);
       }
       return;
+    }
+
+    // Invalidate affected screen caches for mutating actions even when the
+    // response is not a confirmation screen (e.g. share_data → dataGift screen
+    // still needs to invalidate the cached usage screen).
+    if (toolName) {
+      const impactedScreens =
+        ScreenCacheManager.CONFIRMATION_CACHE_INVALIDATION[toolName] ?? [];
+      for (const screenType of impactedScreens) {
+        this.cache.invalidate(request.userId, screenType);
+      }
     }
 
     if (ScreenCacheManager.CACHEABLE_SCREENS.has(response.screenType)) {
