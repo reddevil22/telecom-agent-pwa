@@ -362,38 +362,14 @@ export class SupervisorService {
     let processingSteps: AgentResponse["processingSteps"];
     const toolStart = Date.now();
     try {
-      if (this.isGatedTool(resolution.toolName)) {
-        const gated = this.createPendingConfirmation(
-          request,
-          resolution.toolName,
-          this.normalizeStringArgs(resolution.args),
-        );
-        screenData = gated.screenData;
-        processingSteps = gated.processingSteps;
-      } else if (
-        resolution.toolName === "purchase_bundle" &&
-        !this.hasViewedBundleForSession(
-          request.userId,
-          request.sessionId,
-          resolution.args.bundleId,
-        )
-      ) {
-        const blocked = this.buildPurchasePrerequisiteScreen();
-        screenData = blocked.screenData;
-        processingSteps = blocked.processingSteps;
-      } else {
-        const result = await subAgent.handle(request.userId, resolution.args);
-        screenData = result.screenData;
-        processingSteps = result.processingSteps;
-
-        if (resolution.toolName === "view_bundle_details") {
-          this.markViewedBundle(
-            request.userId,
-            request.sessionId,
-            resolution.args.bundleId,
-          );
-        }
-      }
+      const result = await this.executeSubAgentCore(
+        request,
+        resolution.toolName,
+        resolution.args,
+        subAgent,
+      );
+      screenData = result.screenData;
+      processingSteps = result.processingSteps;
       this.toolDegradation.recordToolSuccess(
         request.userId,
         resolution.toolName,
@@ -775,6 +751,52 @@ export class SupervisorService {
     return TOOL_TO_SCREEN[toolCall.function.name] as ScreenType | undefined;
   }
 
+  /**
+   * Shared sub-agent execution core: handles gated-tool confirmation,
+   * purchase_bundle prerequisite, sub-agent execution, and view_bundle_details
+   * marking. Returns screenData and processingSteps without toolName/screenType
+   * wrapping so both executeSubAgent and tryIntentRouter can call it.
+   */
+  private async executeSubAgentCore(
+    request: AgentRequest,
+    toolName: string,
+    parsedArgs: Record<string, string>,
+    subAgent: SubAgentPort,
+  ): Promise<{
+    screenData: AgentResponse["screenData"];
+    processingSteps: AgentResponse["processingSteps"];
+  }> {
+    if (this.isGatedTool(toolName)) {
+      return this.createPendingConfirmation(request, toolName, parsedArgs);
+    }
+
+    if (
+      toolName === "purchase_bundle" &&
+      !this.hasViewedBundleForSession(
+        request.userId,
+        request.sessionId,
+        parsedArgs.bundleId,
+      )
+    ) {
+      return this.buildPurchasePrerequisiteScreen();
+    }
+
+    const result = await subAgent.handle(request.userId, parsedArgs);
+
+    if (toolName === "view_bundle_details") {
+      this.markViewedBundle(
+        request.userId,
+        request.sessionId,
+        parsedArgs.bundleId,
+      );
+    }
+
+    return {
+      screenData: result.screenData,
+      processingSteps: result.processingSteps,
+    };
+  }
+
   private async executeSubAgent(
     request: AgentRequest,
     subAgent: SubAgentPort,
@@ -785,49 +807,12 @@ export class SupervisorService {
       JSON.parse(toolCall.function.arguments || "{}"),
     );
 
-    if (this.isGatedTool(toolCall.function.name)) {
-      const gated = this.createPendingConfirmation(
-        request,
-        toolCall.function.name,
-        parsedArgs,
-      );
-      return {
-        toolName: toolCall.function.name,
-        screenType,
-        screenData: gated.screenData,
-        processingSteps: gated.processingSteps,
-      };
-    }
-
-    if (
-      toolCall.function.name === "purchase_bundle" &&
-      !this.hasViewedBundleForSession(
-        request.userId,
-        request.sessionId,
-        parsedArgs.bundleId,
-      )
-    ) {
-      const blocked = this.buildPurchasePrerequisiteScreen();
-      return {
-        toolName: toolCall.function.name,
-        screenType,
-        screenData: blocked.screenData,
-        processingSteps: blocked.processingSteps,
-      };
-    }
-
-    const { screenData, processingSteps } = await subAgent.handle(
-      request.userId,
+    const { screenData, processingSteps } = await this.executeSubAgentCore(
+      request,
+      toolCall.function.name,
       parsedArgs,
+      subAgent,
     );
-
-    if (toolCall.function.name === "view_bundle_details") {
-      this.markViewedBundle(
-        request.userId,
-        request.sessionId,
-        parsedArgs.bundleId,
-      );
-    }
 
     return {
       toolName: toolCall.function.name,
