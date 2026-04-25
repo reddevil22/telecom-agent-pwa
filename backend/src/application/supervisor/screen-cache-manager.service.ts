@@ -31,6 +31,15 @@ export class ScreenCacheManager {
     create_ticket: ["support"],
   };
 
+  /**
+   * @param cache         Cache port for storing/retrieving screen responses
+   * @param metrics       Metrics port for recording cache hit/miss
+   * @param logger        Structured logger
+   * @param intentKeywords The **same** keyword map used by IntentRouterService,
+   *                       typically loaded from intent-keywords.json at startup.
+   *                       This shared map ensures that the cache manager's
+   *                       keyword matching is always in sync with the router.
+   */
   constructor(
     private readonly cache: ScreenCachePort | null,
     private readonly metrics: MetricsPort | null,
@@ -38,12 +47,47 @@ export class ScreenCacheManager {
     private readonly intentKeywords: IntentKeywordMap,
   ) {}
 
+  /**
+   * Attempt to serve a previously-cached screen response for the given
+   * request prompt.
+   *
+   * ## Relationship to the Intent Router
+   *
+   * This method runs **after** {@link IntentRouterService.classify} has already
+   * returned null (i.e. Tier 3 — the prompt needs the LLM). At that point the
+   * screen cache acts as a lightweight fallback:
+   *
+   * > "Is this prompt about the *same screen type* we served last time?"
+   *
+   * It re-uses `intentKeywords` — **the very same keyword map** that the intent
+   * router uses — so the two subsystems always agree on which keywords map to
+   * which screen types. Keyword changes in `intent-keywords.json` propagate to
+   * both automatically because the map is loaded once at startup and injected
+   * into both services.
+   *
+   * ## Keyword Matching Strategy
+   *
+   * Compared to the intent router's full pipeline (action-signal bypass,
+   * top-up/create-ticket signal bypass, multi-keyword scoring, intent-match
+   * priority), this method uses a deliberately simpler check:
+   *
+   * 1. Does **any** keyword for a Tier-1 intent appear in the prompt?
+   * 2. If exactly **one** screen type matches → try the cache for that type.
+   * 3. If zero or multiple screen types match → bail out (too ambiguous).
+   *
+   * The `matches.length !== 1` guard is the key conservative gate: ambiguous
+   * prompts (e.g. "buy Value Plus bundle" which hits both "bundles" and "buy"
+   * keywords) are never served from cache, avoiding false positives. The
+   * intent router's action-signal bypass would have already handled such
+   * prompts correctly.
+   */
   tryHit(request: AgentRequest): AgentResponse | null {
     if (!this.cache) {
       return null;
     }
 
-    // Quick keyword check to determine which screen type to look up.
+    // Quick keyword check — uses the same intentKeywords map as the
+    // IntentRouterService to determine which screen type the prompt targets.
     const lower = request.prompt.toLowerCase();
     const matches: ScreenType[] = [];
     for (const [intentKey, keywords] of Object.entries(this.intentKeywords)) {
@@ -56,6 +100,10 @@ export class ScreenCacheManager {
       }
     }
 
+    // Guard: only serve from cache when exactly ONE screen type matches.
+    // Zero matches → no cache candidate. Multiple matches → ambiguous prompt
+    // (the intent router would normally handle these with its scoring logic,
+    //  but if we got here it means the router already returned null).
     if (matches.length !== 1) {
       this.metrics?.recordCacheHit("screen", false);
       return null;
