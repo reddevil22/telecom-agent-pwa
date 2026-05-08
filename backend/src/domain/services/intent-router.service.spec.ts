@@ -163,6 +163,31 @@ describe("IntentRouterService", () => {
     });
   });
 
+  describe("comparison signal routing", () => {
+    it.each([
+      "compare the weekend pass and travel roaming",
+      "compare b2 vs b3",
+      "value plus versus unlimited pro",
+      "travel roaming vs weekend pass",
+      "compare b1 and b2",
+    ] as const)(
+      'returns null for "%s" (compare signal bypasses BROWSE_BUNDLES)',
+      async (prompt) => {
+        const result = await router.classify(prompt, "user-1");
+        expect(result).toBeNull();
+      },
+    );
+
+    it("still matches browse_bundles when no comparison signal is present", async () => {
+      const result = await router.classify(
+        "what bundles are available",
+        "user-1",
+      );
+      expect(result).not.toBeNull();
+      expect(result!.intent).toBe(TelecomIntent.BROWSE_BUNDLES);
+    });
+  });
+
   // ── Truly unknown input ──────────────────────────────────────
 
   describe("unknown input", () => {
