@@ -62,6 +62,8 @@ interface IterationContext {
     processingSteps: AgentResponse["processingSteps"];
   } | null;
   conversationId: string;
+  /** Tool result messages accumulated across loop iterations for multi-tool reasoning */
+  toolResultMessages: LoopMessage[];
 }
 
 interface ToolExecutionResult {
@@ -258,6 +260,7 @@ export class SupervisorService {
         messages: await this.buildInitialMessages(request),
         primaryResult: null,
         conversationId,
+        toolResultMessages: [],
       };
 
       // LLM tool dispatch loop — single tool per request (safety net for retries)
@@ -461,6 +464,8 @@ export class SupervisorService {
     iteration: number,
   ): Promise<IterationResult | null> {
     const iterStart = Date.now();
+
+    // ── First LLM call ──────────────────────────────────────────
     const llmResponse = await this.callLlm(context.messages, request.userId);
     const toolCall = llmResponse.message?.tool_calls?.[0];
 
@@ -475,13 +480,102 @@ export class SupervisorService {
       );
     }
 
-    return await this.handleToolCall(
+    // ── First tool execution ────────────────────────────────────
+    const firstResult = await this.handleToolCall(
       request,
       context,
       iteration,
       iterStart,
       toolCall,
     );
+
+    if (!firstResult) return null;
+    if (firstResult.response.errorCode) return firstResult;
+
+    const firstToolResult = this.extractToolResult(firstResult, toolCall);
+
+    // ── Second tool call (bounded ReAct) ────────────────────────
+    if (
+      iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS - 1 &&
+      firstToolResult &&
+      this.shouldDoSecondToolCall(firstToolResult, request)
+    ) {
+      const toolResultMsg: LoopMessage = {
+        role: "tool",
+        content: JSON.stringify(firstToolResult.screenData),
+        tool_call_id: toolCall.id,
+      };
+      context.toolResultMessages.push(toolResultMsg);
+
+      this.logger?.info(
+        { toolName: firstToolResult.toolName, iteration },
+        "First tool executed — proceeding to second tool call",
+      );
+
+      // Second LLM call with first tool result visible
+      const secondLlmResponse = await this.callLlm(
+        [...context.messages, ...context.toolResultMessages],
+        request.userId,
+      );
+      const secondToolCall = secondLlmResponse.message?.tool_calls?.[0];
+
+      if (secondToolCall) {
+        const secondResult = await this.handleToolCall(
+          request,
+          context,
+          iteration + 1,
+          iterStart,
+          secondToolCall,
+        );
+
+        if (secondResult && !secondResult.response.errorCode) {
+          const secondToolResult = this.extractToolResult(
+            secondResult,
+            secondToolCall,
+          );
+          if (secondToolResult) {
+            this.logger?.info(
+              {
+                firstTool: firstToolResult.toolName,
+                secondTool: secondToolResult.toolName,
+                iteration,
+              },
+              "Second tool executed — returning both results",
+            );
+            return {
+              response: this.buildResponse(
+                {
+                  screenType: secondToolResult.screenType,
+                  screenData: secondToolResult.screenData,
+                  processingSteps: secondToolResult.processingSteps,
+                },
+                [firstToolResult],
+              ),
+              toolName: secondToolResult.toolName,
+            };
+          }
+        }
+      }
+
+      // LLM saw first result but didn't call second tool — return first result
+      this.logger?.info(
+        { toolName: firstToolResult.toolName, iteration },
+        "First tool executed — LLM did not call second tool",
+      );
+      return {
+        response: this.buildResponse(
+          {
+            screenType: firstToolResult.screenType,
+            screenData: firstToolResult.screenData,
+            processingSteps: firstToolResult.processingSteps,
+          },
+          undefined,
+        ),
+        toolName: firstToolResult.toolName,
+      };
+    }
+
+    return firstResult;
   }
 
   private async callLlm(
@@ -898,11 +992,14 @@ export class SupervisorService {
     );
   }
 
-  private buildResponse(primary: {
-    screenType: ScreenType;
-    screenData: AgentResponse["screenData"];
-    processingSteps: AgentResponse["processingSteps"];
-  }): AgentResponse {
+  private buildResponse(
+    primary: {
+      screenType: ScreenType;
+      screenData: AgentResponse["screenData"];
+      processingSteps: AgentResponse["processingSteps"];
+    },
+    supplementaryResults?: ToolExecutionResult[],
+  ): AgentResponse {
     const pendingConfirmationData =
       primary.screenType === "confirmation" &&
       primary.screenData.type === "confirmation" &&
@@ -919,6 +1016,11 @@ export class SupervisorService {
       suggestions: pendingConfirmationData ? [] : SUGGESTION_MAP[primary.screenType],
       confidence: 0.95,
       processingSteps: primary.processingSteps,
+      supplementaryResults: supplementaryResults?.map((r) => ({
+        toolName: r.toolName,
+        screenType: r.screenType,
+        screenData: r.screenData,
+      })),
     };
   }
 
@@ -1234,5 +1336,53 @@ export class SupervisorService {
       userId,
       TOOL_DEFINITIONS,
     );
+  }
+
+  private extractToolResult(
+    result: IterationResult,
+    toolCall: { id: string; type: "function"; function: { name: string; arguments: string } },
+  ): ToolExecutionResult | undefined {
+    if (!result?.response) return undefined;
+    return {
+      toolName: result.toolName ?? toolCall.function.name,
+      screenType: result.response.screenType,
+      screenData: result.response.screenData,
+      processingSteps: result.response.processingSteps,
+    };
+  }
+
+  private shouldDoSecondToolCall(
+    firstToolResult: ToolExecutionResult,
+    request: AgentRequest,
+  ): boolean {
+    const prompt = request.prompt.toLowerCase();
+
+    // Condition A: comparison signal + first tool was view_bundle_details
+    const comparisonSignals = ["compare", "comparison", "versus", "vs", "difference", "which is better", "which one"];
+    const hasComparisonSignal = comparisonSignals.some((sig) => prompt.includes(sig));
+    if (hasComparisonSignal && firstToolResult.toolName === "view_bundle_details") {
+      return true;
+    }
+
+    // Condition B: first tool returned pending confirmation
+    if (
+      firstToolResult.screenType === "confirmation" &&
+      (firstToolResult.screenData as { status?: string }).status === "pending"
+    ) {
+      return true;
+    }
+
+    // Condition C: compound signal + first tool was check_balance or check_usage
+    const compoundSignals = ["and", "also", "both", "plus", "as well"];
+    const hasCompoundSignal = compoundSignals.some((sig) => prompt.includes(sig));
+    if (
+      hasCompoundSignal &&
+      (firstToolResult.toolName === "check_balance" ||
+        firstToolResult.toolName === "check_usage")
+    ) {
+      return true;
+    }
+
+    return false;
   }
 }
