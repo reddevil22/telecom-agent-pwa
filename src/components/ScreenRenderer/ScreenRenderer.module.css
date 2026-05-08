@@ -1,5 +1,86 @@
-.wrapper {
+.primaryScreen {
   width: 100%;
+}
+
+.comparisonContainer {
+  margin-top: var(--space-lg);
+}
+
+.comparisonDivider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.comparisonDivider::before,
+.comparisonDivider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.comparisonLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.comparisonGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-lg);
+}
+
+.comparisonCard {
+  position: relative;
+}
+
+.comparisonCard::before {
+  content: "vs";
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.comparisonGrid > .comparisonCard:first-child::before {
+  display: none;
+}
+
+.supplementaryList {
+  margin-top: var(--space-md);
+}
+
+.supplementaryDivider {
+  height: 1px;
+  background: var(--color-border);
+  margin-bottom: var(--space-md);
+}
+
+.supplementaryItem {
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.supplementaryItem:last-child {
+  border-bottom: none;
 }
 
 .screenExit {
