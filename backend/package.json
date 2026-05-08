@@ -2,7 +2,7 @@
   "name": "telecom-agent-backend",
   "version": "0.0.1",
   "description": "Agent-orchestrated telecom service — NestJS backend",
-  "private": true,
+  "private": false,
   "engines": {
     "node": ">=18"
   },
