@@ -84,6 +84,15 @@ export class IntentRouterService implements IntentRouterPort {
     "transfer data",
   ];
 
+  /** Phrases that indicate bundle comparison intents — bypass Tier 1 "bundles" keyword */
+  private static readonly COMPARE_SIGNALS = [
+    "compare",
+    "comparison",
+    "versus",
+    "vs",
+    "against",
+  ];
+
   /** Phrases that indicate ticket creation intents and should bypass Tier 1 get_support keyword routing */
   private static readonly CREATE_TICKET_SIGNALS = [
     "create a ticket",
@@ -128,6 +137,9 @@ export class IntentRouterService implements IntentRouterPort {
     );
     const hasTopUpSignal = this.hasTopUpSignal(prompt);
     const hasCreateTicketSignal = this.hasCreateTicketSignal(prompt);
+    const hasCompareSignal = IntentRouterService.COMPARE_SIGNALS.some((signal) =>
+      lower.includes(signal),
+    );
 
     for (const [intentKey, keywords] of Object.entries(this.intentKeywords)) {
       const intent = intentKey as TelecomIntent;
@@ -145,6 +157,9 @@ export class IntentRouterService implements IntentRouterPort {
       // Ticket creation prompts contain words like "ticket" and "support" that belong to
       // the get_support keyword list. Bypass Tier 1 and let LLM create the ticket.
       if (hasCreateTicketSignal && intent === TelecomIntent.GET_SUPPORT) continue;
+      // Comparison phrases ("compare", "vs") should fall through to LLM so the 2-tool ReAct
+      // loop can gather both bundle details. Bypass the Tier 1 "bundles" keyword match.
+      if (hasCompareSignal && intent === TelecomIntent.BROWSE_BUNDLES) continue;
 
       const matchedKeywords = keywords.filter((kw) => lower.includes(kw));
       if (matchedKeywords.length === 0) continue;
