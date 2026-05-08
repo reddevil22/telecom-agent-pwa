@@ -23,7 +23,6 @@ import {
   DATA_GIFT_BFF_PORT,
   CONVERSATION_STORAGE_PORT,
   SCREEN_CACHE_PORT,
-  INTENT_CACHE_PORT,
   METRICS_PORT,
   RATE_LIMITER_PORT,
   INTENT_ROUTING_CONFIG,
@@ -38,14 +37,12 @@ import type {
 } from "./domain/ports/bff-ports";
 import type { ConversationStoragePort } from "./domain/ports/conversation-storage.port";
 import type { ScreenCachePort } from "./domain/ports/screen-cache.port";
-import type { IntentCachePort } from "./domain/ports/intent-cache.port";
 import type { MetricsPort } from "./domain/ports/metrics.port";
 import type { RateLimiterPort } from "./domain/ports/rate-limiter.port";
 import { ScreenCacheModule } from "./infrastructure/cache/screen-cache.module";
 import { MockTelcoModule } from "./infrastructure/telco/mock-telco.module";
 import { MockTelcoService } from "./infrastructure/telco/mock-telco.service";
 import { IntentRouterService } from "./domain/services/intent-router.service";
-import { IntentCacheService } from "./application/supervisor/intent-cache.service";
 import { CircuitBreakerService } from "./domain/services/circuit-breaker.service";
 import { loadIntentRoutingConfig } from "./config/intent-routing.config";
 import { createBillingAgentRegistrations } from "./application/sub-agents/billing-agents.provider";
@@ -94,15 +91,6 @@ function registerSubAgents(
       inject: [ConfigService, PinoLogger],
     },
     {
-      provide: INTENT_CACHE_PORT,
-      useFactory: (config: ConfigService): IntentCachePort => {
-        return new IntentCacheService(
-          config.get<number>("INTENT_CACHE_THRESHOLD"),
-        );
-      },
-      inject: [ConfigService],
-    },
-    {
       provide: METRICS_PORT,
       useFactory: (): MetricsPort => new SimpleMetricsAdapter(),
     },
@@ -115,16 +103,14 @@ function registerSubAgents(
     {
       provide: IntentRouterService,
       useFactory: (
-        intentCache: IntentCachePort,
         intentRoutingConfig: IntentRoutingConfig,
       ): IntentRouterService => {
         return new IntentRouterService(
-          intentCache,
           intentRoutingConfig.keywords,
           intentRoutingConfig.actionSignals,
         );
       },
-      inject: [INTENT_CACHE_PORT, INTENT_ROUTING_CONFIG],
+      inject: [INTENT_ROUTING_CONFIG],
     },
     {
       provide: SupervisorService,

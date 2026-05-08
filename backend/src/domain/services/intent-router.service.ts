@@ -1,24 +1,22 @@
 import type { IntentRouterPort } from "../ports/intent-router.port";
-import type { IntentCachePort } from "../ports/intent-cache.port";
 import type { IntentResolution } from "../types/intent";
 import {
   TelecomIntent,
-  TIER1_INTENTS,
   INTENT_TOOL_MAP,
   INTENT_KEYWORDS,
   type IntentKeywordMap,
-  type Tier1Intent,
 } from "../types/intent";
 
 /**
- * Three-tier intent classification:
+ * Two-tier intent classification:
  *   Tier 1 — exact keyword match (no LLM needed)
- *   Tier 2 — fuzzy intent cache (no LLM needed)
- *   Tier 3 — returns null (caller falls through to LLM)
+ *   Tier 2 — LLM fallback (caller handles)
+ *
+ * Deterministic handlers (data-gift, top-up, purchase) run before Tier 1
+ * and bypass LLM when they have complete entity information.
  */
 export class IntentRouterService implements IntentRouterPort {
   constructor(
-    private readonly cache: IntentCachePort,
     private readonly intentKeywords: IntentKeywordMap = INTENT_KEYWORDS,
     private readonly actionSignals: readonly string[] = IntentRouterService.DEFAULT_ACTION_SIGNALS,
   ) {}
@@ -39,30 +37,12 @@ export class IntentRouterService implements IntentRouterPort {
     const purchase = this.purchaseIntentMatch(prompt, userId);
     if (purchase) return purchase;
 
-    // Tier 1: Exact keyword match
+    // Tier 1: Exact keyword match — returns null if no match (caller falls through to LLM)
     const tier1 = this.tier1KeywordMatch(prompt, userId);
     if (tier1) return tier1;
 
-    // Top-up prompts often contain "account" or "credit" and must bypass Tier 2 cache
-    // to avoid stale account/balance intent matches.
-    if (this.hasTopUpSignal(prompt)) return null;
-
-    // Tier 2: Fuzzy intent cache
-    const tier2 = this.tier2FuzzyCache(prompt, userId);
-    if (tier2) return tier2;
-
-    // Tier 3: Caller falls through to LLM
+    // Tier 2: No match — caller handles via LLM
     return null;
-  }
-
-  /**
-   * Store a successful LLM classification into the fuzzy cache.
-   * Only Tier 1-eligible intents are cached (no entity-extraction intents).
-   */
-  cacheLlmResult(userId: string, prompt: string, intent: TelecomIntent): void {
-    if (TIER1_INTENTS.has(intent as Tier1Intent)) {
-      this.cache.store(userId, prompt, intent);
-    }
   }
 
   /** Words that signal a purchase/action intent requiring entity extraction */
@@ -216,21 +196,6 @@ export class IntentRouterService implements IntentRouterPort {
     return IntentRouterService.CREATE_TICKET_SIGNALS.some((signal) =>
       lower.includes(signal),
     );
-  }
-
-  private tier2FuzzyCache(
-    prompt: string,
-    userId: string,
-  ): IntentResolution | null {
-    const cached = this.cache.findBestMatch(userId, prompt);
-    if (!cached) return null;
-
-    return {
-      intent: cached.intent,
-      toolName: INTENT_TOOL_MAP[cached.intent],
-      args: { userId },
-      confidence: cached.confidence,
-    };
   }
 
   private topUpIntentMatch(

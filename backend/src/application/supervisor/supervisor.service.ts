@@ -283,7 +283,6 @@ export class SupervisorService {
             iterationResult.response,
             iterationResult.toolName,
           );
-          this.cacheIntentResult(request, iterationResult.response);
           this.persistAgentResponse(conversationId, iterationResult.response);
           yield iterationResult.response;
           return;
@@ -321,7 +320,7 @@ export class SupervisorService {
     this.metrics?.recordCacheHit("intent", resolution.confidence < 1.0);
 
     this.metrics?.recordIntentResolution(
-      resolution.confidence === 1.0 ? 1 : 2,
+      resolution.confidence === 1.0 ? 1 : 3,
       resolution.intent,
       Date.now() - intentStart,
     );
@@ -331,7 +330,7 @@ export class SupervisorService {
         intent: resolution.intent,
         toolName: resolution.toolName,
         confidence: resolution.confidence,
-        tier: resolution.confidence === 1.0 ? "keyword" : "fuzzy",
+        tier: resolution.confidence === 1.0 ? "keyword" : "llm",
       },
       "Intent router resolved — skipping LLM",
     );
@@ -422,25 +421,6 @@ export class SupervisorService {
     this.screenCacheManager.store(request, response, resolution.toolName);
     this.persistAgentResponse(conversationId, response);
     yield response;
-  }
-
-  private cacheIntentResult(
-    request: AgentRequest,
-    response: AgentResponse,
-  ): void {
-    if (!this.intentRouter) return;
-
-    // Find the TelecomIntent for this screen type (reverse lookup)
-    for (const [intent, toolName] of Object.entries(INTENT_TOOL_MAP)) {
-      if (TOOL_TO_SCREEN[toolName] === response.screenType) {
-        this.intentRouter.cacheLlmResult(
-          request.userId,
-          request.prompt,
-          intent as TelecomIntent,
-        );
-        return;
-      }
-    }
   }
 
   private initializeConversation(request: AgentRequest): string {

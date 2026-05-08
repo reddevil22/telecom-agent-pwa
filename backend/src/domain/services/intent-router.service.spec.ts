@@ -1,17 +1,11 @@
 import { IntentRouterService } from "./intent-router.service";
-import { TelecomIntent, TIER1_INTENTS, INTENT_TOOL_MAP } from "../types/intent";
-import type { IntentCachePort } from "../ports/intent-cache.port";
+import { TelecomIntent, INTENT_TOOL_MAP } from "../types/intent";
 
 describe("IntentRouterService", () => {
   let router: IntentRouterService;
-  let mockCache: { findBestMatch: jest.Mock; store: jest.Mock };
 
   beforeEach(() => {
-    mockCache = {
-      findBestMatch: jest.fn().mockReturnValue(null),
-      store: jest.fn(),
-    };
-    router = new IntentRouterService(mockCache as IntentCachePort);
+    router = new IntentRouterService();
   });
 
   // ── Tier 1: Exact keyword matching ───────────────────────────
@@ -69,7 +63,6 @@ describe("IntentRouterService", () => {
 
     it("supports configurable action signal phrases", async () => {
       const customRouter = new IntentRouterService(
-        mockCache as IntentCachePort,
         {
           [TelecomIntent.CHECK_BALANCE]: ["balance"],
           [TelecomIntent.CHECK_USAGE]: ["usage"],
@@ -88,47 +81,7 @@ describe("IntentRouterService", () => {
     });
   });
 
-  // ── Tier 2: Fuzzy cache fallback ─────────────────────────────
-
-  describe("Tier 2 — fuzzy cache fallback", () => {
-    it("returns cached result when Tier 1 does not match", async () => {
-      mockCache.findBestMatch.mockReturnValue({
-        intent: TelecomIntent.CHECK_BALANCE,
-        confidence: 0.75,
-      });
-
-      // "funds left" — no exact keyword match, but cache has a fuzzy hit
-      const result = await router.classify("funds left on my number", "user-1");
-      expect(result).not.toBeNull();
-      expect(result!.intent).toBe(TelecomIntent.CHECK_BALANCE);
-      expect(result!.confidence).toBe(0.75);
-      expect(result!.toolName).toBe("check_balance");
-    });
-
-    it("passes tokenized prompt to cache", async () => {
-      mockCache.findBestMatch.mockReturnValue(null);
-      await router.classify("some random prompt", "user-1");
-      expect(mockCache.findBestMatch).toHaveBeenCalled();
-    });
-
-    it("ignores cached account intent for top-up phrasing and routes to top_up", async () => {
-      mockCache.findBestMatch.mockReturnValue({
-        intent: TelecomIntent.ACCOUNT_SUMMARY,
-        confidence: 0.9,
-      });
-
-      const result = await router.classify(
-        "top up my account by 5 dollars",
-        "user-1",
-      );
-      expect(result).not.toBeNull();
-      expect(result!.intent).toBe(TelecomIntent.TOP_UP);
-      expect(result!.toolName).toBe(INTENT_TOOL_MAP[TelecomIntent.TOP_UP]);
-      expect(result!.args).toEqual({ userId: "user-1", amount: "5" });
-    });
-  });
-
-  // ── Tier 3: Entity-extraction intents always bypass ──────────
+  // ── Entity-extraction intents always route to LLM ──────────
 
   describe("Tier 3 — entity-extraction intents route to LLM when no keyword match", () => {
     it.each([
@@ -219,7 +172,6 @@ describe("IntentRouterService", () => {
     });
 
     it("returns null for non-telecom queries", async () => {
-      mockCache.findBestMatch.mockReturnValue(null);
       const result = await router.classify(
         "what is the weather today",
         "user-1",
