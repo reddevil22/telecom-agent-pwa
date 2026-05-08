@@ -1,16 +1,61 @@
-# Project Guidelines
+# Telecom Agent PWA
+
+> AI-powered telecom customer service PWA built with React 19, NestJS, and XState v5
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-blue.svg)](https://react.dev/)
+[![NestJS](https://img.shields.io/badge/NestJS-11-blue.svg)](https://nestjs.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Open Source](https://img.shields.io/badge/Open%20Source-Yes-brightgreen.svg)](https://github.com/reddevil22/telecom-agent-pwa)
 
 ## Overview
 
-Telecom Agent PWA — an AI-powered telecom customer service app with a React 19 frontend and NestJS backend. The backend orchestrates LLM-powered agents via a three-tier intent routing system with circuit breaker resilience.
+Telecom Agent PWA is an AI-powered customer service application. Users type natural-language requests ("show my balance", "what bundles are available?") and get rich screen responses — balances, bundle catalogs, usage charts, support tickets. It runs as a PWA (installable, offline-capable).
 
 ## Tech Stack
 
-- **Frontend**: React 19 + TypeScript (strict) + Vite 8 + XState v5 + CSS Modules
-- **Backend**: NestJS 11 + TypeScript (strict) + SQLite (better-sqlite3) + Pino logging
-- **LLM**: OpenAI-compatible API. GLM-5.1 used during development. Configurable via `LLM_*` / `DASHSCOPE_*` env vars.
-- **Testing**: Jest (backend unit + e2e), Playwright (frontend e2e)
-- **Styling**: CSS Modules with design tokens (`theme/tokens.css`). DM Sans (body), DM Serif Display (headings). No CSS-in-JS.
+| Layer         | Technology                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------- |
+| Frontend      | React 19, TypeScript (strict), Vite 8, XState v5, CSS Modules                                          |
+| Backend       | NestJS 11, TypeScript (strict), SQLite (better-sqlite3), Pino logging                                  |
+| LLM           | OpenAI-compatible API. Configurable via `LLM_*` / `DASHSCOPE_*` env vars.                               |
+| E2E Tests     | Playwright                                                                                              |
+| Backend Tests | Jest + Supertest                                                                                        |
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- An OpenAI-compatible LLM server (e.g., llama-server) running on port 8080
+
+### Frontend
+
+```bash
+npm install
+cp .env.example .env
+npm run dev        # http://127.0.0.1:5173
+npm run build      # Production build
+```
+
+### Backend
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+npm run start:dev  # http://localhost:3001
+```
+
+### Running Tests
+
+```bash
+# Frontend E2E
+npx playwright test
+
+# Backend unit tests
+cd backend && npm test
+```
 
 ## Architecture
 
@@ -63,7 +108,7 @@ backend/src/
 ├── config/                  # ConfigModule, env validation, intent-routing config loader
 ├── app.agent-module.ts      # Wires ports, adapters, sub-agents, IntentRouter, CircuitBreaker
 ├── app.module.ts            # Root: ConfigModule + AgentModule + SqliteDataModule (+ global interceptor/filter providers)
-└── main.ts                  # Bootstrap: ValidationPipe (whitelist+forbid), CORS (routes are explicitly /api/* at controller level)
+└── main.ts                  # Bootstrap: ValidationPipe (whitelist+forbid), CORS
 ```
 
 ### Frontend — React + XState
@@ -160,9 +205,9 @@ POST /api/agent/chat
 | -------------------------- | ------ | -------------------------------------------- |
 | `/api/agent/chat`          | POST   | Process prompt, return AgentResponse         |
 | `/api/agent/chat/stream`   | POST   | SSE streaming (step + result + error events) |
-| `/api/agent/status`        | GET    | LLM availability and circuit state           |
+| `/api/agent/status`        | GET    | LLM availability and circuit state            |
 | `/api/agent/quick-actions` | GET    | Quick-action button config (cached 5 min)    |
-| `/api/history/sessions`    | GET    | List user's conversation sessions            |
+| `/api/history/sessions`    | GET    | List user's conversation sessions             |
 | `/api/history/session/:id` | GET    | Get specific conversation                    |
 | `/api/history/session/:id` | DELETE | Soft-delete a conversation                   |
 | `/api/health/llm`          | GET    | LLM server health check                      |
@@ -174,27 +219,6 @@ POST /api/agent/chat
 ### Database
 
 SQLite at `backend/data/telecom.db` (auto-created). Tables: `conversations`, `messages`, `telco_accounts`, `telco_bundles_catalog`, `telco_subscriptions`, `telco_usage_records`, `telco_tickets`, `telco_faq`. Migration 007 adds `dataGift` to the `messages.screen_type` CHECK constraint.
-
-## Build and Test
-
-```bash
-# Frontend
-npm install              # install frontend deps
-npm run dev              # Vite dev server on 127.0.0.1:5173
-npm run build            # tsc -b && vite build
-npm run lint             # eslint
-
-# Backend (run from backend/)
-npm install
-npm test                 # Jest unit tests
-npm run test:e2e         # Jest integration tests (test/jest-e2e.json)
-npm run start:dev        # NestJS watch mode
-
-# E2E (Playwright — run from root)
-npx playwright test                                    # all specs
-npx playwright test e2e/degraded-mode.spec.ts          # degraded mode
-npx playwright test --config=playwright.demo.config.ts # demo recording
-```
 
 ## Environment Variables
 
