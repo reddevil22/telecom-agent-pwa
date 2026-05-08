@@ -64,6 +64,8 @@ interface IterationContext {
   conversationId: string;
   /** Tool result messages accumulated across loop iterations for multi-tool reasoning */
   toolResultMessages: LoopMessage[];
+  /** Cumulative token usage across all LLM calls in this request */
+  totalTokensUsed: number;
 }
 
 interface ToolExecutionResult {
@@ -261,6 +263,7 @@ export class SupervisorService {
         primaryResult: null,
         conversationId,
         toolResultMessages: [],
+        totalTokensUsed: 0,
       };
 
       // LLM tool dispatch loop — single tool per request (safety net for retries)
@@ -466,7 +469,7 @@ export class SupervisorService {
     const iterStart = Date.now();
 
     // ── First LLM call ──────────────────────────────────────────
-    const llmResponse = await this.callLlm(context.messages, request.userId);
+    const llmResponse = await this.callLlm(context.messages, request.userId, context);
     const toolCall = llmResponse.message?.tool_calls?.[0];
 
     this.checkForInstructionLeak(iteration, llmResponse, toolCall);
@@ -495,7 +498,11 @@ export class SupervisorService {
     const firstToolResult = this.extractToolResult(firstResult, toolCall);
 
     // ── Second tool call (bounded ReAct) ────────────────────────
+    // Only proceed if: iteration room available, conditions met, AND token budget not exceeded
+    const withinTokenBudget =
+      context.totalTokensUsed < SECURITY_LIMITS.SUPERVISOR_MAX_TOKENS_PER_REQUEST;
     if (
+      withinTokenBudget &&
       iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS - 1 &&
       firstToolResult &&
       this.shouldDoSecondToolCall(firstToolResult, request)
@@ -516,6 +523,7 @@ export class SupervisorService {
       const secondLlmResponse = await this.callLlm(
         [...context.messages, ...context.toolResultMessages],
         request.userId,
+        context,
       );
       const secondToolCall = secondLlmResponse.message?.tool_calls?.[0];
 
@@ -581,36 +589,36 @@ export class SupervisorService {
   private async callLlm(
     messages: LoopMessage[],
     userId: string,
+    context: IterationContext,
   ): Promise<LlmChatResponse> {
     try {
       const llmStart = Date.now();
-      return await this.llm
-        .chatCompletion({
-          model: this.modelName,
-          messages: messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-          })),
-          tools: this.getEnabledToolDefinitions(userId),
-          tool_choice: "auto",
-          temperature: this.temperature,
-          max_tokens: this.maxTokens,
-        })
-        .then((response) => {
-          this.metrics?.recordLlmCall(
-            this.modelName,
-            (response.usage?.prompt_tokens ?? 0) +
-              (response.usage?.completion_tokens ?? 0),
-            Date.now() - llmStart,
-          );
-          this.metrics?.recordIntentResolution(
-            3,
-            "llm_fallback",
-            Date.now() - llmStart,
-          );
-          return response;
-        });
+      const response = await this.llm.chatCompletion({
+        model: this.modelName,
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+        })),
+        tools: this.getEnabledToolDefinitions(userId),
+        tool_choice: "auto",
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+      });
+
+      const tokensUsed =
+        (response.usage?.prompt_tokens ?? 0) +
+        (response.usage?.completion_tokens ?? 0);
+      context.totalTokensUsed += tokensUsed;
+
+      this.metrics?.recordLlmCall(this.modelName, tokensUsed, Date.now() - llmStart);
+      this.metrics?.recordIntentResolution(
+        3,
+        "llm_fallback",
+        Date.now() - llmStart,
+      );
+
+      return response;
     } catch {
       throw new LlmCallError("LLM call failed");
     }
