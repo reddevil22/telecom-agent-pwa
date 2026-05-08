@@ -17,6 +17,7 @@ import type { PinoLogger } from "nestjs-pino";
 import type { ConversationStoragePort } from "../../domain/ports/conversation-storage.port";
 import type { SubAgentPort } from "../../domain/ports/sub-agent.port";
 import type { ScreenCachePort } from "../../domain/ports/screen-cache.port";
+import type { BffResponseCachePort } from "../../domain/ports/bff-response-cache.port";
 import type { MetricsPort } from "../../domain/ports/metrics.port";
 import type { IntentRouterService } from "../../domain/services/intent-router.service";
 import type { CircuitBreakerService } from "../../domain/services/circuit-breaker.service";
@@ -142,6 +143,7 @@ export class SupervisorService {
   private readonly toolDegradation: ToolDegradationService;
   private readonly toolValidation: ToolValidationService;
   private readonly screenCacheManager: ScreenCacheManager;
+  private readonly bffResponseCache: BffResponseCachePort | null;
   private readonly dataGiftBff: DataGiftBffPort | null;
   private readonly pendingConfirmations = new Map<
     string,
@@ -165,6 +167,7 @@ export class SupervisorService {
     toolDegradation?: ToolDegradationService,
     toolValidation?: ToolValidationService,
     screenCacheManager?: ScreenCacheManager,
+    bffResponseCache?: BffResponseCachePort,
     dataGiftBff?: DataGiftBffPort,
   ) {
     this.toolResolver = new ToolResolver();
@@ -187,6 +190,7 @@ export class SupervisorService {
         intentKeywords,
       );
     this.dataGiftBff = dataGiftBff ?? null;
+    this.bffResponseCache = bffResponseCache ?? null;
     this.logger?.setContext(SupervisorService.name);
   }
 
@@ -865,6 +869,19 @@ export class SupervisorService {
       return this.buildPurchasePrerequisiteScreen();
     }
 
+    // Try BFF response cache for stable read-only tools
+    const cached = this.bffResponseCache?.get(request.userId, toolName);
+    if (cached) {
+      this.logger?.debug(
+        { toolName, userId: request.userId },
+        "BFF response cache hit",
+      );
+      return {
+        screenData: cached.screenData,
+        processingSteps: cached.processingSteps,
+      };
+    }
+
     const result = await subAgent.handle(request.userId, request.sessionId, parsedArgs);
 
     if (toolName === "view_bundle_details") {
@@ -874,6 +891,9 @@ export class SupervisorService {
         parsedArgs.bundleId,
       );
     }
+
+    // Cache stable tool results for next request
+    this.bffResponseCache?.set(request.userId, toolName, result as unknown as AgentResponse);
 
     return {
       screenData: result.screenData,
@@ -1224,6 +1244,13 @@ export class SupervisorService {
         true,
         Date.now() - toolStart,
       );
+
+      // Invalidate BFF cache after write operations
+      this.bffResponseCache?.invalidate(request.userId, pending.toolName);
+      if (pending.toolName === "top_up") {
+        this.bffResponseCache?.invalidate(request.userId, "check_balance");
+        this.bffResponseCache?.invalidate(request.userId, "get_account_summary");
+      }
 
       return {
         response: this.buildResponse({

@@ -23,6 +23,7 @@ import {
   DATA_GIFT_BFF_PORT,
   CONVERSATION_STORAGE_PORT,
   SCREEN_CACHE_PORT,
+  BFF_RESPONSE_CACHE_PORT,
   METRICS_PORT,
   RATE_LIMITER_PORT,
   INTENT_ROUTING_CONFIG,
@@ -39,7 +40,9 @@ import type { ConversationStoragePort } from "./domain/ports/conversation-storag
 import type { ScreenCachePort } from "./domain/ports/screen-cache.port";
 import type { MetricsPort } from "./domain/ports/metrics.port";
 import type { RateLimiterPort } from "./domain/ports/rate-limiter.port";
+import type { BffResponseCachePort } from "./domain/ports/bff-response-cache.port";
 import { ScreenCacheModule } from "./infrastructure/cache/screen-cache.module";
+import { BffResponseCacheAdapter } from "./infrastructure/cache/bff-response-cache.adapter";
 import { MockTelcoModule } from "./infrastructure/telco/mock-telco.module";
 import { MockTelcoService } from "./infrastructure/telco/mock-telco.service";
 import { IntentRouterService } from "./domain/services/intent-router.service";
@@ -101,6 +104,12 @@ function registerSubAgents(
       },
     },
     {
+      provide: BFF_RESPONSE_CACHE_PORT,
+      useFactory: (): BffResponseCacheAdapter => {
+        return new BffResponseCacheAdapter();
+      },
+    },
+    {
       provide: IntentRouterService,
       useFactory: (
         intentRoutingConfig: IntentRoutingConfig,
@@ -129,6 +138,7 @@ function registerSubAgents(
         intentRoutingConfig: IntentRoutingConfig,
         telcoService: MockTelcoService,
         metrics: MetricsPort,
+        bffResponseCache: BffResponseCachePort,
       ) => {
         const provider = config.get<string>("LLM_PROVIDER") ?? "local";
         const modelName =
@@ -153,6 +163,7 @@ function registerSubAgents(
           undefined,
           undefined,
           undefined,
+          bffResponseCache,
           dataGiftBff,
         );
 
@@ -194,6 +205,7 @@ function registerSubAgents(
         INTENT_ROUTING_CONFIG,
         MockTelcoService,
         METRICS_PORT,
+        BFF_RESPONSE_CACHE_PORT,
       ],
     },
   ],
