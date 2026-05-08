@@ -18,7 +18,7 @@ describe("SimpleQuerySubAgent", () => {
       transformResult,
     });
 
-    const result = await agent.handle("user-1");
+    const result = await agent.handle("user-1", "session-1");
 
     expect(result.screenData.type).toBe("balance");
     expect(result.screenData).toMatchObject({
@@ -39,7 +39,7 @@ describe("SimpleQuerySubAgent", () => {
       transformResult: (result: unknown) => ({ usage: result }),
     });
 
-    const result = await agent.handle("user-42");
+    const result = await agent.handle("user-42", "session-1");
 
     expect(bffMethod).toHaveBeenCalledWith("user-42");
     expect(result.processingSteps).toHaveLength(3);
@@ -56,7 +56,7 @@ describe("SimpleQuerySubAgent", () => {
       transformResult: (result: unknown) => ({ balance: result }),
     });
 
-    await expect(agent.handle("user-1")).rejects.toThrow("BFF failed");
+    await expect(agent.handle("user-1", "session-1")).rejects.toThrow("BFF failed");
   });
 });
 
@@ -98,7 +98,7 @@ describe("ActionSubAgent", () => {
   it("returns error confirmation when validation fails", async () => {
     const agent = makeAgent();
 
-    const result = await agent.handle("user-1", {});
+    const result = await agent.handle("user-1", "session-1", {});
 
     expect(result.screenData).toMatchObject({
       type: "confirmation",
@@ -144,7 +144,7 @@ describe("ActionSubAgent", () => {
     });
 
     const agent = makeAgent({ executeAction });
-    const result = await agent.handle("user-1", { amount: "5" });
+    const result = await agent.handle("user-1", "session-1", { amount: "5" });
 
     expect(result.screenData).toMatchObject({
       type: "confirmation",
@@ -162,10 +162,10 @@ describe("ActionSubAgent", () => {
       },
     });
 
-    const resultWithUpdating = await withUpdating.handle("user-1", {
+    const resultWithUpdating = await withUpdating.handle("user-1", "session-1", {
       amount: "5",
     });
-    const resultWithoutUpdating = await withoutUpdating.handle("user-1", {
+    const resultWithoutUpdating = await withoutUpdating.handle("user-1", "session-1", {
       amount: "5",
     });
 
@@ -194,7 +194,7 @@ describe("DualQuerySubAgent", () => {
       transformResult: (tickets, faqItems) => ({ tickets, faqItems }),
     });
 
-    const result = await agent.handle("user-1");
+    const result = await agent.handle("user-1", "session-1");
 
     expect(primary).toHaveBeenCalledWith("user-1");
     expect(secondary).toHaveBeenCalledWith("user-1");
@@ -222,7 +222,7 @@ describe("DualQuerySubAgent", () => {
       transformResult: (tickets, faqItems) => ({ tickets, faqItems }),
     });
 
-    await expect(agent.handle("user-1")).rejects.toThrow("primary failed");
+    await expect(agent.handle("user-1", "session-1")).rejects.toThrow("primary failed");
   });
 
   it("propagates error if secondary bff fails", async () => {
@@ -240,6 +240,6 @@ describe("DualQuerySubAgent", () => {
       transformResult: (tickets, faqItems) => ({ tickets, faqItems }),
     });
 
-    await expect(agent.handle("user-1")).rejects.toThrow("secondary failed");
+    await expect(agent.handle("user-1", "session-1")).rejects.toThrow("secondary failed");
   });
 });

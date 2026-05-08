@@ -5,7 +5,7 @@ import type { ScreenData, ProcessingStep } from '../../domain/types/agent';
 export class CreateTicketSubAgent implements SubAgentPort {
   constructor(private readonly supportBff: SupportBffPort) {}
 
-  async handle(userId: string, params?: Record<string, string>): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
+  async handle(userId: string, _sessionId: string, params?: Record<string, string>): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
     const subject = params?.['subject'] ?? 'General Inquiry';
     const description = params?.['description'] ?? '';
 

@@ -19,7 +19,7 @@ export class SimpleQuerySubAgent implements SubAgentPort {
     private readonly config: SimpleQueryConfig,
   ) {}
 
-  async handle(userId: string): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
+  async handle(userId: string, _sessionId: string): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
     const result = await this.bffMethod(userId);
 
     return {
@@ -58,7 +58,7 @@ export class ActionSubAgent<TParams extends Record<string, string>> implements S
     private readonly config: ActionConfig<TParams>,
   ) {}
 
-  async handle(userId: string, params?: Record<string, string>): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
+  async handle(userId: string, _sessionId: string, params?: Record<string, string>): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
     const validation = this.config.validateParams(params);
 
     if (!validation.isValid) {
@@ -117,7 +117,7 @@ export class DualQuerySubAgent implements SubAgentPort {
     private readonly config: DualQueryConfig,
   ) {}
 
-  async handle(userId: string): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
+  async handle(userId: string, _sessionId: string): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
     const [primary, secondary] = await Promise.all([
       this.primaryBffMethod(userId),
       this.secondaryBffMethod(userId),

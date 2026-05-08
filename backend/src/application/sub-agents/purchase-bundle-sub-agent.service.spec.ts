@@ -8,7 +8,7 @@ describe("PurchaseBundleSubAgent", () => {
     };
 
     const agent = new PurchaseBundleSubAgent(bundlesBff as never);
-    const result = await agent.handle("user-1");
+    const result = await agent.handle("user-1", "session-1");
 
     expect(result.screenData).toMatchObject({
       type: "confirmation",
@@ -28,7 +28,7 @@ describe("PurchaseBundleSubAgent", () => {
     };
 
     const agent = new PurchaseBundleSubAgent(bundlesBff as never);
-    const result = await agent.handle("user-1", { bundleId: "" });
+    const result = await agent.handle("user-1", "session-1", { bundleId: "" });
 
     expect(result.screenData).toMatchObject({
       type: "confirmation",
@@ -64,7 +64,7 @@ describe("PurchaseBundleSubAgent", () => {
     };
 
     const agent = new PurchaseBundleSubAgent(bundlesBff as never);
-    const result = await agent.handle("user-1", { bundleId: "b4" });
+    const result = await agent.handle("user-1", "session-1", { bundleId: "b4" });
 
     expect(bundlesBff.purchaseBundle).toHaveBeenCalledWith("user-1", "b4");
     expect(result.screenData).toMatchObject({
@@ -92,7 +92,7 @@ describe("PurchaseBundleSubAgent", () => {
     };
 
     const agent = new PurchaseBundleSubAgent(bundlesBff as never);
-    const result = await agent.handle("user-1", { bundleId: "b4" });
+    const result = await agent.handle("user-1", "session-1", { bundleId: "b4" });
 
     expect(result.screenData).toMatchObject({
       type: "confirmation",

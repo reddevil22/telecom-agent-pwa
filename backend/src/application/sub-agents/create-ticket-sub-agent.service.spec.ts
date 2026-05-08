@@ -14,7 +14,7 @@ describe("CreateTicketSubAgent", () => {
     };
 
     const agent = new CreateTicketSubAgent(supportBff as never);
-    const result = await agent.handle("user-1", {
+    const result = await agent.handle("user-1", "session-1", {
       subject: "Billing mismatch",
       description: "Charged twice",
     });
@@ -45,7 +45,7 @@ describe("CreateTicketSubAgent", () => {
     };
 
     const agent = new CreateTicketSubAgent(supportBff as never);
-    await agent.handle("user-1");
+    await agent.handle("user-1", "session-1");
 
     expect(supportBff.createTicket).toHaveBeenCalledWith(
       "user-1",
@@ -67,7 +67,7 @@ describe("CreateTicketSubAgent", () => {
     };
 
     const agent = new CreateTicketSubAgent(supportBff as never);
-    const result = await agent.handle("user-1", {
+    const result = await agent.handle("user-1", "session-1", {
       subject: "Network issue",
       description: "No signal",
     });
@@ -94,7 +94,7 @@ describe("CreateTicketSubAgent", () => {
     const agent = new CreateTicketSubAgent(supportBff as never);
 
     await expect(
-      agent.handle("user-1", {
+      agent.handle("user-1", "session-1", {
         subject: "Network issue",
         description: "No signal",
       }),

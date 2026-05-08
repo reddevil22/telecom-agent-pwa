@@ -9,7 +9,7 @@ describe("ViewBundleDetailsSubAgent", () => {
       bundlesBff as never,
       balanceBff as never,
     );
-    const result = await agent.handle("user-1");
+    const result = await agent.handle("user-1", "session-1");
 
     expect(result.screenData).toEqual({ type: "unknown" });
     expect(result.processingSteps).toEqual([
@@ -26,7 +26,7 @@ describe("ViewBundleDetailsSubAgent", () => {
       bundlesBff as never,
       balanceBff as never,
     );
-    const result = await agent.handle("user-1", { bundleId: "b99" });
+    const result = await agent.handle("user-1", "session-1", { bundleId: "b99" });
 
     expect(result.screenData).toEqual({ type: "unknown" });
     expect(result.processingSteps).toEqual([
@@ -64,7 +64,7 @@ describe("ViewBundleDetailsSubAgent", () => {
       bundlesBff as never,
       balanceBff as never,
     );
-    const result = await agent.handle("user-1", { bundleId: "b4" });
+    const result = await agent.handle("user-1", "session-1", { bundleId: "b4" });
 
     expect(bundlesBff.getBundles).toHaveBeenCalledWith("user-1");
     expect(balanceBff.getBalance).toHaveBeenCalledWith("user-1");

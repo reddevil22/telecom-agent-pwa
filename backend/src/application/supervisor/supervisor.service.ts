@@ -37,6 +37,7 @@ import {
 import { ScreenCacheManager } from "./screen-cache-manager.service";
 import { randomUUID } from "crypto";
 import type { DataGiftBffPort } from "../../domain/ports/bff-ports";
+import { DataGiftArgsParser } from "../sub-agents/data-gift-args-parser";
 
 class LlmCallError extends Error {
   constructor(message: string) {
@@ -45,7 +46,7 @@ class LlmCallError extends Error {
   }
 }
 
-/** Internal message type supporting tool-call and tool-result roles for the ReAct loop */
+/** Internal message type supporting tool-call and tool-result roles for the LLM tool dispatch loop */
 interface LoopMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
@@ -259,6 +260,7 @@ export class SupervisorService {
         conversationId,
       };
 
+      // LLM tool dispatch loop — single tool per request (safety net for retries)
       for (
         let iteration = 0;
         iteration < SECURITY_LIMITS.SUPERVISOR_MAX_ITERATIONS;
@@ -781,7 +783,7 @@ export class SupervisorService {
       return this.buildPurchasePrerequisiteScreen();
     }
 
-    const result = await subAgent.handle(request.userId, parsedArgs);
+    const result = await subAgent.handle(request.userId, request.sessionId, parsedArgs);
 
     if (toolName === "view_bundle_details") {
       this.markViewedBundle(
@@ -1007,17 +1009,14 @@ export class SupervisorService {
     screenData: AgentResponse["screenData"];
     processingSteps: AgentResponse["processingSteps"];
   } {
-    const amountMatch = args.amount?.match(/^(\d+(?:\.\d+)?)\s*(GB|MB)/i);
-    const amountMb = amountMatch
-      ? (amountMatch[2].toUpperCase() === "GB" ? parseFloat(amountMatch[1]) * 1024 : parseFloat(amountMatch[1]))
-      : 0;
+    const amountMb = DataGiftArgsParser.parseAmount(args.amount ?? "");
 
     return {
       screenData: {
         type: "dataGift",
         status: "pending",
         title: "Review Data Gift",
-        message: `Send ${this.formatMb(amountMb)} to ${args.recipientQuery}?`,
+        message: `Send ${DataGiftArgsParser.formatMb(amountMb)} to ${args.recipientQuery}?`,
         details: {
           recipientName: args.recipientQuery,
           recipientMsisdn: "",
@@ -1035,10 +1034,6 @@ export class SupervisorService {
         { label: "Awaiting confirmation", status: "active" },
       ],
     };
-  }
-
-  private formatMb(mb: number): string {
-    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
   }
 
   /**
@@ -1132,7 +1127,7 @@ export class SupervisorService {
 
     try {
       const toolStart = Date.now();
-      const result = await subAgent.handle(request.userId, pending.args);
+      const result = await subAgent.handle(request.userId, request.sessionId, pending.args);
       this.toolDegradation.recordToolSuccess(request.userId, pending.toolName);
       this.metrics?.recordToolCall(
         pending.toolName,

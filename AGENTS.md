@@ -170,9 +170,37 @@ User prompt
   │   Min 2 tokens required. Per-user, 50-entry LRU, 5-min TTL.
   │   Only caches Tier1-eligible intents (no entity-extraction intents).
   │
-  └─ Tier 3: LLM ReAct loop → single tool call per request (no chaining)
+  └─ Tier 3: LLM tool dispatch → single tool call per request (no chaining)
       Required for: purchase, create ticket, view bundle details,
       and top-up prompts without extractable amount
+```
+
+### Tool → SubAgent Registry
+
+Tool definitions are auto-generated from `backend/src/domain/constants/tool-registry.ts` via `tool-definitions.ts`. The `ToolResolver` maps tool names to `SubAgentPort` instances registered by provider factories.
+
+| Tool Name | SubAgent Class | Provider | Tier | Notes |
+| --------- | -------------- | -------- | ---- | ----- |
+| `check_balance` | `SimpleQuerySubAgent` | `billing-agents.provider.ts` | 1 | |
+| `top_up` | `ActionSubAgent<TopUpParams>` | `billing-agents.provider.ts` | 1* | Amount extracted by IntentRouter before routing |
+| `check_usage` | `SimpleQuerySubAgent` | `account-agents.provider.ts` | 1 | |
+| `get_account_summary` | `SimpleQuerySubAgent` | `account-agents.provider.ts` | 1 | |
+| `list_bundles` | `SimpleQuerySubAgent` | `bundle-agents.provider.ts` | 1 | |
+| `view_bundle_details` | `ViewBundleDetailsSubAgent` | `bundle-agents.provider.ts` | 3 | LLM-guided; requires entity extraction |
+| `purchase_bundle` | `PurchaseBundleSubAgent` | `bundle-agents.provider.ts` | 3 | LLM-guided; requires view_bundle_details prerequisite |
+| `get_support` | `DualQuerySubAgent` | `support-agents.provider.ts` | 1 | |
+| `create_ticket` | `CreateTicketSubAgent` | `support-agents.provider.ts` | 3 | LLM-guided; requires subject + description |
+| `share_data` | `DataGiftSubAgent` | `data-gift-agents.provider.ts` | 1* | Deterministic routing when recipient + amount present |
+
+**Tier key:**
+- **1**: Routed via keyword/fuzzy match — bypasses LLM (`IntentRouterService`)
+- **1\***: Special deterministic routing — data-gift/top-up/purchase pre-check in IntentRouterService
+- **3**: Falls through to LLM — requires entity extraction (bundleId, subject, etc.)
+
+**Routing flow:**
+```
+IntentRouterService.classify() → IntentResolution (intent + toolName + args)
+  └→ SupervisorService calls ToolResolver.resolve(toolName) → SubAgentPort.handle(userId, args)
 ```
 
 ### Circuit Breaker & Degraded Mode
@@ -191,10 +219,10 @@ POST /api/agent/chat
       1. IntentRouterService (Tier 1 → Tier 2 → Tier 3)
       2. Screen cache check (userId + screenType)
       3. Circuit breaker gate — if open, return degraded response
-      4. LLM ReAct loop (up to 3 iterations):
+      4. LLM tool dispatch loop (up to 3 iterations, single tool per request):
          → LlmPort.chatCompletion() with tool definitions
          → validateToolCall() against ALLOWED_TOOLS whitelist
-         → ToolResolver → SubAgentPort.handle(userId)
+         → ToolResolver → SubAgentPort.handle(userId, args)
          → Return immediately after first successful tool call
       5. Store response (SQLite) → return AgentResponse
 ```

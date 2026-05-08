@@ -5,7 +5,7 @@ import type { ScreenData, ProcessingStep } from '../../domain/types/agent';
 export class PurchaseBundleSubAgent implements SubAgentPort {
   constructor(private readonly bundlesBff: BundlesBffPort) {}
 
-  async handle(userId: string, params?: Record<string, string>): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
+  async handle(userId: string, _sessionId: string, params?: Record<string, string>): Promise<{ screenData: ScreenData; processingSteps: ProcessingStep[] }> {
     const bundleId = params?.['bundleId'] ?? '';
 
     if (!bundleId) {
