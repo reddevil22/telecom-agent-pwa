@@ -28,7 +28,7 @@ describe("support-agents.provider", () => {
       (registration) => registration.toolName === "get_support",
     );
 
-    const result = await getSupport!.agent.handle("user-1");
+    const result = await getSupport!.agent.handle("user-1", "session-1");
 
     expect(supportBff.getTickets).toHaveBeenCalledWith("user-1");
     expect(supportBff.getFaq).toHaveBeenCalled();

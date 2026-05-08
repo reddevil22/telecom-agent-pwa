@@ -38,7 +38,7 @@ describe("bundle-agents.provider", () => {
       (registration) => registration.toolName === "list_bundles",
     );
 
-    await listBundles!.agent.handle("user-1");
+    await listBundles!.agent.handle("user-1", "session-1");
 
     expect(bundlesBff.getBundles).toHaveBeenCalledWith("user-1");
   });

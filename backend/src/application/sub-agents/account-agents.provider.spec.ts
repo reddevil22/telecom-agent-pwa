@@ -28,7 +28,7 @@ describe("account-agents.provider", () => {
       (registration) => registration.toolName === "check_usage",
     );
 
-    await checkUsage!.agent.handle("user-1");
+    await checkUsage!.agent.handle("user-1", "session-1");
 
     expect(usageBff.getUsage).toHaveBeenCalledWith("user-1");
   });
@@ -53,7 +53,7 @@ describe("account-agents.provider", () => {
       (registration) => registration.toolName === "get_account_summary",
     );
 
-    await accountSummary!.agent.handle("user-1");
+    await accountSummary!.agent.handle("user-1", "session-1");
 
     expect(telcoService.getAccountSummary).toHaveBeenCalledWith("user-1");
   });

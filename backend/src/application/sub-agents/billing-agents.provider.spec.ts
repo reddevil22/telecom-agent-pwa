@@ -34,7 +34,7 @@ describe("billing-agents.provider", () => {
       (r) => r.toolName === "check_balance",
     );
 
-    await checkBalance!.agent.handle("user-1");
+    await checkBalance!.agent.handle("user-1", "session-1");
 
     expect(balanceBff.getBalance).toHaveBeenCalledWith("user-1");
   });
@@ -48,8 +48,8 @@ describe("billing-agents.provider", () => {
     const registrations = createBillingAgentRegistrations(balanceBff as never);
     const topUp = registrations.find((r) => r.toolName === "top_up");
 
-    const nonNumeric = await topUp!.agent.handle("user-1", { amount: "abc" });
-    const nonPositive = await topUp!.agent.handle("user-1", { amount: "0" });
+    const nonNumeric = await topUp!.agent.handle("user-1", "session-1", { amount: "abc" });
+    const nonPositive = await topUp!.agent.handle("user-1", "session-1", { amount: "0" });
 
     expect(nonNumeric.screenData).toMatchObject({
       type: "confirmation",
@@ -76,7 +76,7 @@ describe("billing-agents.provider", () => {
     const registrations = createBillingAgentRegistrations(balanceBff as never);
     const topUp = registrations.find((r) => r.toolName === "top_up");
 
-    const result = await topUp!.agent.handle("user-1", { amount: "5" });
+    const result = await topUp!.agent.handle("user-1", "session-1", { amount: "5" });
 
     expect(balanceBff.topUp).toHaveBeenCalledWith("user-1", 5);
     expect(result.screenData).toMatchObject({

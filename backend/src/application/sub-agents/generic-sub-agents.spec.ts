@@ -125,7 +125,7 @@ describe("ActionSubAgent", () => {
     });
 
     const agent = makeAgent({ executeAction });
-    const result = await agent.handle("user-1", { amount: "5" });
+    const result = await agent.handle("user-1", "session-1", { amount: "5" });
 
     expect(executeAction).toHaveBeenCalledWith("user-1", { amount: "5" });
     expect(result.screenData).toMatchObject({
