@@ -74,8 +74,7 @@ backend/src/
 │
 ├── application/             # Use-case orchestration
 │   ├── supervisor/          # SupervisorService — hybrid routing + LLM tool dispatch
-│   │   ├── supervisor.service.ts   # Main orchestrator (intent router → screen cache → circuit breaker → LLM)
-│   │   ├── intent-cache.service.ts # Fuzzy Jaccard similarity cache (per-user, 50-entry LRU, 5-min TTL)
+│   │   ├── supervisor.service.ts   # Main orchestrator (intent router → screen cache → circuit breaker → ReAct loop)
 │   │   ├── system-prompt.ts        # LLM system prompt with security rules
 │   │   ├── tool-definitions.ts     # Auto-generated from tool-registry.ts
 │   │   └── tool-resolver.ts        # toolName → SubAgentPort registry
@@ -147,55 +146,46 @@ src/
 └── types/                  # AgentRequest, AgentResponse, ScreenData, screen registry types
 ```
 
-### Three-Tier Intent Routing
+### Intent Routing (Deterministic Pre-Checks + LLM)
 
 ```
 User prompt
   │
-  ├─ Data-gift pre-check: if share/gift/send/transfer data signal + amount +
+  ├─ Share-data pre-check: if share/gift/send/transfer data signal + amount +
   │  recipient are present, route directly to `share_data` (deterministic, no LLM)
   │
   ├─ Top-up pre-check: if top-up/recharge/add-credit signal + amount is present,
   │  route directly to `top_up` (deterministic, no LLM)
   │
-  ├─ Tier 1: Keyword match → sub-agent directly (no LLM, confidence 1.0)
-  │   Covers: balance, usage, bundles, support, account, share_data keywords
-  │   Keywords externalized in backend/data/intent-keywords.json
-  │   Multi-match resolved by lexical specificity scoring + priority tie-breaking
-  │   Skips BROWSE_BUNDLES when action signals detected (buy, purchase, order, etc.)
-  │   Skips CHECK_BALANCE / ACCOUNT_SUMMARY when top-up signals detected
-  │   Skips GET_SUPPORT when create-ticket signals detected
+  ├─ Purchase pre-check: if purchase signal + concrete bundle ID is present,
+  │  route directly to `purchase_bundle` (deterministic, no LLM)
   │
-  ├─ Tier 2: Fuzzy intent cache → Jaccard similarity on token sets (≥0.6, configurable)
-  │   Min 2 tokens required. Per-user, 50-entry LRU, 5-min TTL.
-  │   Only caches Tier1-eligible intents (no entity-extraction intents).
-  │
-  └─ Tier 3: LLM tool dispatch → single tool call per request (no chaining)
+  └─ LLM tool dispatch → bounded 2-tool ReAct loop
+      Bounded second tool call when:
+        (A) comparison signal ("compare", "vs") + first tool was view_bundle_details
+        (B) first tool returned pending confirmation
+        (C) compound signal ("and", "also") + first tool was check_balance/check_usage
+      Both results surfaced via AgentResponse.supplementaryResults for comparison UI
       Required for: purchase, create ticket, view bundle details,
-      and top-up prompts without extractable amount
+      and prompts without extractable entities
 ```
 
 ### Tool → SubAgent Registry
 
 Tool definitions are auto-generated from `backend/src/domain/constants/tool-registry.ts` via `tool-definitions.ts`. The `ToolResolver` maps tool names to `SubAgentPort` instances registered by provider factories.
 
-| Tool Name | SubAgent Class | Provider | Tier | Notes |
-| --------- | -------------- | -------- | ---- | ----- |
-| `check_balance` | `SimpleQuerySubAgent` | `billing-agents.provider.ts` | 1 | |
-| `top_up` | `ActionSubAgent<TopUpParams>` | `billing-agents.provider.ts` | 1* | Amount extracted by IntentRouter before routing |
-| `check_usage` | `SimpleQuerySubAgent` | `account-agents.provider.ts` | 1 | |
-| `get_account_summary` | `SimpleQuerySubAgent` | `account-agents.provider.ts` | 1 | |
-| `list_bundles` | `SimpleQuerySubAgent` | `bundle-agents.provider.ts` | 1 | |
-| `view_bundle_details` | `ViewBundleDetailsSubAgent` | `bundle-agents.provider.ts` | 3 | LLM-guided; requires entity extraction |
-| `purchase_bundle` | `PurchaseBundleSubAgent` | `bundle-agents.provider.ts` | 3 | LLM-guided; requires view_bundle_details prerequisite |
-| `get_support` | `DualQuerySubAgent` | `support-agents.provider.ts` | 1 | |
-| `create_ticket` | `CreateTicketSubAgent` | `support-agents.provider.ts` | 3 | LLM-guided; requires subject + description |
-| `share_data` | `DataGiftSubAgent` | `data-gift-agents.provider.ts` | 1* | Deterministic routing when recipient + amount present |
-
-**Tier key:**
-- **1**: Routed via keyword/fuzzy match — bypasses LLM (`IntentRouterService`)
-- **1\***: Special deterministic routing — data-gift/top-up/purchase pre-check in IntentRouterService
-- **3**: Falls through to LLM — requires entity extraction (bundleId, subject, etc.)
+| Tool Name | SubAgent Class | Provider | Route | Notes |
+| --------- | -------------- | -------- | ----- | ----- |
+| `check_balance` | `SimpleQuerySubAgent` | `billing-agents.provider.ts` | Keyword | |
+| `top_up` | `ActionSubAgent<TopUpParams>` | `billing-agents.provider.ts` | Pre-check | Amount extracted by IntentRouter before routing |
+| `check_usage` | `SimpleQuerySubAgent` | `account-agents.provider.ts` | Keyword | |
+| `get_account_summary` | `SimpleQuerySubAgent` | `account-agents.provider.ts` | Keyword | |
+| `list_bundles` | `SimpleQuerySubAgent` | `bundle-agents.provider.ts` | Keyword | |
+| `view_bundle_details` | `ViewBundleDetailsSubAgent` | `bundle-agents.provider.ts` | LLM | LLM-guided; first call in bundle comparison; requires entity extraction |
+| `purchase_bundle` | `PurchaseBundleSubAgent` | `bundle-agents.provider.ts` | Pre-check or LLM | Pre-check when bundle ID present; LLM-guided otherwise |
+| `get_support` | `DualQuerySubAgent` | `support-agents.provider.ts` | Keyword | |
+| `create_ticket` | `CreateTicketSubAgent` | `support-agents.provider.ts` | LLM | LLM-guided; requires subject + description |
+| `share_data` | `DataGiftSubAgent` | `data-gift-agents.provider.ts` | Pre-check | Deterministic routing when recipient + amount present |
 
 **Routing flow:**
 ```
@@ -216,14 +206,15 @@ IntentRouterService.classify() → IntentResolution (intent + toolName + args)
 POST /api/agent/chat
   → RateLimitGuard → ValidationPipe → PromptSanitizerPipe
   → SupervisorService.processRequest()
-      1. IntentRouterService (Tier 1 → Tier 2 → Tier 3)
+      1. Share-data / Top-up / Purchase pre-check (deterministic routing, no LLM)
       2. Screen cache check (userId + screenType)
       3. Circuit breaker gate — if open, return degraded response
-      4. LLM tool dispatch loop (up to 3 iterations, single tool per request):
+      4. LLM tool dispatch loop (up to 3 iterations, bounded 2-tool ReAct):
          → LlmPort.chatCompletion() with tool definitions
          → validateToolCall() against ALLOWED_TOOLS whitelist
          → ToolResolver → SubAgentPort.handle(userId, args)
-         → Return immediately after first successful tool call
+         → Second tool call if comparison/compound/pending-confirmation conditions met
+         → Both results returned via supplementaryResults[] when applicable
       5. Store response (SQLite) → return AgentResponse
 ```
 
@@ -276,7 +267,7 @@ SQLite at `backend/data/telecom.db` (auto-created). Tables: `conversations`, `me
 - **Test isolation**: Backend e2e tests use unique `userId` per test and `mockReset()` between scenarios to prevent cache pollution.
 - **Playwright baseURL**: Uses `127.0.0.1:5173` (not `localhost`) to avoid port conflicts.
 - **Domain boundary**: Domain layer has zero NestJS imports. Ports are plain TypeScript interfaces.
-- **Single screen per request**: Supervisor returns after first successful tool call. No tool chaining.
+- **Bounded 2-tool ReAct loop**: The supervisor may call a second tool within the same request when conditions warrant it (bundle comparisons, compound queries, pending confirmations). Both results are returned via `AgentResponse.supplementaryResults[]` for the frontend to render in a comparison layout.
 - **userId trust boundary**: Supervisor always passes `request.userId` to sub-agents, never LLM-parsed values.
 - **Tool whitelist**: 10 tools registered (`check_balance`, `list_bundles`, `check_usage`, `get_support`, `view_bundle_details`, `purchase_bundle`, `top_up`, `create_ticket`, `get_account_summary`, `share_data`).
 - **CSS design tokens**: All token variables use the `--color-*` prefix (e.g., `--color-primary`, `--color-bg-card`, `--color-text-primary`, `--color-success`, `--color-error`). Do not use bare names like `--primary` or `--surface` — they will resolve to transparent and break UI visibility.

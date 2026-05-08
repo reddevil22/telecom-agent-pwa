@@ -38,19 +38,22 @@ User types a message
 ┌─────────────────────────────────┐
 │  SupervisorService (ReAct loop) │
 │                                 │
-│  1. Check cache — keyword match │
-│     on user prompt              │
-│  2. Build message history with  │
+│  1. Deterministic pre-check    │
+│     (share-data, top-up,       │
+│      purchase) — no LLM       │
+│  2. Keyword match — no LLM     │
+│  3. Build message history with  │
 │     system prompt + context     │
-│  3. Call LLM with tool defs     │
-│  4. LLM picks a tool → route   │
+│  4. Call LLM with tool defs     │
+│  5. LLM picks a tool → route   │
 │     to the matching sub-agent   │
-│  5. Sub-agent returns screen    │
-│     data                        │
-│  6. Return after first          │
-│     successful tool call        │
-│  7. Store in cache, persist to  │
-│     SQLite                      │
+│  6. Bounded second tool call  │
+│     for comparison/compound/   │
+│     pending-confirmation       │
+│  7. Return primary +          │
+│     supplementary results     │
+│  8. Store in cache, persist to  │
+│     SQLite                     │
 └──────────────┬──────────────────┘
                │
                ▼
