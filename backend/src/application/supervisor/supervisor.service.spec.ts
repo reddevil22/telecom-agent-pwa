@@ -238,6 +238,7 @@ describe("SupervisorService", () => {
     expect(result.confidence).toBe(0.95);
     expect(balanceAgent.handle).toHaveBeenCalledWith(
       "user-42",
+      "s1",
       expect.any(Object),
     );
   });
@@ -252,6 +253,7 @@ describe("SupervisorService", () => {
     expect(result.screenType).toBe("bundles");
     expect(bundlesAgent.handle).toHaveBeenCalledWith(
       "user-42",
+      "s1",
       expect.any(Object),
     );
   });
@@ -266,6 +268,7 @@ describe("SupervisorService", () => {
     expect(result.screenType).toBe("usage");
     expect(usageAgent.handle).toHaveBeenCalledWith(
       "user-42",
+      "s1",
       expect.any(Object),
     );
   });
@@ -280,6 +283,7 @@ describe("SupervisorService", () => {
     expect(result.screenType).toBe("support");
     expect(supportAgent.handle).toHaveBeenCalledWith(
       "user-42",
+      "s1",
       expect.any(Object),
     );
   });
@@ -296,6 +300,7 @@ describe("SupervisorService", () => {
     expect(result.screenType).toBe("balance");
     expect(balanceAgent.handle).toHaveBeenCalledWith(
       "user-42",
+      "s1",
       expect.any(Object),
     );
     expect(balanceAgent.handle).not.toHaveBeenCalledWith("attacker-controlled");
@@ -354,6 +359,7 @@ describe("SupervisorService", () => {
     expect(result.screenType).toBe("balance");
     expect(balanceAgent.handle).toHaveBeenCalledWith(
       "user-42",
+      "s1",
       expect.any(Object),
     );
     expect(mockLlm.chatCompletion).toHaveBeenCalledTimes(2);
@@ -556,6 +562,7 @@ describe("SupervisorService", () => {
     expect(result.supplementaryResults).toBeUndefined();
     expect(balanceAgent.handle).toHaveBeenCalledWith(
       "user-42",
+      "s1",
       expect.any(Object),
     );
     // usage and support agents should NOT be called
